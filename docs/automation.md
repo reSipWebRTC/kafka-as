@@ -14,6 +14,19 @@ The goal is not unattended coding on `main`. The goal is deterministic execution
 
 ## 2. Local Entry Points
 
+### Activate Superpowers for this repository
+
+```bash
+tools/activate-superpowers.sh
+```
+
+Behavior:
+
+- checks that the home-local `superpowers` plugin already exists
+- links it into `./plugins/superpowers`
+- registers this repository as a Codex plugin marketplace
+- lets future Codex sessions pick up both `AGENTS.md` and the plugin-driven workflow
+
 ### Create a feature worktree
 
 ```bash
@@ -74,6 +87,9 @@ That keeps local verification and CI aligned. If `tools/verify.sh` changes, CI c
 ## 4. Recommended Daily Flow
 
 ```bash
+# 0. Activate repo-local Superpowers wiring once per machine/session setup
+tools/activate-superpowers.sh
+
 # 1. Create isolated branch/worktree
 tools/new-feature.sh feature/asr-pipeline
 

@@ -4,6 +4,12 @@
 
 This document fixes the actual `superpowers` workflow for this repository.
 
+Repository activation is handled by:
+
+- `AGENTS.md`
+- `tools/activate-superpowers.sh`
+- `.agents/plugins/marketplace.json`
+
 The goal is to avoid ambiguity between:
 
 - product/design refinement
