@@ -81,6 +81,8 @@ flowchart LR
   WebSocket 协议、错误码、版本规则与 Schema 文件入口。
 - [docs/dev-workflow.md](docs/dev-workflow.md)
   `superpowers + git worktree` 的开发约定、分支命名和执行流程。
+- [docs/superpowers-plan.md](docs/superpowers-plan.md)
+  `superpowers` 在本仓库中的实际触发顺序、边界和落地规则。
 - [docs/services.md](docs/services.md)
   微服务拆分、职责边界、接口与依赖关系。
 - [docs/observability.md](docs/observability.md)
