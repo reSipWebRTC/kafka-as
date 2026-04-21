@@ -79,6 +79,8 @@ flowchart LR
   统一事件头、Topic 规划、顺序与幂等策略。
 - [docs/contracts.md](docs/contracts.md)
   WebSocket 协议、错误码、版本规则与 Schema 文件入口。
+- [docs/automation.md](docs/automation.md)
+  本地脚本、CI 入口，以及 `new-feature / verify / finish-feature` 的执行方式。
 - [docs/dev-workflow.md](docs/dev-workflow.md)
   `superpowers + git worktree` 的开发约定、分支命名和执行流程。
 - [docs/superpowers-plan.md](docs/superpowers-plan.md)

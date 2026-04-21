@@ -101,6 +101,12 @@ Save plans under:
 
 Each plan must reference exact files in this repository. Plans should follow the already approved architecture and contracts rather than inventing a second design.
 
+When the plan is ready, prefer repository-local execution entrypoints where available:
+
+- `tools/new-feature.sh`
+- `tools/verify.sh`
+- `tools/finish-feature.sh`
+
 ### Step 5: Execute in one of two modes
 
 Recommended default:
@@ -152,6 +158,12 @@ Preferred order:
 2. Merge branch back to `main`
 3. Remove the worktree
 4. Delete the merged feature branch
+
+The default repository-local command for this is:
+
+```bash
+tools/finish-feature.sh <branch-name>
+```
 
 ## 5. Repository-Specific Rules
 
@@ -214,4 +226,3 @@ The repository is already prepared for this workflow:
 - `main` branch created
 - `.worktrees/` reserved and ignored
 - `feature/gateway` worktree already created
-

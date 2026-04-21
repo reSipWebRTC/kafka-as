@@ -61,6 +61,12 @@ From the repository root:
 git worktree add .worktrees/feature-gateway -b feature/gateway
 ```
 
+Automation entrypoint:
+
+```bash
+tools/new-feature.sh feature/gateway
+```
+
 ### 5.2 Work inside the isolated tree
 
 ```bash
@@ -85,6 +91,12 @@ At minimum:
 - Review changed contracts and docs
 - Check `git diff --stat`
 
+Default verification entrypoint:
+
+```bash
+tools/verify.sh
+```
+
 ### 5.5 Merge back
 
 After review:
@@ -96,7 +108,28 @@ git worktree remove .worktrees/feature-gateway
 git branch -d feature/gateway
 ```
 
-## 6. Superpowers Usage
+Automation entrypoint:
+
+```bash
+tools/finish-feature.sh feature/gateway
+```
+
+## 6. Automation Scripts
+
+Repository-local automation lives under `tools/`:
+
+- `tools/new-feature.sh`
+  Creates a branch-backed worktree under `.worktrees/`.
+- `tools/verify.sh`
+  Runs contract checks and `./gradlew test`.
+- `tools/finish-feature.sh`
+  Verifies, merges into `main`, and optionally cleans up the branch worktree.
+
+See also:
+
+- `docs/automation.md`
+
+## 7. Superpowers Usage
 
 Use `superpowers` as the execution workflow layer:
 
@@ -113,14 +146,14 @@ The repository-side convention is simple:
 - `api/` defines machine-checkable protocol
 - `.worktrees/` defines isolated implementation workspaces
 
-## 7. What Not to Do
+## 8. What Not to Do
 
 - Do not implement large features directly on `main`.
 - Do not change event formats in code without updating `docs/contracts.md` and `api/`.
 - Do not run multiple unrelated features in the same worktree.
 - Do not introduce a second technical source of truth beside `docs/` and `api/`.
 
-## 8. First Recommended Feature Sequence
+## 9. First Recommended Feature Sequence
 
 Recommended implementation order:
 
@@ -130,4 +163,3 @@ Recommended implementation order:
 4. `feature/translation-worker`
 5. `feature/observability-baseline`
 6. `feature/tts-orchestrator`
-
