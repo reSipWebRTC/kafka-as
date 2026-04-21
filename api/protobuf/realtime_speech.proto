@@ -33,6 +33,19 @@ message AudioIngressRawEvent {
   AudioIngressRawPayload payload = 2;
 }
 
+message SessionControlPayload {
+  string action = 1;
+  string status = 2;
+  string source_lang = 3;
+  string target_lang = 4;
+  string reason = 5;
+}
+
+message SessionControlEvent {
+  EventEnvelope envelope = 1;
+  SessionControlPayload payload = 2;
+}
+
 message AsrFinalPayload {
   string text = 1;
   string language = 2;

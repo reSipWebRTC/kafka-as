@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: session-orchestrator
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+orchestrator:
+  kafka:
+    enabled: ${ORCHESTRATOR_KAFKA_ENABLED:true}
+    session-control-topic: ${ORCHESTRATOR_SESSION_CONTROL_TOPIC:session.control}
+    producer-id: ${ORCHESTRATOR_PRODUCER_ID:session-orchestrator}

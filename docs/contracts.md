@@ -54,6 +54,7 @@
 | 事件类型 | 说明 | Topic | Key |
 | --- | --- | --- | --- |
 | `audio.ingress.raw` | 网关接收原始音频分片 | `audio.ingress.raw` | `sessionId` |
+| `session.control` | 会话生命周期控制事件（start/stop 等） | `session.control` | `sessionId` |
 | `asr.final` | ASR 最终识别结果 | `asr.final` | `sessionId` |
 | `translation.result` | 翻译结果 | `translation.result` | `sessionId` |
 | `tts.request` | TTS 合成请求 | `tts.request` | `sessionId` |
@@ -107,6 +108,7 @@
   - `api/protobuf/realtime_speech.proto`
 - JSON Schema
   - `api/json-schema/audio.ingress.raw.v1.json`
+  - `api/json-schema/session.control.v1.json`
   - `api/json-schema/asr.final.v1.json`
   - `api/json-schema/translation.result.v1.json`
   - `api/json-schema/tts.request.v1.json`
