@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package kafka_asr.v1;
+
+option java_multiple_files = true;
+option java_package = "com.kafka_asr.contract.v1";
+option java_outer_classname = "RealtimeSpeechProto";
+
+message EventEnvelope {
+  string event_id = 1;
+  string event_type = 2;
+  string event_version = 3;
+  string trace_id = 4;
+  string session_id = 5;
+  string tenant_id = 6;
+  string room_id = 7;
+  string producer = 8;
+  uint64 seq = 9;
+  int64 ts_ms = 10;
+  string idempotency_key = 11;
+}
+
+message AudioIngressRawPayload {
+  string audio_codec = 1;
+  uint32 sample_rate = 2;
+  uint32 channels = 3;
+  bytes audio_bytes = 4;
+  bool end_of_stream = 5;
+}
+
+message AudioIngressRawEvent {
+  EventEnvelope envelope = 1;
+  AudioIngressRawPayload payload = 2;
+}
+
+message AsrFinalPayload {
+  string text = 1;
+  string language = 2;
+  float confidence = 3;
+  bool stable = 4;
+}
+
+message AsrFinalEvent {
+  EventEnvelope envelope = 1;
+  AsrFinalPayload payload = 2;
+}
+
+message TranslationResultPayload {
+  string source_text = 1;
+  string translated_text = 2;
+  string source_lang = 3;
+  string target_lang = 4;
+  string engine = 5;
+}
+
+message TranslationResultEvent {
+  EventEnvelope envelope = 1;
+  TranslationResultPayload payload = 2;
+}
+
+message TtsRequestPayload {
+  string text = 1;
+  string language = 2;
+  string voice = 3;
+  string cache_key = 4;
+  bool stream = 5;
+}
+
+message TtsRequestEvent {
+  EventEnvelope envelope = 1;
+  TtsRequestPayload payload = 2;
+}
+
+message WsSessionStart {
+  string session_id = 1;
+  string tenant_id = 2;
+  string source_lang = 3;
+  string target_lang = 4;
+}
+
+message WsAudioFrame {
+  string session_id = 1;
+  uint64 seq = 2;
+  string codec = 3;
+  uint32 sample_rate = 4;
+  bytes audio_bytes = 5;
+}
+
+message WsSessionPing {
+  string session_id = 1;
+  int64 ts_ms = 2;
+}
+
+message WsSessionStop {
+  string session_id = 1;
+}
+
+message WsClientMessage {
+  string type = 1;
+  oneof body {
+    WsSessionStart session_start = 2;
+    WsAudioFrame audio_frame = 3;
+    WsSessionPing session_ping = 4;
+    WsSessionStop session_stop = 5;
+  }
+}
+
+message WsSubtitlePartial {
+  string session_id = 1;
+  uint64 seq = 2;
+  string text = 3;
+}
+
+message WsSubtitleFinal {
+  string session_id = 1;
+  uint64 seq = 2;
+  string text = 3;
+}
+
+message WsSessionError {
+  string session_id = 1;
+  string code = 2;
+  string message = 3;
+}
+
+message WsSessionClosed {
+  string session_id = 1;
+  string reason = 2;
+}
+
+message WsServerMessage {
+  string type = 1;
+  oneof body {
+    WsSubtitlePartial subtitle_partial = 2;
+    WsSubtitleFinal subtitle_final = 3;
+    WsSessionError session_error = 4;
+    WsSessionClosed session_closed = 5;
+  }
+}

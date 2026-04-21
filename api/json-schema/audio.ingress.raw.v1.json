@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kafka-asr.local/schemas/audio.ingress.raw.v1.json",
+  "title": "audio.ingress.raw.v1",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "traceId",
+    "sessionId",
+    "tenantId",
+    "producer",
+    "seq",
+    "ts",
+    "idempotencyKey",
+    "payload"
+  ],
+  "properties": {
+    "eventId": { "type": "string", "minLength": 1 },
+    "eventType": { "const": "audio.ingress.raw" },
+    "eventVersion": { "const": "v1" },
+    "traceId": { "type": "string", "minLength": 1 },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "tenantId": { "type": "string", "minLength": 1 },
+    "roomId": { "type": "string" },
+    "producer": { "type": "string", "minLength": 1 },
+    "seq": { "type": "integer", "minimum": 0 },
+    "ts": { "type": "integer", "minimum": 0 },
+    "idempotencyKey": { "type": "string", "minLength": 1 },
+    "payload": {
+      "type": "object",
+      "required": ["audioCodec", "sampleRate", "channels", "audioBase64", "endOfStream"],
+      "properties": {
+        "audioCodec": {
+          "type": "string",
+          "enum": ["pcm16le", "opus", "aac", "other"]
+        },
+        "sampleRate": { "type": "integer", "minimum": 8000 },
+        "channels": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "audioBase64": { "type": "string", "minLength": 1 },
+        "endOfStream": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
