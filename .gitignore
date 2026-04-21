@@ -6,4 +6,5 @@ worktrees/
 .vscode/
 *.swp
 *.swo
-
+.gradle/
+**/build/

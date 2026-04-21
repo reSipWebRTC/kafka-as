@@ -1,6 +1,11 @@
 spring:
   application:
     name: speech-gateway
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 server:
   port: 8080
@@ -11,3 +16,10 @@ management:
       exposure:
         include: health,info,prometheus
 
+gateway:
+  kafka:
+    enabled: ${GATEWAY_KAFKA_ENABLED:true}
+    audio-ingress-topic: ${GATEWAY_AUDIO_INGRESS_TOPIC:audio.ingress.raw}
+    tenant-id: ${GATEWAY_TENANT_ID:tenant-default}
+    producer-id: ${GATEWAY_PRODUCER_ID:speech-gateway}
+    channels: ${GATEWAY_AUDIO_CHANNELS:1}
