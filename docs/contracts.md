@@ -85,6 +85,7 @@
 | 错误码 | 含义 |
 | --- | --- |
 | `AUTH_INVALID_TOKEN` | 鉴权失败或令牌过期 |
+| `INVALID_MESSAGE` | 消息格式不合法、类型不支持或字段校验失败 |
 | `SESSION_NOT_FOUND` | 会话不存在或已关闭 |
 | `SESSION_SEQ_INVALID` | 序号乱序或重复超限 |
 | `RATE_LIMITED` | 触发限流 |
@@ -109,4 +110,3 @@
   - `api/json-schema/asr.final.v1.json`
   - `api/json-schema/translation.result.v1.json`
   - `api/json-schema/tts.request.v1.json`
-
