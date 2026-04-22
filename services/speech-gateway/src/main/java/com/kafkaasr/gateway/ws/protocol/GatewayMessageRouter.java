@@ -3,6 +3,7 @@ package com.kafkaasr.gateway.ws.protocol;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kafkaasr.gateway.flow.GatewayAudioFrameFlowController;
 import com.kafkaasr.gateway.ingress.AudioFrameIngressCommand;
 import com.kafkaasr.gateway.ingress.AudioIngressPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
@@ -22,8 +23,11 @@ public class GatewayMessageRouter {
     private static final String SESSION_PING_TYPE = "session.ping";
     private static final String SESSION_STOP_TYPE = "session.stop";
     private static final String INVALID_MESSAGE_CODE = "INVALID_MESSAGE";
+    private static final String RATE_LIMITED_CODE = "RATE_LIMITED";
+    private static final String BACKPRESSURE_DROP_CODE = "BACKPRESSURE_DROP";
 
     private final AudioIngressPublisher audioIngressPublisher;
+    private final GatewayAudioFrameFlowController flowController;
     private final AudioFrameMessageDecoder audioFrameMessageDecoder;
     private final SessionStartMessageDecoder sessionStartMessageDecoder;
     private final SessionPingMessageDecoder sessionPingMessageDecoder;
@@ -34,6 +38,7 @@ public class GatewayMessageRouter {
 
     public GatewayMessageRouter(
             AudioIngressPublisher audioIngressPublisher,
+            GatewayAudioFrameFlowController flowController,
             AudioFrameMessageDecoder audioFrameMessageDecoder,
             SessionStartMessageDecoder sessionStartMessageDecoder,
             SessionPingMessageDecoder sessionPingMessageDecoder,
@@ -42,6 +47,7 @@ public class GatewayMessageRouter {
             ObjectMapper objectMapper,
             MeterRegistry meterRegistry) {
         this.audioIngressPublisher = audioIngressPublisher;
+        this.flowController = flowController;
         this.audioFrameMessageDecoder = audioFrameMessageDecoder;
         this.sessionStartMessageDecoder = sessionStartMessageDecoder;
         this.sessionPingMessageDecoder = sessionPingMessageDecoder;
@@ -75,11 +81,27 @@ public class GatewayMessageRouter {
             case AUDIO_FRAME_TYPE -> {
                 AudioFrameIngressCommand request = audioFrameMessageDecoder.decode(rawMessage);
                 sessionBinder.bind(request.sessionId());
-                yield audioIngressPublisher.publishRawFrame(request);
+                GatewayAudioFrameFlowController.FlowDecision decision = flowController.acquire(request.sessionId());
+                if (decision == GatewayAudioFrameFlowController.FlowDecision.RATE_LIMITED) {
+                    yield Mono.error(new MessageValidationException(
+                            RATE_LIMITED_CODE,
+                            "Audio frame rate limit exceeded",
+                            request.sessionId()));
+                }
+                if (decision == GatewayAudioFrameFlowController.FlowDecision.BACKPRESSURE_DROP) {
+                    yield Mono.error(new MessageValidationException(
+                            BACKPRESSURE_DROP_CODE,
+                            "Audio frame dropped due to gateway backpressure",
+                            request.sessionId()));
+                }
+
+                yield audioIngressPublisher.publishRawFrame(request)
+                        .doFinally(signalType -> flowController.release(request.sessionId()));
             }
             case SESSION_START_TYPE -> {
                 SessionStartMessage request = sessionStartMessageDecoder.decode(rawMessage);
                 sessionBinder.bind(request.sessionId());
+                flowController.reset(request.sessionId());
                 yield sessionControlClient.startSession(new SessionStartCommand(
                         request.sessionId(),
                         request.tenantId(),
@@ -95,6 +117,7 @@ public class GatewayMessageRouter {
             case SESSION_STOP_TYPE -> {
                 SessionStopMessage request = sessionStopMessageDecoder.decode(rawMessage);
                 sessionBinder.bind(request.sessionId());
+                flowController.reset(request.sessionId());
                 yield sessionControlClient.stopSession(new SessionStopCommand(
                         request.sessionId(),
                         request.traceId(),

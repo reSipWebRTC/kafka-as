@@ -1,4 +1,4 @@
-package com.kafkaasr.asr.events;
+package com.kafkaasr.gateway.ws.downlink;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -6,22 +6,22 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 @Validated
-@ConfigurationProperties(prefix = "asr.kafka")
-public class AsrKafkaProperties {
+@ConfigurationProperties(prefix = "gateway.downlink")
+public class GatewayDownlinkProperties {
 
     private boolean enabled = true;
 
     @NotBlank
-    private String audioIngressTopic = "audio.ingress.raw";
+    private String consumerGroupId = "speech-gateway-downlink";
 
     @NotBlank
     private String asrPartialTopic = "asr.partial";
 
     @NotBlank
-    private String asrFinalTopic = "asr.final";
+    private String translationResultTopic = "translation.result";
 
     @NotBlank
-    private String producerId = "asr-worker";
+    private String sessionControlTopic = "session.control";
 
     @Min(1)
     private int retryMaxAttempts = 3;
@@ -40,12 +40,12 @@ public class AsrKafkaProperties {
         this.enabled = enabled;
     }
 
-    public String getAudioIngressTopic() {
-        return audioIngressTopic;
+    public String getConsumerGroupId() {
+        return consumerGroupId;
     }
 
-    public void setAudioIngressTopic(String audioIngressTopic) {
-        this.audioIngressTopic = audioIngressTopic;
+    public void setConsumerGroupId(String consumerGroupId) {
+        this.consumerGroupId = consumerGroupId;
     }
 
     public String getAsrPartialTopic() {
@@ -56,20 +56,20 @@ public class AsrKafkaProperties {
         this.asrPartialTopic = asrPartialTopic;
     }
 
-    public String getAsrFinalTopic() {
-        return asrFinalTopic;
+    public String getTranslationResultTopic() {
+        return translationResultTopic;
     }
 
-    public void setAsrFinalTopic(String asrFinalTopic) {
-        this.asrFinalTopic = asrFinalTopic;
+    public void setTranslationResultTopic(String translationResultTopic) {
+        this.translationResultTopic = translationResultTopic;
     }
 
-    public String getProducerId() {
-        return producerId;
+    public String getSessionControlTopic() {
+        return sessionControlTopic;
     }
 
-    public void setProducerId(String producerId) {
-        this.producerId = producerId;
+    public void setSessionControlTopic(String sessionControlTopic) {
+        this.sessionControlTopic = sessionControlTopic;
     }
 
     public int getRetryMaxAttempts() {

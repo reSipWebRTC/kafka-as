@@ -13,7 +13,7 @@
 
 | 服务名 | 当前状态 | 当前已实现能力 | 主要依赖 |
 | --- | --- | --- | --- |
-| `speech-gateway` | 已落地骨架 | WebSocket 接入、Kafka 音频发布、会话 start/stop 转发 | Kafka、`session-orchestrator` |
+| `speech-gateway` | 已落地骨架 | WebSocket 接入、Kafka 音频发布、会话 start/stop 转发、会话级限流/背压 | Kafka、`session-orchestrator` |
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、placeholder ASR、发布 `asr.partial` / `asr.final` | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、placeholder 翻译、发布 `translation.result` | Kafka |
@@ -43,6 +43,7 @@
 - `/ws/audio`
 - `session.start` / `session.ping` / `audio.frame` / `session.stop`
 - `audio.ingress.raw` 发布
+- `audio.frame` 会话级限流与背压保护
 - `session.error` 下行
 - `asr.partial` -> `subtitle.partial`
 - `translation.result` -> `subtitle.final`
@@ -50,7 +51,7 @@
 
 当前未实现：
 
-- 真正的鉴权、限流、背压
+- 真正的鉴权
 - 更完整的结果聚合和多路下行策略
 
 ### session-orchestrator
@@ -166,6 +167,7 @@
 
 - `Kafka`
   当前主异步总线，已落地 6 个 Topic。
+  核心 consumer 已落地固定重试与 `.dlq` 死信回退。
 - `HTTP`
   当前用于 `speech-gateway -> session-orchestrator` 和 `session-orchestrator -> control-plane` 的低频调用。
 
@@ -229,4 +231,4 @@ flowchart LR
 - 把网关做成“超级服务”，同时承担接入、状态、推理与缓存
 - 让编排层继续承担音频中转
 - 在没有统一事件头和版本规则时让各服务自行扩展消息体
-- 把还未落地的 TTS 分发、DLQ、压测能力写成已完成
+- 把还未落地的 TTS 分发、高级补偿/治理和压测能力写成已完成

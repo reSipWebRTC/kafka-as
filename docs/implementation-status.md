@@ -17,13 +17,15 @@
 - 统一 v1 事件 Envelope
 - 6 个已落地 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
 - 低频控制 API：会话 start/stop、租户策略 get/put
+- 网关 `audio.frame` 会话级限流/背压保护（`RATE_LIMITED` / `BACKPRESSURE_DROP`）
+- 核心 Kafka 消费链路固定重试与按源 Topic 的 `.dlq` 死信回退
 - 全仓测试与 `tools/verify.sh` 校验基线
 
 ## 2. 服务模块现状
 
 | 服务 | 端口 | 当前已实现 | 当前未实现 |
 | --- | --- | --- | --- |
-| `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `session.ping` / `audio.frame` / `session.stop` 路由、`audio.ingress.raw` Kafka 发布、错误下行 `session.error`、Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行 | 鉴权、限流、背压、更完整的下行聚合策略 |
+| `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `session.ping` / `audio.frame` / `session.stop` 路由、`audio.ingress.raw` Kafka 发布、会话级限流/背压控制、错误下行 `session.error`、Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行 | 鉴权、更完整的下行聚合策略 |
 | `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、Redis 会话状态、`session.control` Kafka 发布 | 超时编排、结果聚合、补偿工作流 |
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、placeholder 推理、发布 `asr.partial` / `asr.final` | 真实 FunASR、VAD 分段 |
 | `translation-worker` | `8083` | 消费 `asr.final`、placeholder 翻译、发布 `translation.result` | 真实 LLM/MT、术语治理、上下文增强 |
@@ -85,7 +87,7 @@
 
 - `translation.request`、`tts.chunk`、`tts.ready` 仍是计划扩展 Topic
 - ASR / Translation / TTS 仍是 placeholder 引擎，不是生产推理链路
-- 尚未接入对象存储、CDN、DLQ、重试策略、限流、背压和压测体系
+- 尚未接入对象存储、CDN、完整补偿工作流、熔断/灰度治理和压测体系
 
 ## 6. 文档使用建议
 

@@ -29,8 +29,8 @@ public class TranslationResultDownlinkConsumer {
     }
 
     @KafkaListener(
-            topics = "${gateway.downlink.translation-result-topic:translation.result}",
-            groupId = "${gateway.downlink.consumer-group-id:speech-gateway-downlink}")
+            topics = "#{@gatewayDownlinkProperties.translationResultTopic}",
+            groupId = "#{@gatewayDownlinkProperties.consumerGroupId}")
     public void onMessage(String payload) {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {

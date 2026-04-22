@@ -48,3 +48,6 @@ tts:
     producer-id: ${TTS_PRODUCER_ID:tts-orchestrator}
     default-voice: ${TTS_DEFAULT_VOICE:voice-default}
     stream-enabled: ${TTS_STREAM_ENABLED:true}
+    retry-max-attempts: ${TTS_RETRY_MAX_ATTEMPTS:3}
+    retry-backoff-ms: ${TTS_RETRY_BACKOFF_MS:200}
+    dlq-topic-suffix: ${TTS_DLQ_TOPIC_SUFFIX:.dlq}

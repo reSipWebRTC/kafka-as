@@ -53,6 +53,7 @@
 - 当前所有已落地 publisher 都按 `sessionId` 发送 Kafka Key
 - `translation-worker` 当前直接消费 `asr.final`，尚未引入独立 `translation.request`
 - `tts.request` 当前仍是中间编排事件，还未接入真实引擎链路
+- `asr-worker`、`translation-worker`、`tts-orchestrator`、`speech-gateway` 下行消费者已接入固定重试 + `<source-topic>.dlq` 死信回退
 
 ## 4. 计划扩展 Topic
 
@@ -130,7 +131,17 @@
 
 ### 死信
 
-以下情况应进入 `platform.dlq`：
+当前实现（`2026-04-22`）：
+
+- 核心 consumer 失败后会写入 `<source-topic>.dlq`
+- `IllegalArgumentException`（如 payload 非法）按不可重试处理，直接进入对应 DLQ
+
+目标形态（规划中）：
+
+- 统一汇聚到 `platform.dlq` 进行跨服务补偿与排障
+- 建立标准化重放与审计流程
+
+以下情况最终都应进入统一死信治理：
 
 - 超出最大重试次数
 - 反序列化失败

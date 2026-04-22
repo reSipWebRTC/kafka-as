@@ -31,8 +31,8 @@ public class SessionControlDownlinkConsumer {
     }
 
     @KafkaListener(
-            topics = "${gateway.downlink.session-control-topic:session.control}",
-            groupId = "${gateway.downlink.consumer-group-id:speech-gateway-downlink}")
+            topics = "#{@gatewayDownlinkProperties.sessionControlTopic}",
+            groupId = "#{@gatewayDownlinkProperties.consumerGroupId}")
     public void onMessage(String payload) {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
