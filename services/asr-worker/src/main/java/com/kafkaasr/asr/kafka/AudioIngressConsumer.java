@@ -5,10 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.asr.events.AsrKafkaProperties;
 import com.kafkaasr.asr.events.AudioIngressRawEvent;
 import com.kafkaasr.asr.pipeline.AsrPipelineService;
+import com.kafkaasr.asr.policy.TenantReliabilityPolicy;
+import com.kafkaasr.asr.policy.TenantReliabilityPolicyResolver;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -27,9 +27,9 @@ public class AudioIngressConsumer {
     private final AsrFinalPublisher asrFinalPublisher;
     private final AsrCompensationPublisher compensationPublisher;
     private final AsrKafkaProperties kafkaProperties;
+    private final TenantReliabilityPolicyResolver reliabilityPolicyResolver;
     private final TimedIdempotencyGuard idempotencyGuard;
     private final MeterRegistry meterRegistry;
-    private final Map<String, Integer> failureAttempts = new ConcurrentHashMap<>();
 
     public AudioIngressConsumer(
             ObjectMapper objectMapper,
@@ -38,6 +38,7 @@ public class AudioIngressConsumer {
             AsrFinalPublisher asrFinalPublisher,
             AsrCompensationPublisher compensationPublisher,
             AsrKafkaProperties kafkaProperties,
+            TenantReliabilityPolicyResolver reliabilityPolicyResolver,
             MeterRegistry meterRegistry) {
         this.objectMapper = objectMapper;
         this.pipelineService = pipelineService;
@@ -45,6 +46,7 @@ public class AudioIngressConsumer {
         this.asrFinalPublisher = asrFinalPublisher;
         this.compensationPublisher = compensationPublisher;
         this.kafkaProperties = kafkaProperties;
+        this.reliabilityPolicyResolver = reliabilityPolicyResolver;
         this.idempotencyGuard = new TimedIdempotencyGuard(
                 kafkaProperties.isIdempotencyEnabled(),
                 kafkaProperties.getIdempotencyTtlMs());
@@ -56,10 +58,8 @@ public class AudioIngressConsumer {
             groupId = "${ASR_CONSUMER_GROUP_ID:asr-worker}")
     public void onMessage(String payload) {
         Timer.Sample sample = Timer.start(meterRegistry);
-        String failureKey = "raw:" + Integer.toHexString(payload.hashCode());
         try {
             AudioIngressRawEvent ingressEvent = parse(payload);
-            failureKey = resolveFailureKey(ingressEvent.idempotencyKey(), payload);
             if (idempotencyGuard.isDuplicate(ingressEvent.idempotencyKey())) {
                 meterRegistry.counter(
                                 "asr.pipeline.messages.total",
@@ -71,42 +71,72 @@ public class AudioIngressConsumer {
                 log.debug("Dropped duplicated audio.ingress.raw event idempotencyKey={}", ingressEvent.idempotencyKey());
                 return;
             }
-            AsrPipelineService.AsrPipelineEvents pipelineEvents = pipelineService.toAsrEvents(ingressEvent);
-
-            if (pipelineEvents.partialEvent() != null) {
-                asrPartialPublisher.publish(pipelineEvents.partialEvent()).block();
-            }
-            if (pipelineEvents.finalEvent() != null) {
-                asrFinalPublisher.publish(pipelineEvents.finalEvent()).block();
-            }
-            idempotencyGuard.markProcessed(ingressEvent.idempotencyKey());
-            failureAttempts.remove(failureKey);
-            meterRegistry.counter(
-                            "asr.pipeline.messages.total",
-                            "result",
-                            "success",
-                            "code",
-                            "OK")
-                    .increment();
-            log.debug(
-                    "Published ASR events sessionId={} seq={} partial={} final={}",
-                    ingressEvent.sessionId(),
-                    ingressEvent.seq(),
-                    pipelineEvents.partialEvent() != null,
-                    pipelineEvents.finalEvent() != null);
-        } catch (RuntimeException exception) {
+            TenantReliabilityPolicy reliabilityPolicy = reliabilityPolicyResolver.resolve(ingressEvent.tenantId());
+            processWithRetry(ingressEvent, payload, reliabilityPolicy);
+        } catch (IllegalArgumentException exception) {
             meterRegistry.counter(
                             "asr.pipeline.messages.total",
                             "result",
                             "error",
                             "code",
-                            normalizeErrorCode(exception))
+                            "INVALID_PAYLOAD")
                     .increment();
-            recordFailureAndCompensate(failureKey, payload, exception);
             throw exception;
         } finally {
             sample.stop(meterRegistry.timer("asr.pipeline.duration"));
         }
+    }
+
+    private void processWithRetry(
+            AudioIngressRawEvent ingressEvent,
+            String payload,
+            TenantReliabilityPolicy reliabilityPolicy) {
+        int maxAttempts = Math.max(1, reliabilityPolicy.retryMaxAttempts());
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                processOnce(ingressEvent);
+                return;
+            } catch (RuntimeException failure) {
+                boolean retryable = isRetryable(failure);
+                if (retryable && attempt < maxAttempts) {
+                    sleepBackoff(reliabilityPolicy.retryBackoffMs());
+                    continue;
+                }
+                meterRegistry.counter(
+                                "asr.pipeline.messages.total",
+                                "result",
+                                "error",
+                                "code",
+                                normalizeErrorCode(failure))
+                        .increment();
+                recordFailureAndCompensate(payload, reliabilityPolicy, failure);
+                throw wrapForDlq(reliabilityPolicy.dlqTopicSuffix(), failure);
+            }
+        }
+    }
+
+    private void processOnce(AudioIngressRawEvent ingressEvent) {
+        AsrPipelineService.AsrPipelineEvents pipelineEvents = pipelineService.toAsrEvents(ingressEvent);
+        if (pipelineEvents.partialEvent() != null) {
+            asrPartialPublisher.publish(pipelineEvents.partialEvent()).block();
+        }
+        if (pipelineEvents.finalEvent() != null) {
+            asrFinalPublisher.publish(pipelineEvents.finalEvent()).block();
+        }
+        idempotencyGuard.markProcessed(ingressEvent.idempotencyKey());
+        meterRegistry.counter(
+                        "asr.pipeline.messages.total",
+                        "result",
+                        "success",
+                        "code",
+                        "OK")
+                .increment();
+        log.debug(
+                "Published ASR events sessionId={} seq={} partial={} final={}",
+                ingressEvent.sessionId(),
+                ingressEvent.seq(),
+                pipelineEvents.partialEvent() != null,
+                pipelineEvents.finalEvent() != null);
     }
 
     private AudioIngressRawEvent parse(String payload) {
@@ -124,21 +154,36 @@ public class AudioIngressConsumer {
         return "PIPELINE_FAILURE";
     }
 
-    private String resolveFailureKey(String idempotencyKey, String payload) {
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            return idempotencyKey;
-        }
-        return "raw:" + Integer.toHexString(payload.hashCode());
+    private boolean isRetryable(RuntimeException failure) {
+        return !(failure instanceof IllegalArgumentException);
     }
 
-    private void recordFailureAndCompensate(String failureKey, String payload, RuntimeException failure) {
-        int attempts = failureAttempts.merge(failureKey, 1, Integer::sum);
-        if (attempts < kafkaProperties.getRetryMaxAttempts()) {
+    private RuntimeException wrapForDlq(String dlqTopicSuffix, RuntimeException failure) {
+        if (failure instanceof TenantAwareDlqException) {
+            return failure;
+        }
+        return new TenantAwareDlqException(dlqTopicSuffix, failure);
+    }
+
+    private void sleepBackoff(long backoffMs) {
+        if (backoffMs <= 0) {
             return;
         }
-        failureAttempts.remove(failureKey);
+        try {
+            Thread.sleep(backoffMs);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for ASR retry backoff", exception);
+        }
+    }
+
+    private void recordFailureAndCompensate(
+            String payload,
+            TenantReliabilityPolicy reliabilityPolicy,
+            RuntimeException failure) {
         compensationPublisher.publish(
                 kafkaProperties.getAudioIngressTopic(),
+                kafkaProperties.getAudioIngressTopic() + reliabilityPolicy.dlqTopicSuffix(),
                 payload,
                 failure);
     }

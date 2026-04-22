@@ -14,6 +14,9 @@ public record TenantPolicy(
         int grayTrafficPercent,
         boolean controlPlaneFallbackFailOpen,
         long controlPlaneFallbackCacheTtlMs,
+        int retryMaxAttempts,
+        long retryBackoffMs,
+        String dlqTopicSuffix,
         long version,
         long updatedAtMs) {
 }

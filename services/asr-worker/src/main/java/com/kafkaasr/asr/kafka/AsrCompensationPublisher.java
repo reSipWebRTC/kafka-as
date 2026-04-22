@@ -29,12 +29,13 @@ public class AsrCompensationPublisher {
         this.kafkaProperties = kafkaProperties;
     }
 
-    void publish(String sourceTopic, String payload, Throwable failure) {
+    void publish(String sourceTopic, String dlqTopic, String payload, Throwable failure) {
         Map<String, Object> event = new HashMap<>();
         event.put("eventType", "ops.compensation");
         event.put("eventVersion", "v1");
         event.put("service", "asr-worker");
         event.put("sourceTopic", sourceTopic);
+        event.put("dlqTopic", dlqTopic);
         event.put("ts", System.currentTimeMillis());
         event.put("failureType", failure.getClass().getSimpleName());
         event.put("failureMessage", failure.getMessage());

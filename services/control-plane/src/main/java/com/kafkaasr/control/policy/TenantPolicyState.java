@@ -14,6 +14,9 @@ public record TenantPolicyState(
         int grayTrafficPercent,
         boolean controlPlaneFallbackFailOpen,
         long controlPlaneFallbackCacheTtlMs,
+        int retryMaxAttempts,
+        long retryBackoffMs,
+        String dlqTopicSuffix,
         long version,
         long updatedAtMs) {
 
@@ -30,6 +33,9 @@ public record TenantPolicyState(
             int grayTrafficPercent,
             boolean controlPlaneFallbackFailOpen,
             long controlPlaneFallbackCacheTtlMs,
+            int retryMaxAttempts,
+            long retryBackoffMs,
+            String dlqTopicSuffix,
             long version,
             long updatedAtMs) {
         return new TenantPolicyState(
@@ -46,6 +52,9 @@ public record TenantPolicyState(
                 grayTrafficPercent,
                 controlPlaneFallbackFailOpen,
                 controlPlaneFallbackCacheTtlMs,
+                retryMaxAttempts,
+                retryBackoffMs,
+                dlqTopicSuffix,
                 version,
                 updatedAtMs);
     }

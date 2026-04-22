@@ -21,17 +21,29 @@ public class AsrKafkaConsumerConfig {
             AsrKafkaProperties kafkaProperties) {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
                 kafkaTemplate,
-                (record, ignored) -> new TopicPartition(
-                        record.topic() + kafkaProperties.getDlqTopicSuffix(),
+                (record, exception) -> new TopicPartition(
+                        record.topic() + resolveDlqTopicSuffix(exception, kafkaProperties.getDlqTopicSuffix()),
                         record.partition()));
 
-        FixedBackOff fixedBackOff = new FixedBackOff(
-                kafkaProperties.getRetryBackoffMs(),
-                Math.max(0L, kafkaProperties.getRetryMaxAttempts() - 1L));
+        FixedBackOff fixedBackOff = new FixedBackOff(0L, 0L);
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, fixedBackOff);
         errorHandler.addNotRetryableExceptions(IllegalArgumentException.class);
+        errorHandler.addNotRetryableExceptions(TenantAwareDlqException.class);
         return errorHandler;
+    }
+
+    private String resolveDlqTopicSuffix(Throwable throwable, String fallbackSuffix) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof TenantAwareDlqException tenantAware
+                    && tenantAware.dlqTopicSuffix() != null
+                    && !tenantAware.dlqTopicSuffix().isBlank()) {
+                return tenantAware.dlqTopicSuffix();
+            }
+            current = current.getCause();
+        }
+        return fallbackSuffix;
     }
 
     @Bean
