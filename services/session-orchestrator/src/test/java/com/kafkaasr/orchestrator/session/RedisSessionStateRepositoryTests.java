@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -94,5 +95,54 @@ class RedisSessionStateRepositoryTests {
 
         assertTrue(created);
         verify(valueOperations).setIfAbsent(eq("orchestrator:session:sess-3"), anyString(), eq(ttl));
+    }
+
+    @Test
+    void countActiveSessionsByTenantIdCountsOnlyStreamingSessions() throws Exception {
+        SessionState streamingTenantA = new SessionState(
+                "sess-a1",
+                "tenant-a",
+                "zh-CN",
+                "en-US",
+                "trc-1",
+                SessionStatus.STREAMING,
+                1L,
+                1000L,
+                1000L);
+        SessionState closedTenantA = new SessionState(
+                "sess-a2",
+                "tenant-a",
+                "zh-CN",
+                "en-US",
+                "trc-2",
+                SessionStatus.CLOSED,
+                2L,
+                1000L,
+                2000L);
+        SessionState streamingTenantB = new SessionState(
+                "sess-b1",
+                "tenant-b",
+                "zh-CN",
+                "en-US",
+                "trc-3",
+                SessionStatus.STREAMING,
+                1L,
+                1000L,
+                1000L);
+
+        when(redisTemplate.keys("orchestrator:session:*")).thenReturn(Set.of(
+                "orchestrator:session:sess-a1",
+                "orchestrator:session:sess-a2",
+                "orchestrator:session:sess-b1"));
+        when(valueOperations.get("orchestrator:session:sess-a1"))
+                .thenReturn(new ObjectMapper().writeValueAsString(streamingTenantA));
+        when(valueOperations.get("orchestrator:session:sess-a2"))
+                .thenReturn(new ObjectMapper().writeValueAsString(closedTenantA));
+        when(valueOperations.get("orchestrator:session:sess-b1"))
+                .thenReturn(new ObjectMapper().writeValueAsString(streamingTenantB));
+
+        long count = repository.countActiveSessionsByTenantId("tenant-a");
+
+        assertEquals(1L, count);
     }
 }
