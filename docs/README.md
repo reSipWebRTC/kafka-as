@@ -107,8 +107,7 @@ flowchart LR
 
 ## 当前优先事项
 
-- 补齐 `subtitle.partial` / `subtitle.final` / `session.closed` 的下行链路
-- 明确 `session.ping` 是否保留在 `v1`，并实现或下调为保留字段
+- 验证并固化 `subtitle.partial` / `subtitle.final` / `session.closed` 的端到端体验与可靠性
 - 引入 `asr.partial`、重试、DLQ、背压与限流
 - 将 placeholder 的 ASR / Translation / TTS 管线替换为真实引擎
 - 补齐 TTS 的对象存储、CDN 与回放分发能力

@@ -61,14 +61,14 @@
 当前已具备：
 
 - WebSocket 音频上行
+- WebSocket `session.ping`
+- Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行
 - 会话 start/stop 控制
 - `audio.ingress.raw -> asr.final -> translation.result -> tts.request`
 - 基础管理端点和服务指标
 
 当前仍缺：
 
-- `subtitle.partial` / `subtitle.final` / `session.closed` 下行
-- `session.ping`
 - `asr.partial`
 - 明确的端到端 demo 与用户可见闭环
 - 压测窗口下的延迟和稳定性证据
@@ -166,8 +166,8 @@
 
 如果资源有限，建议优先顺序如下：
 
-1. 打通字幕下行与会话关闭链路
-2. 明确并实现 `session.ping` 与 `asr.partial`
+1. 引入 `asr.partial` 并优化字幕链路抖动
+2. 补齐下行链路的稳定性与端到端验证
 3. 补齐重试、DLQ、限流、背压
 4. 替换 placeholder 的 ASR / Translation / TTS 引擎
 5. 建立 Kafka lag、延迟、错误率看板与告警

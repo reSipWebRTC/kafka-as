@@ -41,15 +41,17 @@
 当前已经实现：
 
 - `/ws/audio`
-- `session.start` / `audio.frame` / `session.stop`
+- `session.start` / `session.ping` / `audio.frame` / `session.stop`
 - `audio.ingress.raw` 发布
 - `session.error` 下行
+- `asr.final` -> `subtitle.partial`
+- `translation.result` -> `subtitle.final`
+- `session.control(status=CLOSED)` -> `session.closed`
 
 当前未实现：
 
 - 真正的鉴权、限流、背压
-- `session.ping`
-- `subtitle.*` 与 `session.closed` 推送
+- 更完整的结果聚合和多路下行策略
 
 ### session-orchestrator
 

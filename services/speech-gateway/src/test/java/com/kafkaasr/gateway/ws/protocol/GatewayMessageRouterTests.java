@@ -47,6 +47,7 @@ class GatewayMessageRouterTests {
                 audioIngressPublisher,
                 new AudioFrameMessageDecoder(objectMapper, validator),
                 new SessionStartMessageDecoder(objectMapper, validator),
+                new SessionPingMessageDecoder(objectMapper, validator),
                 new SessionStopMessageDecoder(objectMapper, validator),
                 sessionControlClient,
                 objectMapper,
@@ -68,7 +69,8 @@ class GatewayMessageRouterTests {
                   "sampleRate": 16000,
                   "audioBase64": "AQID"
                 }
-                """))
+                """, sessionId -> {
+                }))
                 .verifyComplete();
 
         ArgumentCaptor<AudioFrameIngressCommand> commandCaptor = ArgumentCaptor.forClass(AudioFrameIngressCommand.class);
@@ -96,7 +98,8 @@ class GatewayMessageRouterTests {
                   "targetLang": "en-US",
                   "traceId": "trc-1"
                 }
-                """))
+                """, sessionId -> {
+                }))
                 .verifyComplete();
 
         ArgumentCaptor<SessionStartCommand> commandCaptor = ArgumentCaptor.forClass(SessionStartCommand.class);
@@ -121,7 +124,8 @@ class GatewayMessageRouterTests {
                   "traceId": "trc-2",
                   "reason": "client.stop"
                 }
-                """))
+                """, sessionId -> {
+                }))
                 .verifyComplete();
 
         ArgumentCaptor<SessionStopCommand> commandCaptor = ArgumentCaptor.forClass(SessionStopCommand.class);
@@ -136,13 +140,31 @@ class GatewayMessageRouterTests {
     }
 
     @Test
-    void rejectsUnsupportedMessageType() {
+    void routesSessionPingWithoutSideEffects() {
         StepVerifier.create(router.route("""
                 {
                   "type": "session.ping",
+                  "sessionId": "sess-4",
+                  "ts": 1713744001000
+                }
+                """, sessionId -> {
+                }))
+                .verifyComplete();
+
+        verify(audioIngressPublisher, never()).publishRawFrame(any());
+        verify(sessionControlClient, never()).startSession(any());
+        verify(sessionControlClient, never()).stopSession(any());
+    }
+
+    @Test
+    void rejectsUnsupportedMessageType() {
+        StepVerifier.create(router.route("""
+                {
+                  "type": "session.unknown",
                   "sessionId": "sess-4"
                 }
-                """))
+                """, sessionId -> {
+                }))
                 .expectErrorSatisfies(error -> {
                     MessageValidationException exception = assertInstanceOf(MessageValidationException.class, error);
                     assertEquals("INVALID_MESSAGE", exception.code());
