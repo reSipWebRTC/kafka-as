@@ -11,6 +11,8 @@ import com.kafkaasr.orchestrator.events.SessionControlPublisher;
 import com.kafkaasr.orchestrator.session.SessionState;
 import com.kafkaasr.orchestrator.session.SessionStateRepository;
 import com.kafkaasr.orchestrator.session.SessionStatus;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
@@ -30,70 +32,130 @@ public class SessionLifecycleService {
     private final OrchestratorKafkaProperties kafkaProperties;
     private final SessionStateRepository sessionStateRepository;
     private final Clock clock;
+    private final MeterRegistry meterRegistry;
 
     @Autowired
     public SessionLifecycleService(
             SessionControlPublisher sessionControlPublisher,
             OrchestratorKafkaProperties kafkaProperties,
-            SessionStateRepository sessionStateRepository) {
-        this(sessionControlPublisher, kafkaProperties, sessionStateRepository, Clock.systemUTC());
+            SessionStateRepository sessionStateRepository,
+            MeterRegistry meterRegistry) {
+        this(sessionControlPublisher, kafkaProperties, sessionStateRepository, Clock.systemUTC(), meterRegistry);
     }
 
     SessionLifecycleService(
             SessionControlPublisher sessionControlPublisher,
             OrchestratorKafkaProperties kafkaProperties,
             SessionStateRepository sessionStateRepository,
-            Clock clock) {
+            Clock clock,
+            MeterRegistry meterRegistry) {
         this.sessionControlPublisher = sessionControlPublisher;
         this.kafkaProperties = kafkaProperties;
         this.sessionStateRepository = sessionStateRepository;
         this.clock = clock;
+        this.meterRegistry = meterRegistry;
     }
 
     public Mono<SessionStartResponse> startSession(SessionStartRequest request) {
-        StartResult result;
-        SessionState current = sessionStateRepository.findBySessionId(request.sessionId());
-        if (current == null) {
-            StartResult created = createSession(request);
-            if (sessionStateRepository.createIfAbsent(created.state())) {
-                result = created;
-            } else {
-                SessionState existing = sessionStateRepository.findBySessionId(request.sessionId());
-                if (existing == null) {
-                    throw new IllegalStateException("Session state lost during start race for " + request.sessionId());
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            StartResult result;
+            SessionState current = sessionStateRepository.findBySessionId(request.sessionId());
+            if (current == null) {
+                StartResult created = createSession(request);
+                if (sessionStateRepository.createIfAbsent(created.state())) {
+                    result = created;
+                } else {
+                    SessionState existing = sessionStateRepository.findBySessionId(request.sessionId());
+                    if (existing == null) {
+                        throw new IllegalStateException("Session state lost during start race for " + request.sessionId());
+                    }
+                    result = handleRepeatedStart(request, existing);
                 }
-                result = handleRepeatedStart(request, existing);
+            } else {
+                result = handleRepeatedStart(request, current);
             }
-        } else {
-            result = handleRepeatedStart(request, current);
-        }
 
-        Mono<Void> publish = result.event() == null
-                ? Mono.empty()
-                : sessionControlPublisher.publish(result.event());
-        return publish.thenReturn(result.response());
+            Mono<Void> publish = result.event() == null
+                    ? Mono.empty()
+                    : sessionControlPublisher.publish(result.event());
+            return publish.thenReturn(result.response())
+                    .doOnSuccess(response -> meterRegistry.counter(
+                                    "orchestrator.session.start.total",
+                                    "result",
+                                    response.created() ? "created" : "idempotent",
+                                    "code",
+                                    "OK")
+                            .increment())
+                    .doOnError(exception -> meterRegistry.counter(
+                                    "orchestrator.session.start.total",
+                                    "result",
+                                    "error",
+                                    "code",
+                                    normalizeErrorCode(exception))
+                            .increment())
+                    .doFinally(signalType -> sample.stop(meterRegistry.timer("orchestrator.session.start.duration")));
+        } catch (RuntimeException exception) {
+            meterRegistry.counter(
+                            "orchestrator.session.start.total",
+                            "result",
+                            "error",
+                            "code",
+                            normalizeErrorCode(exception))
+                    .increment();
+            sample.stop(meterRegistry.timer("orchestrator.session.start.duration"));
+            throw exception;
+        }
     }
 
     public Mono<SessionStopResponse> stopSession(String sessionId, SessionStopRequest request) {
-        SessionStopRequest normalizedRequest = request == null ? SessionStopRequest.empty() : request;
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            SessionStopRequest normalizedRequest = request == null ? SessionStopRequest.empty() : request;
 
-        StopResult result;
-        SessionState current = sessionStateRepository.findBySessionId(sessionId);
-        if (current == null) {
-            throw SessionControlException.sessionNotFound(sessionId);
+            StopResult result;
+            SessionState current = sessionStateRepository.findBySessionId(sessionId);
+            if (current == null) {
+                throw SessionControlException.sessionNotFound(sessionId);
+            }
+
+            if (current.status() == SessionStatus.CLOSED) {
+                result = alreadyStopped(current, normalizedRequest);
+            } else {
+                result = closeSession(current, normalizedRequest);
+                sessionStateRepository.save(result.state());
+            }
+
+            Mono<Void> publish = result.event() == null
+                    ? Mono.empty()
+                    : sessionControlPublisher.publish(result.event());
+            return publish.thenReturn(result.response())
+                    .doOnSuccess(response -> meterRegistry.counter(
+                                    "orchestrator.session.stop.total",
+                                    "result",
+                                    response.stopped() ? "stopped" : "idempotent",
+                                    "code",
+                                    "OK")
+                            .increment())
+                    .doOnError(exception -> meterRegistry.counter(
+                                    "orchestrator.session.stop.total",
+                                    "result",
+                                    "error",
+                                    "code",
+                                    normalizeErrorCode(exception))
+                            .increment())
+                    .doFinally(signalType -> sample.stop(meterRegistry.timer("orchestrator.session.stop.duration")));
+        } catch (RuntimeException exception) {
+            meterRegistry.counter(
+                            "orchestrator.session.stop.total",
+                            "result",
+                            "error",
+                            "code",
+                            normalizeErrorCode(exception))
+                    .increment();
+            sample.stop(meterRegistry.timer("orchestrator.session.stop.duration"));
+            throw exception;
         }
-
-        if (current.status() == SessionStatus.CLOSED) {
-            result = alreadyStopped(current, normalizedRequest);
-        } else {
-            result = closeSession(current, normalizedRequest);
-            sessionStateRepository.save(result.state());
-        }
-
-        Mono<Void> publish = result.event() == null
-                ? Mono.empty()
-                : sessionControlPublisher.publish(result.event());
-        return publish.thenReturn(result.response());
     }
 
     private StartResult createSession(SessionStartRequest request) {
@@ -221,6 +283,16 @@ public class SessionLifecycleService {
             }
         }
         return "";
+    }
+
+    private String normalizeErrorCode(Throwable throwable) {
+        if (throwable instanceof SessionControlException exception) {
+            return exception.code();
+        }
+        if (throwable instanceof IllegalArgumentException) {
+            return "INVALID_MESSAGE";
+        }
+        return "INTERNAL_ERROR";
     }
 
     private record StartResult(SessionState state, SessionStartResponse response, SessionControlEvent event) {

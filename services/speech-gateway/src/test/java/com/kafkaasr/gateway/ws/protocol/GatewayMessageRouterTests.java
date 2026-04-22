@@ -15,6 +15,7 @@ import com.kafkaasr.gateway.ingress.AudioIngressPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,7 +49,8 @@ class GatewayMessageRouterTests {
                 new SessionStartMessageDecoder(objectMapper, validator),
                 new SessionStopMessageDecoder(objectMapper, validator),
                 sessionControlClient,
-                objectMapper);
+                objectMapper,
+                new SimpleMeterRegistry());
 
         lenient().when(audioIngressPublisher.publishRawFrame(any())).thenReturn(Mono.empty());
         lenient().when(sessionControlClient.startSession(any())).thenReturn(Mono.empty());

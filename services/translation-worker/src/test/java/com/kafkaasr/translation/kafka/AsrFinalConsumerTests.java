@@ -12,6 +12,7 @@ import com.kafkaasr.translation.events.AsrFinalPayload;
 import com.kafkaasr.translation.events.TranslationResultEvent;
 import com.kafkaasr.translation.events.TranslationResultPayload;
 import com.kafkaasr.translation.pipeline.TranslationPipelineService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,7 +34,11 @@ class AsrFinalConsumerTests {
 
     @BeforeEach
     void setUp() {
-        consumer = new AsrFinalConsumer(objectMapper, pipelineService, translationResultPublisher);
+        consumer = new AsrFinalConsumer(
+                objectMapper,
+                pipelineService,
+                translationResultPublisher,
+                new SimpleMeterRegistry());
     }
 
     @Test

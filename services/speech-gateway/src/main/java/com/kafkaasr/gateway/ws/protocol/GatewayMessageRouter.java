@@ -5,8 +5,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.gateway.ingress.AudioIngressPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
+import com.kafkaasr.gateway.session.SessionControlClientException;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -24,6 +27,7 @@ public class GatewayMessageRouter {
     private final SessionStopMessageDecoder sessionStopMessageDecoder;
     private final SessionControlClient sessionControlClient;
     private final ObjectMapper objectMapper;
+    private final MeterRegistry meterRegistry;
 
     public GatewayMessageRouter(
             AudioIngressPublisher audioIngressPublisher,
@@ -31,19 +35,38 @@ public class GatewayMessageRouter {
             SessionStartMessageDecoder sessionStartMessageDecoder,
             SessionStopMessageDecoder sessionStopMessageDecoder,
             SessionControlClient sessionControlClient,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            MeterRegistry meterRegistry) {
         this.audioIngressPublisher = audioIngressPublisher;
         this.audioFrameMessageDecoder = audioFrameMessageDecoder;
         this.sessionStartMessageDecoder = sessionStartMessageDecoder;
         this.sessionStopMessageDecoder = sessionStopMessageDecoder;
         this.sessionControlClient = sessionControlClient;
         this.objectMapper = objectMapper;
+        this.meterRegistry = meterRegistry;
     }
 
     public Mono<Void> route(String rawMessage) {
-        InboundEnvelope envelope = parseEnvelope(rawMessage);
+        InboundEnvelope envelope;
+        try {
+            envelope = parseEnvelope(rawMessage);
+        } catch (RuntimeException exception) {
+            meterRegistry.counter(
+                            "gateway.ws.messages.total",
+                            "type",
+                            "invalid",
+                            "result",
+                            "error",
+                            "code",
+                            normalizeErrorCode(exception))
+                    .increment();
+            throw exception;
+        }
 
-        return switch (envelope.type()) {
+        String metricType = normalizeType(envelope.type());
+        Timer.Sample sample = Timer.start(meterRegistry);
+
+        Mono<Void> routeResult = switch (envelope.type()) {
             case AUDIO_FRAME_TYPE -> audioIngressPublisher.publishRawFrame(audioFrameMessageDecoder.decode(rawMessage));
             case SESSION_START_TYPE -> {
                 SessionStartMessage request = sessionStartMessageDecoder.decode(rawMessage);
@@ -66,6 +89,29 @@ public class GatewayMessageRouter {
                     "Unsupported message type: " + envelope.type(),
                     envelope.sessionId()));
         };
+
+        return routeResult
+                .doOnSuccess(unused -> meterRegistry.counter(
+                                "gateway.ws.messages.total",
+                                "type",
+                                metricType,
+                                "result",
+                                "success",
+                                "code",
+                                "OK")
+                        .increment())
+                .doOnError(exception -> meterRegistry.counter(
+                                "gateway.ws.messages.total",
+                                "type",
+                                metricType,
+                                "result",
+                                "error",
+                                "code",
+                                normalizeErrorCode(exception))
+                        .increment())
+                .doFinally(signalType -> sample.stop(Timer.builder("gateway.ws.messages.duration")
+                        .tag("type", metricType)
+                        .register(meterRegistry)));
     }
 
     private InboundEnvelope parseEnvelope(String rawMessage) {
@@ -95,6 +141,26 @@ public class GatewayMessageRouter {
             return "";
         }
         return fieldNode.asText("");
+    }
+
+    private String normalizeType(String type) {
+        return switch (type) {
+            case AUDIO_FRAME_TYPE, SESSION_START_TYPE, SESSION_STOP_TYPE -> type;
+            default -> "unsupported";
+        };
+    }
+
+    private String normalizeErrorCode(Throwable throwable) {
+        if (throwable instanceof MessageValidationException exception) {
+            return exception.code();
+        }
+        if (throwable instanceof SessionControlClientException exception) {
+            return exception.code();
+        }
+        if (throwable instanceof IllegalArgumentException) {
+            return INVALID_MESSAGE_CODE;
+        }
+        return "INTERNAL_ERROR";
     }
 
     private record InboundEnvelope(String type, String sessionId) {

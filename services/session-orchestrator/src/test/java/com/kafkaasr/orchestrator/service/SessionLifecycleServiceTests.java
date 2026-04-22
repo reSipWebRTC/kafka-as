@@ -12,6 +12,7 @@ import com.kafkaasr.orchestrator.events.SessionControlEvent;
 import com.kafkaasr.orchestrator.events.SessionControlPublisher;
 import com.kafkaasr.orchestrator.session.SessionState;
 import com.kafkaasr.orchestrator.session.SessionStateRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -43,7 +44,8 @@ class SessionLifecycleServiceTests {
                 publisher,
                 properties,
                 stateRepository,
-                Clock.fixed(Instant.parse("2026-04-21T00:00:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-04-21T00:00:00Z"), ZoneOffset.UTC),
+                new SimpleMeterRegistry());
     }
 
     @Test
