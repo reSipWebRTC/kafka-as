@@ -1,158 +1,205 @@
 # Services
 
-## 1. 推荐服务拆分
+本文件同时描述两件事：
 
-建议先拆成 6 个核心服务和 2 类基础设施能力。
+- 当前仓库里已经存在的服务模块和实现边界
+- 这些服务在目标生产架构中的职责边界
 
-### 核心服务
+当前落地状态的快速总览见 [implementation-status.md](implementation-status.md)。
 
-| 服务名 | 主要职责 | 是否第一阶段必需 |
-| --- | --- | --- |
-| `speech-gateway` | 长连接接入、鉴权、限流、协议适配、会话路由 | 是 |
-| `session-orchestrator` | 会话状态机、事件编排、幂等、降级、策略执行 | 是 |
-| `asr-worker` | FunASR 推理、partial/final 结果生成 | 是 |
-| `translation-worker` | 文本翻译、术语增强、上下文处理 | 是 |
-| `tts-orchestrator` | 文本归一化、缓存命中、请求合并、对象分发 | 否 |
-| `control-plane` | 租户、策略、配置、灰度、治理后台 | 否 |
+## 1. 当前模块基线
 
-### 基础设施
+仓库现在已经包含 6 个核心服务和 2 类基础设施依赖的工程骨架。
 
-| 组件 | 作用 |
+| 服务名 | 当前状态 | 当前已实现能力 | 主要依赖 |
+| --- | --- | --- | --- |
+| `speech-gateway` | 已落地骨架 | WebSocket 接入、Kafka 音频发布、会话 start/stop 转发 | Kafka、`session-orchestrator` |
+| `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
+| `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、placeholder ASR、发布 `asr.final` | Kafka |
+| `translation-worker` | 已落地骨架 | 消费 `asr.final`、placeholder 翻译、发布 `translation.result` | Kafka |
+| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、发布 `tts.request` | Kafka |
+| `control-plane` | 已落地骨架 | 租户策略 HTTP API、Redis 存储、版本化 upsert | Redis |
+
+基础设施：
+
+| 组件 | 当前用途 |
 | --- | --- |
-| `Kafka` | 事件总线、削峰、解耦、可重放 |
-| `Redis` | 会话状态、路由信息、幂等记录、热点缓存 |
+| `Kafka` | 事件总线、主数据链路、模块解耦 |
+| `Redis` | 会话状态、租户策略、后续幂等与缓存基础 |
 
-## 2. 服务边界
+## 2. 目标职责边界
 
 ### speech-gateway
 
-只负责：
+目标职责：
 
-- 连接建立与保活
-- 令牌校验与租户识别
-- 请求速率限制
-- 音频帧接收与转发
-- 回传字幕或回放地址
+- 长连接建立与保活
+- 鉴权、租户识别、协议校验
+- 高频音频帧接收与直接写 Kafka
+- 回传字幕、错误和会话关闭事件
 
-不负责：
+当前已经实现：
 
-- 推理决策
-- 复杂业务状态机
-- 文本翻译逻辑
-- TTS 缓存策略
+- `/ws/audio`
+- `session.start` / `audio.frame` / `session.stop`
+- `audio.ingress.raw` 发布
+- `session.error` 下行
+
+当前未实现：
+
+- 真正的鉴权、限流、背压
+- `session.ping`
+- `subtitle.*` 与 `session.closed` 推送
 
 ### session-orchestrator
 
-只负责：
+目标职责：
 
-- 会话生命周期
-- 工作流编排
-- 超时处理
+- 会话状态机
+- 编排顺序、超时、幂等、重试、降级
+- 汇聚 ASR / Translation / TTS 结果
+
+当前已经实现：
+
+- start/stop 生命周期 API
+- 租户策略查询与校验
+- Redis 会话状态存储
+- `session.control` Kafka 发布
+
+当前未实现：
+
 - 结果聚合
-- 重试和降级判断
-
-不负责：
-
-- 直接承载大规模长连接
-- 直接运行 GPU 推理
+- 超时调度
+- 补偿与降级工作流
 
 ### asr-worker
 
-只负责：
+目标职责：
 
+- 流式 ASR 推理
 - 管理模型上下文
-- 执行音频分片识别
-- 输出稳定或最终文本
-- 上报识别质量和推理耗时
+- 产出 `asr.partial` / `asr.final`
+
+当前已经实现：
+
+- `audio.ingress.raw` 消费
+- placeholder 推理
+- `asr.final` 发布
+
+当前未实现：
+
+- FunASR 真正接入
+- `asr.partial`
+- VAD/切段/上下文管理
 
 ### translation-worker
 
-只负责：
+目标职责：
 
-- 消费最终文本
-- 调用 Spring AI / LLM / 规则引擎
-- 输出翻译文本
+- 翻译、术语替换、上下文增强
+- 产出字幕结果和后续 TTS 请求
+
+当前已经实现：
+
+- `asr.final` 消费
+- placeholder 翻译
+- `translation.result` 发布
+
+当前未实现：
+
+- 真实模型接入
+- glossary / context / fallback 策略
 
 ### tts-orchestrator
 
-只负责：
+目标职责：
 
-- 生成缓存键
-- 判断是否命中已有音频
-- 合并重复请求
-- 调度 TTS 引擎
-- 产出流式分片或对象存储地址
+- 文本归一化
+- 缓存键生成
+- 重复请求合并
+- TTS 引擎调度
+- 分片或回放地址输出
+
+当前已经实现：
+
+- `translation.result` 消费
+- voice 选择
+- cacheKey 生成
+- `tts.request` 发布
+
+当前未实现：
+
+- 真实 TTS 引擎
+- `tts.chunk` / `tts.ready`
+- 对象存储和 CDN 分发
 
 ### control-plane
 
-只负责：
+目标职责：
 
-- 管理业务配置
-- 动态切换模型版本
-- 控制灰度和熔断策略
-- 维护租户维度配额
+- 租户、语言对、模型版本和配额管理
+- 策略治理、灰度和熔断配置
 
-## 3. 通信方式建议
+当前已经实现：
+
+- 租户策略的 GET / PUT API
+- Redis 持久化抽象
+- 版本化更新语义
+
+当前未实现：
+
+- 认证鉴权
+- 数据库持久化
+- 跨服务动态策略分发
+
+## 3. 当前通信方式
 
 ### 外部接入
 
 - `WebSocket`
-  适合实时语音上行与字幕下行。
+  当前用于 `speech-gateway` 的实时语音入口。
 - `HTTP`
-  适合控制接口、查询接口、后台操作接口。
+  当前用于 `session-orchestrator` 与 `control-plane` 的低频控制接口。
 
 ### 内部通信
 
 - `Kafka`
-  作为主异步总线。
-- `gRPC` 或 `HTTP`
-  仅用于少量同步控制面接口，不建议承载高频语音主链路。
+  当前主异步总线，已落地 5 个 Topic。
+- `HTTP`
+  当前用于 `speech-gateway -> session-orchestrator` 和 `session-orchestrator -> control-plane` 的低频调用。
 
-## 4. 依赖关系建议
+## 4. 当前依赖关系
 
 ```mermaid
 flowchart LR
     G["speech-gateway"] --> O["session-orchestrator"]
+    O --> CP["control-plane"]
     G --> K["Kafka"]
     O --> K
     O --> R["Redis"]
+    CP --> R
     A["asr-worker"] --> K
     T["translation-worker"] --> K
     TS["tts-orchestrator"] --> K
-    TS --> R
-    TS --> OSS["Object Storage"]
-    CP["control-plane"] --> O
-    CP --> R
+    TS -. "future" .-> OSS["Object Storage / CDN"]
 ```
 
 依赖规则：
 
-- 高并发数据流优先经 Kafka。
-- 高频音频帧只允许 `speech-gateway -> Kafka`，不允许 `speech-gateway -> session-orchestrator -> Kafka` 中转。
-- 服务之间不要随意互相同步调用。
-- 只有编排层和控制面允许持有更完整的业务视图。
+- 高频音频帧只允许 `speech-gateway -> Kafka`
+- `session-orchestrator` 不承接高频音频帧
+- 当前所有已落地 Topic 都按 `sessionId` 维持会话内顺序
+- 服务间同步调用只保留低频控制面路径
 
-## 5. 建议的工程目录结构
+## 5. 当前工程目录结构
 
-当仓库开始进入代码阶段后，建议按下面的结构组织：
+仓库已经进入代码阶段，当前结构如下：
 
 ```text
 .
-├─ README.md
 ├─ docs/
-│  ├─ architecture.md
-│  ├─ event-model.md
-│  ├─ observability.md
-│  ├─ roadmap.md
-│  └─ services.md
 ├─ api/
-│  ├─ openapi/
-│  ├─ protobuf/
-│  └─ json-schema/
 ├─ deploy/
-│  ├─ docker/
-│  ├─ k8s/
-│  └─ monitoring/
 ├─ services/
 │  ├─ speech-gateway/
 │  ├─ session-orchestrator/
@@ -161,28 +208,24 @@ flowchart LR
 │  ├─ tts-orchestrator/
 │  └─ control-plane/
 ├─ shared/
-│  ├─ event-contracts/
-│  ├─ common-model/
-│  └─ test-fixtures/
 └─ tools/
-   ├─ load-test/
-   └─ local-dev/
 ```
 
-## 6. 第一阶段接口约束
+后续仍可继续补齐：
 
-在真正编码之前，建议先冻结以下契约：
+- `deploy/k8s`、监控看板、压测脚本
+- `shared/event-contracts`、公共测试夹具
+- TTS 分发与对象存储相关模块
 
-- WebSocket 上行音频帧协议
-- WebSocket 下行字幕协议
-- 会话控制接口
-- 统一事件 Envelope
-- Topic 命名规范
-- 错误码与降级码
+## 6. 契约与实现边界
+
+- 对外行为的权威定义仍然在 `contracts.md` 和 `api/`
+- `services/*/README.md` 用于描述单模块当前范围
+- 当目标职责与当前实现不一致时，优先显式写出“当前已实现 / 当前未实现”，不要混写成已经上线
 
 ## 7. 需要特别避免的拆分错误
 
-- 把网关做成“超级服务”，同时负责接入、状态、推理与缓存
-- 让 TTS 引擎直接暴露给外部业务
-- 在没有统一事件头之前先各服务各自定义消息格式
-- 过早做过细粒度微服务，导致编排复杂度先失控
+- 把网关做成“超级服务”，同时承担接入、状态、推理与缓存
+- 让编排层继续承担音频中转
+- 在没有统一事件头和版本规则时让各服务自行扩展消息体
+- 把还未落地的 TTS 分发、DLQ、压测能力写成已完成

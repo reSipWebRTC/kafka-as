@@ -39,7 +39,7 @@
 
 ## 3. 推荐 SLO
 
-下面的数值不是硬标准，但可作为第一版目标：
+下面的数值不是当前已达成结果，而是第一版目标：
 
 | 指标 | 建议值 |
 | --- | --- |
@@ -97,7 +97,7 @@
 
 ### Trace
 
-所有核心链路必须贯通：
+目标态要求所有核心链路贯通：
 
 - `gateway -> orchestrator -> kafka -> asr -> translation -> tts`
 
@@ -111,20 +111,16 @@
 
 ### 日志
 
-日志至少分成三类：
-
-- 业务日志
-  记录会话状态变化、策略命中、降级执行。
-- 技术日志
-  记录超时、重试、异常堆栈、依赖错误。
-- 审计日志
-  记录配置变更、权限操作、模型切换。
-
-要求：
+目标态日志要求：
 
 - 使用结构化日志
 - 默认 JSON 输出
 - 严禁只打印字符串不带主键
+
+当前基线说明：
+
+- 6 个服务都已统一 `traceId` / `spanId` 关联字段
+- 当前日志格式仍是文本 pattern，不是完整 JSON 结构化日志
 
 ## 6. 告警设计
 
@@ -180,7 +176,7 @@
 - 服务健康看板
 - 基础资源看板
 
-## 9. 当前仓库 Baseline 落地（2026-04-22）
+## 9. 当前仓库观测基线（2026-04-22）
 
 已在以下服务接入统一基线：
 
@@ -188,6 +184,8 @@
 - `session-orchestrator`
 - `asr-worker`
 - `translation-worker`
+- `tts-orchestrator`
+- `control-plane`
 
 ### 已统一配置
 
@@ -205,3 +203,15 @@
 - `orchestrator.session.stop.total` / `orchestrator.session.stop.duration`
 - `asr.pipeline.messages.total` / `asr.pipeline.duration`
 - `translation.pipeline.messages.total` / `translation.pipeline.duration`
+- `tts.pipeline.messages.total` / `tts.pipeline.duration`
+- `controlplane.tenant.policy.upsert.total` / `controlplane.tenant.policy.upsert.duration`
+- `controlplane.tenant.policy.get.total` / `controlplane.tenant.policy.get.duration`
+
+### 当前仍缺失
+
+- 客户端可感知的字幕首包 / 最终字幕延迟指标
+- Kafka consumer lag 看板与告警
+- `subtitle.*` 下行链路观测
+- 结构化 JSON 日志
+- 压测报告与 SLO 达成证据
+- 故障注入与恢复演练基线

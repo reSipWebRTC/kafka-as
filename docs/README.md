@@ -1,35 +1,45 @@
 # kafka-asr
 
-这个目录当前是一组围绕实时语音平台的专题资料页，而不是一个已经完成代码实现的工程仓库。
+`kafka-asr` 现在不是单纯的资料收敛目录，而是一个同时包含设计文档、契约文件和 Spring Boot 服务骨架的实时语音平台仓库。
 
-为了便于后续把这些资料沉淀为可执行的设计与代码，本仓库补充了一套结构化文档，统一收敛为一个目标明确的方案：
+当前仓库分成三层：
 
-- 以 `WebFlux + Kafka + FunASR + Spring AI + TTS + Redis + K8s` 为核心技术栈
-- 面向“实时语音识别 / 翻译 / TTS 回放”的生产级平台
-- 以会话有序、状态外置、事件驱动、控制面与数据面分离为核心设计原则
+- `docs/` 与 `api/`：主维护的技术事实来源。
+- `services/`：当前已经落地并通过测试的实现基线。
+- `docs/html/`：保留的原始长文参考资料，不再作为日常维护目标。
 
-## 当前资料来源
+核心技术栈仍然围绕：
 
-仓库原始内容由 7 篇 HTML 长文组成，职责大致如下：
+- `WebFlux + Kafka + Redis + FunASR + Spring AI + TTS + K8s`
+- 会话内有序、状态外置、事件驱动
+- 数据面与控制面分离
 
-- `FunASR 流式语音识别生产级实战...html`
-  聚焦流式 ASR、VAD、chunk、cache、2-pass 和推理架构演进。
-- `TTS 缓存、回放与音频分发体系...html`
-  聚焦 TTS 缓存、对象存储、CDN 分发、流式合成与回放控制。
-- `百万级长连接音频网关...html`
-  聚焦 WebFlux、长连接网关、背压、房间/会话亲和路由。
-- `从零到百万并发...html`
-  作为总体架构总纲，覆盖事件流、组件选型、微服务拆分、幂等与降级。
-- `从零到生产级：构建高可用的 Spring AI 实时语音翻译机器人.html`
-  聚焦领域建模、状态机、依赖配置、工程结构、部署与故障治理。
-- `实时语音翻译系统的可观测性与压测方法论.html`
-  聚焦指标体系、SLI/SLO、压测方法和告警闭环。
-- `亿级实时语音事件流：基于 Kafka 的分布式架构设计与实践.html`
-  聚焦 Topic 设计、分区规划、顺序、重试、重平衡与消费模型。
+## 当前实现基线（2026-04-22）
 
-## 收敛后的统一方案
+当前仓库已经具备一条可运行的模块化骨架链路：
 
-建议把项目定位为“生产级实时语音翻译平台”，采用下面的总体拓扑：
+- `speech-gateway` 通过 `/ws/audio` 接收 `session.start`、`audio.frame`、`session.stop`
+- `speech-gateway` 直接发布 `audio.ingress.raw` 到 Kafka
+- `speech-gateway` 通过低频 HTTP 调用 `session-orchestrator` 做 start/stop
+- `session-orchestrator` 调用 `control-plane` 获取租户策略，写 Redis 会话状态，并发布 `session.control`
+- `asr-worker` 消费 `audio.ingress.raw` 并发布 `asr.final`
+- `translation-worker` 消费 `asr.final` 并发布 `translation.result`
+- `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`
+
+当前详细实现状态见 [implementation-status.md](implementation-status.md)。
+
+## 原始参考资料
+
+7 篇 HTML 原文仍然保留在 `docs/html/`，但它们只作为历史输入和设计上下文。映射关系见 [html/README.md](html/README.md)。
+
+当 HTML 与 Markdown / `api/` 冲突时，优先遵循：
+
+- `docs/*.md`
+- `api/protobuf/realtime_speech.proto`
+- `api/json-schema/*.json`
+- `services/*` 中已落地并有测试覆盖的行为
+
+## 目标架构
 
 ```mermaid
 flowchart LR
@@ -65,39 +75,41 @@ flowchart LR
 核心判断：
 
 - 实时语音链路的本质是事件流，不是单条同步调用链。
-- 会话内顺序比全局顺序更重要，所有关键有序能力都应围绕 `sessionId` 设计。
-- 网关只做接入和路由，不做重业务。
-- 状态机、幂等、重试、降级放在编排层。
-- 推理与分发是独立扩缩容单元，不要把 GPU 能力和接入层绑定在一起。
+- 会话内顺序比全局顺序更重要，关键路由能力围绕 `sessionId` 设计。
+- 网关只做接入和低频控制，不承担重业务编排。
 - 高频音频帧固定走 `gateway -> kafka`，编排层不做音频中转。
+- 推理、翻译、TTS、控制面都应独立伸缩。
 
 ## 文档导航
 
-- [docs/architecture.md](docs/architecture.md)
-  总体架构、边界、数据面与控制面分层。
-- [docs/event-model.md](docs/event-model.md)
-  统一事件头、Topic 规划、顺序与幂等策略。
-- [docs/contracts.md](docs/contracts.md)
-  WebSocket 协议、错误码、版本规则与 Schema 文件入口。
-- [docs/automation.md](docs/automation.md)
-  本地脚本、CI 入口，以及 `new-feature / verify / finish-feature` 的执行方式。
-- [docs/dev-workflow.md](docs/dev-workflow.md)
+- [architecture.md](architecture.md)
+  总体架构、当前实现基线与目标拓扑。
+- [implementation-status.md](implementation-status.md)
+  当前服务、接口、Topic、端口和缺口总览。
+- [event-model.md](event-model.md)
+  统一事件头、当前已实现 Topic 与计划扩展 Topic。
+- [contracts.md](contracts.md)
+  WebSocket 协议、错误码、版本规则与 Schema 入口。
+- [services.md](services.md)
+  服务边界、当前模块状态和依赖规则。
+- [observability.md](observability.md)
+  SLI/SLO、当前观测基线与后续缺口。
+- [roadmap.md](roadmap.md)
+  分阶段建设路线和当前阶段完成度。
+- [automation.md](automation.md)
+  本地脚本、CI 入口以及 `new-feature / verify / finish-feature` 的执行方式。
+- [dev-workflow.md](dev-workflow.md)
   `superpowers + git worktree` 的开发约定、分支命名和执行流程。
-- [docs/superpowers-plan.md](docs/superpowers-plan.md)
+- [superpowers-plan.md](superpowers-plan.md)
   `superpowers` 在本仓库中的实际触发顺序、边界和落地规则。
-- [docs/services.md](docs/services.md)
-  微服务拆分、职责边界、接口与依赖关系。
-- [docs/observability.md](docs/observability.md)
-  SLI/SLO、指标、链路、日志、压测与告警。
-- [docs/roadmap.md](docs/roadmap.md)
-  分阶段建设路线、里程碑、风险与建议目录结构。
+- [html/README.md](html/README.md)
+  HTML 原始资料与当前 Markdown 文档的映射关系。
 
-## 推荐的下一步
+## 当前优先事项
 
-- 先把本文档集作为项目主设计文档，而不是继续维护 HTML 导出页。
-- 优先固化 `事件契约 + 状态机 + Topic 规划 + 服务边界`。
-- 之后再进入代码仓库初始化：
-  - 创建多模块工程骨架
-  - 定义 API / Schema / Protobuf
-  - 建立本地开发环境与最小链路
-  - 逐步引入可观测性、压测和弹性扩容
+- 补齐 `subtitle.partial` / `subtitle.final` / `session.closed` 的下行链路
+- 明确 `session.ping` 是否保留在 `v1`，并实现或下调为保留字段
+- 引入 `asr.partial`、重试、DLQ、背压与限流
+- 将 placeholder 的 ASR / Translation / TTS 管线替换为真实引擎
+- 补齐 TTS 的对象存储、CDN 与回放分发能力
+- 建立压测、Kafka lag 看板、告警和故障演练基线
