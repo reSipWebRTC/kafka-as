@@ -22,7 +22,7 @@
 - `speech-gateway` 直接发布 `audio.ingress.raw` 到 Kafka
 - `speech-gateway` 通过低频 HTTP 调用 `session-orchestrator` 做 start/stop
 - `session-orchestrator` 调用 `control-plane` 获取租户策略，写 Redis 会话状态，并发布 `session.control`
-- `asr-worker` 消费 `audio.ingress.raw` 并发布 `asr.final`
+- `asr-worker` 消费 `audio.ingress.raw` 并发布 `asr.partial` / `asr.final`
 - `translation-worker` 消费 `asr.final` 并发布 `translation.result`
 - `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`
 
@@ -108,7 +108,7 @@ flowchart LR
 ## 当前优先事项
 
 - 验证并固化 `subtitle.partial` / `subtitle.final` / `session.closed` 的端到端体验与可靠性
-- 引入 `asr.partial`、重试、DLQ、背压与限流
+- 补齐重试、DLQ、背压与限流
 - 将 placeholder 的 ASR / Translation / TTS 管线替换为真实引擎
 - 补齐 TTS 的对象存储、CDN 与回放分发能力
 - 建立压测、Kafka lag 看板、告警和故障演练基线

@@ -20,11 +20,10 @@
 - WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`
 - WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`session.closed`
 - 低频控制 API：会话 start/stop、租户策略 get/put
-- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.final`、`translation.result`、`tts.request`
+- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
 
 仍在 v1 契约中保留但尚未打通：
 
-- `asr.partial`
 - `tts.chunk`
 - `tts.ready`
 
@@ -72,6 +71,7 @@
 | --- | --- | --- | --- |
 | `audio.ingress.raw` | 网关接收原始音频分片 | `audio.ingress.raw` | `sessionId` |
 | `session.control` | 会话生命周期控制事件（start/stop 等） | `session.control` | `sessionId` |
+| `asr.partial` | ASR 中间识别结果 | `asr.partial` | `sessionId` |
 | `asr.final` | ASR 最终识别结果 | `asr.final` | `sessionId` |
 | `translation.result` | 翻译结果 | `translation.result` | `sessionId` |
 | `tts.request` | TTS 合成请求 | `tts.request` | `sessionId` |
@@ -135,6 +135,7 @@
 - JSON Schema
   - `api/json-schema/audio.ingress.raw.v1.json`
   - `api/json-schema/session.control.v1.json`
+  - `api/json-schema/asr.partial.v1.json`
   - `api/json-schema/asr.final.v1.json`
   - `api/json-schema/translation.result.v1.json`
   - `api/json-schema/tts.request.v1.json`

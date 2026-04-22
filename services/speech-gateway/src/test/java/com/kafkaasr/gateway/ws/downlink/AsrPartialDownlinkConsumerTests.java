@@ -18,27 +18,27 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 
 @ExtendWith(MockitoExtension.class)
-class AsrFinalDownlinkConsumerTests {
+class AsrPartialDownlinkConsumerTests {
 
     @Mock
     private GatewayDownlinkPublisher downlinkPublisher;
 
-    private AsrFinalDownlinkConsumer consumer;
+    private AsrPartialDownlinkConsumer consumer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
-        consumer = new AsrFinalDownlinkConsumer(
+        consumer = new AsrPartialDownlinkConsumer(
                 objectMapper,
                 downlinkPublisher,
                 new SimpleMeterRegistry());
     }
 
     @Test
-    void forwardsAsrFinalAsSubtitlePartial() throws Exception {
-        String payload = objectMapper.writeValueAsString(new TestAsrFinalEvent(
+    void forwardsAsrPartialAsSubtitlePartial() throws Exception {
+        String payload = objectMapper.writeValueAsString(new TestAsrPartialEvent(
                 "evt-1",
-                "asr.final",
+                "asr.partial",
                 "v1",
                 "trc-1",
                 "sess-1",
@@ -47,8 +47,8 @@ class AsrFinalDownlinkConsumerTests {
                 "asr-worker",
                 9L,
                 1713744001000L,
-                "sess-1:asr.final:9",
-                new TestAsrFinalPayload("hello", "en-US", 0.99, true)));
+                "sess-1:asr.partial:9",
+                new TestAsrPartialPayload("hello", "en-US", 0.99, false)));
 
         when(downlinkPublisher.publishSubtitlePartial(eq("sess-1"), eq(9L), eq("hello")))
                 .thenReturn(Mono.empty());
@@ -65,7 +65,7 @@ class AsrFinalDownlinkConsumerTests {
         verify(downlinkPublisher, never()).publishSubtitlePartial(eq("sess-1"), anyLong(), eq("hello"));
     }
 
-    private record TestAsrFinalEvent(
+    private record TestAsrPartialEvent(
             String eventId,
             String eventType,
             String eventVersion,
@@ -77,10 +77,10 @@ class AsrFinalDownlinkConsumerTests {
             long seq,
             long ts,
             String idempotencyKey,
-            TestAsrFinalPayload payload) {
+            TestAsrPartialPayload payload) {
     }
 
-    private record TestAsrFinalPayload(
+    private record TestAsrPartialPayload(
             String text,
             String language,
             double confidence,

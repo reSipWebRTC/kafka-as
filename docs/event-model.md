@@ -43,6 +43,7 @@
 | --- | --- | --- | --- | --- |
 | `audio.ingress.raw` | `speech-gateway` | `asr-worker` | `sessionId` | 高频音频主链路 |
 | `session.control` | `session-orchestrator` | 暂无仓库内下游 | `sessionId` | 生命周期控制事件 |
+| `asr.partial` | `asr-worker` | `speech-gateway` | `sessionId` | 中间识别结果，用于 `subtitle.partial` |
 | `asr.final` | `asr-worker` | `translation-worker` | `sessionId` | 当前翻译入口 |
 | `translation.result` | `translation-worker` | `tts-orchestrator` | `sessionId` | 当前 TTS 入口 |
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 编排输出 |
@@ -60,7 +61,6 @@
 | Topic | 说明 | 计划用途 |
 | --- | --- | --- |
 | `audio.vad.segmented` | VAD 切分后的语音段 | 支撑更细粒度 ASR 管线 |
-| `asr.partial` | 流式中间识别结果 | 实时字幕体验优化 |
 | `translation.request` | 待翻译文本 | 将翻译入队与 ASR 最终结果解耦 |
 | `tts.chunk` | 流式音频分片 | 实时播放 |
 | `tts.ready` | 音频文件可回放 | 对象存储/CDN 分发 |
@@ -172,13 +172,12 @@ FAILED
 
 1. `speech-gateway` 发布 `audio.ingress.raw`
 2. `session-orchestrator` 发布 `session.control`
-3. `asr-worker` 消费 `audio.ingress.raw` 并产出 `asr.final`
+3. `asr-worker` 消费 `audio.ingress.raw` 并产出 `asr.partial` 与 `asr.final`
 4. `translation-worker` 消费 `asr.final` 并发布 `translation.result`
 5. `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`
 
 仍未打通的部分：
 
-- `asr.partial`
-- 字幕下行回推
+- `translation.request`
 - `tts.request -> tts.chunk / tts.ready`
 - DLQ、补偿和故障恢复链路

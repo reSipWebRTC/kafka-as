@@ -1,6 +1,9 @@
-package com.kafkaasr.gateway.ws.downlink.events;
+package com.kafkaasr.asr.events;
 
-public record AsrFinalEvent(
+import com.fasterxml.jackson.annotation.JsonInclude;
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public record AsrPartialEvent(
         String eventId,
         String eventType,
         String eventVersion,
@@ -12,5 +15,5 @@ public record AsrFinalEvent(
         long seq,
         long ts,
         String idempotencyKey,
-        AsrFinalPayload payload) {
+        AsrPartialPayload payload) {
 }
