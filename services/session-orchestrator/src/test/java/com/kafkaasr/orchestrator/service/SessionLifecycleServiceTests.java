@@ -10,11 +10,15 @@ import com.kafkaasr.orchestrator.api.SessionStopRequest;
 import com.kafkaasr.orchestrator.events.OrchestratorKafkaProperties;
 import com.kafkaasr.orchestrator.events.SessionControlEvent;
 import com.kafkaasr.orchestrator.events.SessionControlPublisher;
+import com.kafkaasr.orchestrator.session.SessionState;
+import com.kafkaasr.orchestrator.session.SessionStateRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -23,11 +27,13 @@ import reactor.test.StepVerifier;
 class SessionLifecycleServiceTests {
 
     private RecordingPublisher publisher;
+    private SessionStateRepository stateRepository;
     private SessionLifecycleService sessionLifecycleService;
 
     @BeforeEach
     void setUp() {
         publisher = new RecordingPublisher();
+        stateRepository = new InMemorySessionStateRepository();
 
         OrchestratorKafkaProperties properties = new OrchestratorKafkaProperties();
         properties.setProducerId("session-orchestrator");
@@ -36,6 +42,7 @@ class SessionLifecycleServiceTests {
         sessionLifecycleService = new SessionLifecycleService(
                 publisher,
                 properties,
+                stateRepository,
                 Clock.fixed(Instant.parse("2026-04-21T00:00:00Z"), ZoneOffset.UTC));
     }
 
@@ -128,6 +135,26 @@ class SessionLifecycleServiceTests {
 
         List<SessionControlEvent> events() {
             return events;
+        }
+    }
+
+    private static final class InMemorySessionStateRepository implements SessionStateRepository {
+
+        private final Map<String, SessionState> states = new HashMap<>();
+
+        @Override
+        public SessionState findBySessionId(String sessionId) {
+            return states.get(sessionId);
+        }
+
+        @Override
+        public boolean createIfAbsent(SessionState state) {
+            return states.putIfAbsent(state.sessionId(), state) == null;
+        }
+
+        @Override
+        public void save(SessionState state) {
+            states.put(state.sessionId(), state);
         }
     }
 }

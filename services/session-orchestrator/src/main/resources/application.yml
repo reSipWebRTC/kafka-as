@@ -1,6 +1,10 @@
 spring:
   application:
     name: session-orchestrator
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -21,3 +25,6 @@ orchestrator:
     enabled: ${ORCHESTRATOR_KAFKA_ENABLED:true}
     session-control-topic: ${ORCHESTRATOR_SESSION_CONTROL_TOPIC:session.control}
     producer-id: ${ORCHESTRATOR_PRODUCER_ID:session-orchestrator}
+  session-store:
+    key-prefix: ${ORCHESTRATOR_SESSION_STORE_KEY_PREFIX:orchestrator:session:}
+    ttl: ${ORCHESTRATOR_SESSION_STORE_TTL:12h}

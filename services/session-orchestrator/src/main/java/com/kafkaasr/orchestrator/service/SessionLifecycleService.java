@@ -9,11 +9,10 @@ import com.kafkaasr.orchestrator.events.SessionControlEvent;
 import com.kafkaasr.orchestrator.events.SessionControlPayload;
 import com.kafkaasr.orchestrator.events.SessionControlPublisher;
 import com.kafkaasr.orchestrator.session.SessionState;
+import com.kafkaasr.orchestrator.session.SessionStateRepository;
 import com.kafkaasr.orchestrator.session.SessionStatus;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -29,37 +28,44 @@ public class SessionLifecycleService {
 
     private final SessionControlPublisher sessionControlPublisher;
     private final OrchestratorKafkaProperties kafkaProperties;
+    private final SessionStateRepository sessionStateRepository;
     private final Clock clock;
-
-    private final Object mutex = new Object();
-    private final Map<String, SessionState> sessions = new HashMap<>();
 
     @Autowired
     public SessionLifecycleService(
             SessionControlPublisher sessionControlPublisher,
-            OrchestratorKafkaProperties kafkaProperties) {
-        this(sessionControlPublisher, kafkaProperties, Clock.systemUTC());
+            OrchestratorKafkaProperties kafkaProperties,
+            SessionStateRepository sessionStateRepository) {
+        this(sessionControlPublisher, kafkaProperties, sessionStateRepository, Clock.systemUTC());
     }
 
     SessionLifecycleService(
             SessionControlPublisher sessionControlPublisher,
             OrchestratorKafkaProperties kafkaProperties,
+            SessionStateRepository sessionStateRepository,
             Clock clock) {
         this.sessionControlPublisher = sessionControlPublisher;
         this.kafkaProperties = kafkaProperties;
+        this.sessionStateRepository = sessionStateRepository;
         this.clock = clock;
     }
 
     public Mono<SessionStartResponse> startSession(SessionStartRequest request) {
         StartResult result;
-        synchronized (mutex) {
-            SessionState current = sessions.get(request.sessionId());
-            if (current == null) {
-                result = createSession(request);
-                sessions.put(request.sessionId(), result.state());
+        SessionState current = sessionStateRepository.findBySessionId(request.sessionId());
+        if (current == null) {
+            StartResult created = createSession(request);
+            if (sessionStateRepository.createIfAbsent(created.state())) {
+                result = created;
             } else {
-                result = handleRepeatedStart(request, current);
+                SessionState existing = sessionStateRepository.findBySessionId(request.sessionId());
+                if (existing == null) {
+                    throw new IllegalStateException("Session state lost during start race for " + request.sessionId());
+                }
+                result = handleRepeatedStart(request, existing);
             }
+        } else {
+            result = handleRepeatedStart(request, current);
         }
 
         Mono<Void> publish = result.event() == null
@@ -72,18 +78,16 @@ public class SessionLifecycleService {
         SessionStopRequest normalizedRequest = request == null ? SessionStopRequest.empty() : request;
 
         StopResult result;
-        synchronized (mutex) {
-            SessionState current = sessions.get(sessionId);
-            if (current == null) {
-                throw SessionControlException.sessionNotFound(sessionId);
-            }
+        SessionState current = sessionStateRepository.findBySessionId(sessionId);
+        if (current == null) {
+            throw SessionControlException.sessionNotFound(sessionId);
+        }
 
-            if (current.status() == SessionStatus.CLOSED) {
-                result = alreadyStopped(current, normalizedRequest);
-            } else {
-                result = closeSession(current, normalizedRequest);
-                sessions.put(sessionId, result.state());
-            }
+        if (current.status() == SessionStatus.CLOSED) {
+            result = alreadyStopped(current, normalizedRequest);
+        } else {
+            result = closeSession(current, normalizedRequest);
+            sessionStateRepository.save(result.state());
         }
 
         Mono<Void> publish = result.event() == null
