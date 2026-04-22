@@ -86,6 +86,45 @@ class FunasrAsrInferenceEngineTests {
         assertTrue(exception.getMessage().contains("Empty FunASR transcript"));
     }
 
+    @Test
+    void inferRejectsProviderBusinessErrorCode() {
+        ExchangeFunction exchangeFunction = request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .body("{\"code\":500,\"msg\":\"engine overloaded\"}")
+                .build());
+
+        FunasrAsrInferenceEngine engine = new FunasrAsrInferenceEngine(
+                funasrProperties(""),
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper());
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> engine.infer(sampleIngressEvent(false)));
+        assertTrue(exception.getMessage().contains("provider error"));
+        assertTrue(exception.getMessage().contains("code=500"));
+    }
+
+    @Test
+    void inferParsesSentenceArrayAndBooleanLikeFields() {
+        ExchangeFunction exchangeFunction = request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .body("{\"status\":\"0\",\"sentences\":[{\"sentence\":\"hello world\",\"confidence\":\"0.82\",\"is_final\":1}],\"lang\":\"en-US\"}")
+                .build());
+
+        FunasrAsrInferenceEngine engine = new FunasrAsrInferenceEngine(
+                funasrProperties(""),
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper());
+
+        AsrInferenceEngine.AsrInferenceResult result = engine.infer(sampleIngressEvent(false));
+
+        assertEquals("hello world", result.text());
+        assertEquals("en-US", result.language());
+        assertEquals(0.82d, result.confidence());
+        assertTrue(result.stable());
+    }
+
     private static AsrInferenceProperties funasrProperties(String authToken) {
         AsrInferenceProperties properties = new AsrInferenceProperties();
         properties.setMode("funasr");
