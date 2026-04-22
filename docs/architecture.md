@@ -51,14 +51,16 @@ flowchart LR
 - `speech-gateway -> session-orchestrator` 的低频会话控制
 - `speech-gateway` 的 `session.ping` 处理
 - `speech-gateway` 基于 Kafka 的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行回推
+- `speech-gateway` 会话级 `audio.frame` 限流与背压保护
 - `session-orchestrator -> control-plane` 的租户策略查询
 - `session-orchestrator` 的 Redis 会话状态与 `session.control` 发布
 - `asr-worker -> translation-worker -> tts-orchestrator` 的占位事件链路
+- 核心 Kafka consumer 固定重试 + `.dlq` 死信回退
 
 当前尚未实现：
 
 - TTS 引擎、对象存储、CDN
-- 生产级限流、背压、DLQ、补偿
+- 生产级补偿编排、熔断与灰度治理
 
 ## 4. 目标总体分层
 
@@ -138,7 +140,7 @@ flowchart TB
 当前基线：
 
 - 已实现 `/ws/audio`、`session.ping`、音频直写 Kafka、start/stop 调用 orchestrator、错误下行、基于 Kafka 的字幕与会话关闭回推
-- 未实现鉴权、限流、背压和更细粒度下行编排
+- 未实现鉴权和更细粒度下行编排
 
 ### Session Orchestrator
 
@@ -165,7 +167,8 @@ flowchart TB
 当前基线：
 
 - 已承接 `audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
-- 暂未落地 DLQ、重放流程和 Lag 治理文档化闭环
+- 已落地消费侧固定重试和 `.dlq` 死信回退
+- 暂未落地统一重放流程和 Lag 治理文档化闭环
 
 ### ASR Worker
 

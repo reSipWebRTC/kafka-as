@@ -10,11 +10,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kafkaasr.gateway.flow.GatewayAudioFrameFlowController;
+import com.kafkaasr.gateway.flow.GatewayFlowControlProperties;
 import com.kafkaasr.gateway.ingress.AudioFrameIngressCommand;
 import com.kafkaasr.gateway.ingress.AudioIngressPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -24,7 +29,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,11 +47,22 @@ class GatewayMessageRouterTests {
 
     @BeforeEach
     void setUp() {
+        router = buildRouter(50, 8, Clock.systemUTC());
+    }
+
+    private GatewayMessageRouter buildRouter(
+            int rateLimitPerSecond,
+            int maxInflight,
+            Clock clock) {
         ObjectMapper objectMapper = new ObjectMapper();
         Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
+        GatewayFlowControlProperties flowControlProperties = new GatewayFlowControlProperties();
+        flowControlProperties.setAudioFrameRateLimitPerSecond(rateLimitPerSecond);
+        flowControlProperties.setAudioFrameMaxInflight(maxInflight);
 
-        router = new GatewayMessageRouter(
+        GatewayMessageRouter gatewayMessageRouter = new GatewayMessageRouter(
                 audioIngressPublisher,
+                new GatewayAudioFrameFlowController(flowControlProperties, clock),
                 new AudioFrameMessageDecoder(objectMapper, validator),
                 new SessionStartMessageDecoder(objectMapper, validator),
                 new SessionPingMessageDecoder(objectMapper, validator),
@@ -56,20 +74,13 @@ class GatewayMessageRouterTests {
         lenient().when(audioIngressPublisher.publishRawFrame(any())).thenReturn(Mono.empty());
         lenient().when(sessionControlClient.startSession(any())).thenReturn(Mono.empty());
         lenient().when(sessionControlClient.stopSession(any())).thenReturn(Mono.empty());
+
+        return gatewayMessageRouter;
     }
 
     @Test
     void routesAudioFrameToIngressPublisher() {
-        StepVerifier.create(router.route("""
-                {
-                  "type": "audio.frame",
-                  "sessionId": "sess-1",
-                  "seq": 7,
-                  "codec": "pcm16le",
-                  "sampleRate": 16000,
-                  "audioBase64": "AQID"
-                }
-                """, sessionId -> {
+        StepVerifier.create(router.route(audioFrameMessage("sess-1", 7), sessionId -> {
                 }))
                 .verifyComplete();
 
@@ -171,5 +182,64 @@ class GatewayMessageRouterTests {
                     assertEquals("sess-4", exception.sessionId());
                 })
                 .verify();
+    }
+
+    @Test
+    void rejectsAudioFrameWhenRateLimited() {
+        router = buildRouter(
+                1,
+                8,
+                Clock.fixed(Instant.parse("2026-04-22T12:00:00Z"), ZoneOffset.UTC));
+
+        StepVerifier.create(router.route(audioFrameMessage("sess-6", 1), sessionId -> {
+                }))
+                .verifyComplete();
+
+        StepVerifier.create(router.route(audioFrameMessage("sess-6", 2), sessionId -> {
+                }))
+                .expectErrorSatisfies(error -> {
+                    MessageValidationException exception = assertInstanceOf(MessageValidationException.class, error);
+                    assertEquals("RATE_LIMITED", exception.code());
+                    assertEquals("sess-6", exception.sessionId());
+                })
+                .verify();
+    }
+
+    @Test
+    void rejectsAudioFrameWhenBackpressureThresholdExceeded() {
+        router = buildRouter(50, 1, Clock.systemUTC());
+
+        Sinks.Empty<Void> firstPublishSignal = Sinks.empty();
+        when(audioIngressPublisher.publishRawFrame(any())).thenReturn(firstPublishSignal.asMono());
+
+        Disposable firstSubscription = router.route(audioFrameMessage("sess-7", 1), sessionId -> {
+                })
+                .subscribe();
+        try {
+            StepVerifier.create(router.route(audioFrameMessage("sess-7", 2), sessionId -> {
+                    }))
+                    .expectErrorSatisfies(error -> {
+                        MessageValidationException exception = assertInstanceOf(MessageValidationException.class, error);
+                        assertEquals("BACKPRESSURE_DROP", exception.code());
+                        assertEquals("sess-7", exception.sessionId());
+                    })
+                    .verify();
+        } finally {
+            firstPublishSignal.tryEmitEmpty();
+            firstSubscription.dispose();
+        }
+    }
+
+    private String audioFrameMessage(String sessionId, long seq) {
+        return """
+                {
+                  "type": "audio.frame",
+                  "sessionId": "%s",
+                  "seq": %d,
+                  "codec": "pcm16le",
+                  "sampleRate": 16000,
+                  "audioBase64": "AQID"
+                }
+                """.formatted(sessionId, seq);
     }
 }

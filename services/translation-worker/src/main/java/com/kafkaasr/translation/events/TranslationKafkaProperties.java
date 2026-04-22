@@ -1,5 +1,6 @@
 package com.kafkaasr.translation.events;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -24,6 +25,15 @@ public class TranslationKafkaProperties {
 
     @NotBlank
     private String engineName = "placeholder";
+
+    @Min(1)
+    private int retryMaxAttempts = 3;
+
+    @Min(1)
+    private long retryBackoffMs = 200L;
+
+    @NotBlank
+    private String dlqTopicSuffix = ".dlq";
 
     public boolean isEnabled() {
         return enabled;
@@ -71,5 +81,29 @@ public class TranslationKafkaProperties {
 
     public void setEngineName(String engineName) {
         this.engineName = engineName;
+    }
+
+    public int getRetryMaxAttempts() {
+        return retryMaxAttempts;
+    }
+
+    public void setRetryMaxAttempts(int retryMaxAttempts) {
+        this.retryMaxAttempts = retryMaxAttempts;
+    }
+
+    public long getRetryBackoffMs() {
+        return retryBackoffMs;
+    }
+
+    public void setRetryBackoffMs(long retryBackoffMs) {
+        this.retryBackoffMs = retryBackoffMs;
+    }
+
+    public String getDlqTopicSuffix() {
+        return dlqTopicSuffix;
+    }
+
+    public void setDlqTopicSuffix(String dlqTopicSuffix) {
+        this.dlqTopicSuffix = dlqTopicSuffix;
     }
 }

@@ -28,8 +28,8 @@ public class AsrPartialDownlinkConsumer {
     }
 
     @KafkaListener(
-            topics = "${gateway.downlink.asr-partial-topic:asr.partial}",
-            groupId = "${gateway.downlink.consumer-group-id:speech-gateway-downlink}")
+            topics = "#{@gatewayDownlinkProperties.asrPartialTopic}",
+            groupId = "#{@gatewayDownlinkProperties.consumerGroupId}")
     public void onMessage(String payload) {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {

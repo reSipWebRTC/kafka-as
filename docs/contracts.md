@@ -21,6 +21,8 @@
 - WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`session.closed`
 - 低频控制 API：会话 start/stop、租户策略 get/put
 - 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
+- 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
+- 核心 Kafka consumer 固定重试与按源 Topic 的 `.dlq` 死信回退
 
 仍在 v1 契约中保留但尚未打通：
 
