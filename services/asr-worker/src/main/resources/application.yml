@@ -53,3 +53,10 @@ asr:
     idempotency-enabled: ${ASR_IDEMPOTENCY_ENABLED:true}
     idempotency-ttl-ms: ${ASR_IDEMPOTENCY_TTL_MS:300000}
     compensation-topic: ${ASR_COMPENSATION_TOPIC:platform.compensation}
+  inference:
+    mode: ${ASR_INFERENCE_MODE:placeholder}
+    http:
+      endpoint: ${ASR_INFERENCE_HTTP_ENDPOINT:}
+      path: ${ASR_INFERENCE_HTTP_PATH:/v1/asr/infer}
+      timeout-ms: ${ASR_INFERENCE_HTTP_TIMEOUT_MS:1500}
+      auth-token: ${ASR_INFERENCE_HTTP_AUTH_TOKEN:}

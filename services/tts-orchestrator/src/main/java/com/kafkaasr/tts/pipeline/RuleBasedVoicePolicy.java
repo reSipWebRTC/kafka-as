@@ -4,7 +4,7 @@ import com.kafkaasr.tts.events.TranslationResultEvent;
 import org.springframework.stereotype.Component;
 
 @Component
-public class PlaceholderVoicePolicy implements VoicePolicy {
+public class RuleBasedVoicePolicy implements VoicePolicy {
 
     @Override
     public String resolveVoice(TranslationResultEvent event, String language, String defaultVoice) {
