@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.translation.events.AsrFinalEvent;
 import com.kafkaasr.translation.events.TranslationResultEvent;
 import com.kafkaasr.translation.pipeline.TranslationPipelineService;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -20,28 +22,52 @@ public class AsrFinalConsumer {
     private final ObjectMapper objectMapper;
     private final TranslationPipelineService pipelineService;
     private final TranslationResultPublisher translationResultPublisher;
+    private final MeterRegistry meterRegistry;
 
     public AsrFinalConsumer(
             ObjectMapper objectMapper,
             TranslationPipelineService pipelineService,
-            TranslationResultPublisher translationResultPublisher) {
+            TranslationResultPublisher translationResultPublisher,
+            MeterRegistry meterRegistry) {
         this.objectMapper = objectMapper;
         this.pipelineService = pipelineService;
         this.translationResultPublisher = translationResultPublisher;
+        this.meterRegistry = meterRegistry;
     }
 
     @KafkaListener(
             topics = "#{@translationKafkaProperties.asrFinalTopic}",
             groupId = "${TRANSLATION_CONSUMER_GROUP_ID:translation-worker}")
     public void onMessage(String payload) {
-        AsrFinalEvent asrFinalEvent = parse(payload);
-        TranslationResultEvent resultEvent = pipelineService.toTranslationResultEvent(asrFinalEvent);
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            AsrFinalEvent asrFinalEvent = parse(payload);
+            TranslationResultEvent resultEvent = pipelineService.toTranslationResultEvent(asrFinalEvent);
 
-        translationResultPublisher.publish(resultEvent).block();
-        log.debug(
-                "Published translation.result event sessionId={} seq={}",
-                resultEvent.sessionId(),
-                resultEvent.seq());
+            translationResultPublisher.publish(resultEvent).block();
+            meterRegistry.counter(
+                            "translation.pipeline.messages.total",
+                            "result",
+                            "success",
+                            "code",
+                            "OK")
+                    .increment();
+            log.debug(
+                    "Published translation.result event sessionId={} seq={}",
+                    resultEvent.sessionId(),
+                    resultEvent.seq());
+        } catch (RuntimeException exception) {
+            meterRegistry.counter(
+                            "translation.pipeline.messages.total",
+                            "result",
+                            "error",
+                            "code",
+                            normalizeErrorCode(exception))
+                    .increment();
+            throw exception;
+        } finally {
+            sample.stop(meterRegistry.timer("translation.pipeline.duration"));
+        }
     }
 
     private AsrFinalEvent parse(String payload) {
@@ -50,5 +76,12 @@ public class AsrFinalConsumer {
         } catch (JsonProcessingException exception) {
             throw new IllegalArgumentException("Invalid asr.final payload", exception);
         }
+    }
+
+    private String normalizeErrorCode(Throwable throwable) {
+        if (throwable instanceof IllegalArgumentException) {
+            return "INVALID_PAYLOAD";
+        }
+        return "PIPELINE_FAILURE";
     }
 }

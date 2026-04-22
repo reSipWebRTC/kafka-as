@@ -19,6 +19,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework.kafka:spring-kafka")
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+
+    runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+    runtimeOnly("io.opentelemetry:opentelemetry-exporter-otlp")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("io.projectreactor:reactor-test")

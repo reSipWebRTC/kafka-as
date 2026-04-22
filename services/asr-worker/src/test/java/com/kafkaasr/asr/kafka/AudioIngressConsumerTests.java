@@ -12,6 +12,7 @@ import com.kafkaasr.asr.events.AsrFinalPayload;
 import com.kafkaasr.asr.events.AudioIngressRawEvent;
 import com.kafkaasr.asr.events.AudioIngressRawPayload;
 import com.kafkaasr.asr.pipeline.AsrPipelineService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,7 +34,7 @@ class AudioIngressConsumerTests {
 
     @BeforeEach
     void setUp() {
-        consumer = new AudioIngressConsumer(objectMapper, pipelineService, asrFinalPublisher);
+        consumer = new AudioIngressConsumer(objectMapper, pipelineService, asrFinalPublisher, new SimpleMeterRegistry());
     }
 
     @Test

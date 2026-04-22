@@ -180,3 +180,28 @@
 - 服务健康看板
 - 基础资源看板
 
+## 9. 当前仓库 Baseline 落地（2026-04-22）
+
+已在以下服务接入统一基线：
+
+- `speech-gateway`
+- `session-orchestrator`
+- `asr-worker`
+- `translation-worker`
+
+### 已统一配置
+
+- `management` 端点暴露：`health,info,metrics,prometheus`
+- 健康探针：`management.endpoint.health.probes.enabled=true`
+- 指标公共标签：`service`、`env`
+- tracing 采样：`management.tracing.sampling.probability`
+- OTLP 导出：`management.otlp.tracing.endpoint`
+- 日志关联键：`traceId`、`spanId`
+
+### 已落地指标（第一版）
+
+- `gateway.ws.messages.total` / `gateway.ws.messages.duration`
+- `orchestrator.session.start.total` / `orchestrator.session.start.duration`
+- `orchestrator.session.stop.total` / `orchestrator.session.stop.duration`
+- `asr.pipeline.messages.total` / `asr.pipeline.duration`
+- `translation.pipeline.messages.total` / `translation.pipeline.duration`
