@@ -23,8 +23,14 @@ class TtsRequestPipelineServiceTests {
         properties.setStreamEnabled(true);
 
         VoicePolicy voicePolicy = (event, language, defaultVoice) -> defaultVoice;
+        TtsSynthesisEngine synthesisEngine = (event, input) -> new TtsSynthesisEngine.SynthesisPlan(
+                input.text(),
+                input.language(),
+                input.voice(),
+                input.stream());
         TtsRequestPipelineService service = new TtsRequestPipelineService(
                 voicePolicy,
+                synthesisEngine,
                 properties,
                 Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
 
@@ -69,6 +75,11 @@ class TtsRequestPipelineServiceTests {
 
         TtsRequestPipelineService service = new TtsRequestPipelineService(
                 (event, language, defaultVoice) -> "voice-A",
+                (event, input) -> new TtsSynthesisEngine.SynthesisPlan(
+                        input.text(),
+                        input.language(),
+                        input.voice(),
+                        input.stream()),
                 properties,
                 Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
 
@@ -96,6 +107,11 @@ class TtsRequestPipelineServiceTests {
     void rejectsUnexpectedEventType() {
         TtsRequestPipelineService service = new TtsRequestPipelineService(
                 (event, language, defaultVoice) -> "voice-default",
+                (event, input) -> new TtsSynthesisEngine.SynthesisPlan(
+                        input.text(),
+                        input.language(),
+                        input.voice(),
+                        input.stream()),
                 new TtsKafkaProperties(),
                 Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
 
@@ -116,5 +132,44 @@ class TtsRequestPipelineServiceTests {
         IllegalArgumentException exception =
                 assertThrows(IllegalArgumentException.class, () -> service.toTtsRequestEvent(invalid));
         assertTrue(exception.getMessage().contains("Unsupported translation.result eventType"));
+    }
+
+    @Test
+    void usesSynthesisEngineOverridesForFinalPayload() {
+        TtsKafkaProperties properties = new TtsKafkaProperties();
+        properties.setProducerId("tts-orchestrator");
+        properties.setDefaultVoice("en-US-neural-a");
+        properties.setStreamEnabled(true);
+
+        TtsRequestPipelineService service = new TtsRequestPipelineService(
+                (event, language, defaultVoice) -> defaultVoice,
+                (event, input) -> new TtsSynthesisEngine.SynthesisPlan(
+                        "HELLO",
+                        "en-GB",
+                        "en-GB-neural-b",
+                        false),
+                properties,
+                Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
+
+        TranslationResultEvent input = new TranslationResultEvent(
+                "evt-in-3",
+                "translation.result",
+                "v1",
+                "trc-3",
+                "sess-3",
+                "tenant-a",
+                null,
+                "translation-worker",
+                11L,
+                1713744000000L,
+                "sess-3:translation.result:11",
+                new TranslationResultPayload("你好", "hello", "zh-CN", "en-US", "placeholder"));
+
+        TtsRequestEvent out = service.toTtsRequestEvent(input);
+
+        assertEquals("HELLO", out.payload().text());
+        assertEquals("en-GB", out.payload().language());
+        assertEquals("en-GB-neural-b", out.payload().voice());
+        assertEquals(false, out.payload().stream());
     }
 }

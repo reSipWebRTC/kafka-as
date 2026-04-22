@@ -24,21 +24,25 @@ public class TtsRequestPipelineService {
     private static final String FALLBACK_TEXT = "[empty]";
 
     private final VoicePolicy voicePolicy;
+    private final TtsSynthesisEngine synthesisEngine;
     private final TtsKafkaProperties kafkaProperties;
     private final Clock clock;
 
     @Autowired
     public TtsRequestPipelineService(
             VoicePolicy voicePolicy,
+            TtsSynthesisEngine synthesisEngine,
             TtsKafkaProperties kafkaProperties) {
-        this(voicePolicy, kafkaProperties, Clock.systemUTC());
+        this(voicePolicy, synthesisEngine, kafkaProperties, Clock.systemUTC());
     }
 
     TtsRequestPipelineService(
             VoicePolicy voicePolicy,
+            TtsSynthesisEngine synthesisEngine,
             TtsKafkaProperties kafkaProperties,
             Clock clock) {
         this.voicePolicy = voicePolicy;
+        this.synthesisEngine = synthesisEngine;
         this.kafkaProperties = kafkaProperties;
         this.clock = clock;
     }
@@ -51,12 +55,32 @@ public class TtsRequestPipelineService {
         String text = normalizeText(
                 translationResultEvent.payload().translatedText(),
                 translationResultEvent.payload().sourceText());
-
         String voice = normalizeVoice(voicePolicy.resolveVoice(
                 translationResultEvent,
                 language,
                 kafkaProperties.getDefaultVoice()));
-        String cacheKey = buildCacheKey(language, voice, text);
+        boolean stream = kafkaProperties.isStreamEnabled();
+
+        TtsSynthesisEngine.SynthesisInput synthesisInput = new TtsSynthesisEngine.SynthesisInput(
+                text,
+                language,
+                voice,
+                stream);
+        TtsSynthesisEngine.SynthesisPlan synthesisPlan = synthesisEngine.synthesize(translationResultEvent, synthesisInput);
+        if (synthesisPlan == null) {
+            synthesisPlan = new TtsSynthesisEngine.SynthesisPlan(
+                    synthesisInput.text(),
+                    synthesisInput.language(),
+                    synthesisInput.voice(),
+                    synthesisInput.stream());
+        }
+
+        String finalizedText = normalizeText(synthesisPlan.text(), synthesisInput.text());
+        String finalizedLanguage = normalizeLanguage(firstNonBlank(synthesisPlan.language(), synthesisInput.language()));
+        String finalizedVoice = normalizeVoice(firstNonBlank(synthesisPlan.voice(), synthesisInput.voice()));
+        boolean finalizedStream = synthesisPlan.stream();
+
+        String cacheKey = buildCacheKey(finalizedLanguage, finalizedVoice, finalizedText);
 
         return new TtsRequestEvent(
                 prefixedId("evt"),
@@ -71,11 +95,11 @@ public class TtsRequestPipelineService {
                 timestamp,
                 translationResultEvent.sessionId() + ":" + OUTPUT_EVENT_TYPE + ":" + translationResultEvent.seq(),
                 new TtsRequestPayload(
-                        text,
-                        language,
-                        voice,
+                        finalizedText,
+                        finalizedLanguage,
+                        finalizedVoice,
                         cacheKey,
-                        kafkaProperties.isStreamEnabled()));
+                        finalizedStream));
     }
 
     private void validateTranslationResultEvent(TranslationResultEvent translationResultEvent) {
@@ -121,6 +145,15 @@ public class TtsRequestPipelineService {
             return "voice-default";
         }
         return voice;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private String buildCacheKey(String language, String voice, String text) {
