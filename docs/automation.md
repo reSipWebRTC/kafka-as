@@ -106,7 +106,39 @@ cd /home/david/work/kafka-asr
 tools/finish-feature.sh feature/asr-pipeline
 ```
 
-## 5. Boundaries
+## 5. Second Codex Session Template
+
+Use a second Codex session for parallel work that does not modify the same files as the current feature branch.
+
+Example target:
+
+- current session: `feature/session-orchestrator`
+- second session: `feature/gateway-session-control`
+
+Bootstrap commands for the second session:
+
+```bash
+cd /home/david/work/kafka-asr
+tools/new-feature.sh feature/gateway-session-control
+cd .worktrees/feature-gateway-session-control
+tools/activate-superpowers.sh
+```
+
+Suggested first prompt for the second session:
+
+```text
+Use superpowers workflow for this repository. Implement feature/gateway-session-control: wire speech-gateway to call session-orchestrator start/stop APIs, keep audio.frame path unchanged, add config + client + error mapping + tests, then run tools/verify.sh.
+```
+
+Finish flow for the second session:
+
+```bash
+tools/verify.sh
+cd /home/david/work/kafka-asr
+tools/finish-feature.sh feature/gateway-session-control
+```
+
+## 6. Boundaries
 
 This automation is intentionally narrow:
 
