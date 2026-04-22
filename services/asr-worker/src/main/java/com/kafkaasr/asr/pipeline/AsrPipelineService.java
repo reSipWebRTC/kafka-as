@@ -51,10 +51,23 @@ public class AsrPipelineService {
 
         AsrInferenceEngine.AsrInferenceResult inferenceResult = inferenceEngine.infer(ingressEvent);
         long timestamp = Instant.now(clock).toEpochMilli();
+        String text = coalesceText(inferenceResult.text());
+        String language = normalizeLanguage(inferenceResult.language());
+        double confidence = normalizeConfidence(inferenceResult.confidence());
+        boolean emitFinal = shouldEmitFinal(ingressEvent, inferenceResult);
+
+        AsrPartialEvent partialEvent = null;
+        AsrFinalEvent finalEvent = null;
+
+        if (!emitFinal) {
+            partialEvent = toAsrPartialEvent(ingressEvent, text, language, confidence, timestamp);
+        } else {
+            finalEvent = toAsrFinalEvent(ingressEvent, text, language, confidence, timestamp);
+        }
 
         return new AsrPipelineEvents(
-                toAsrPartialEvent(ingressEvent, inferenceResult, timestamp),
-                toAsrFinalEvent(ingressEvent, inferenceResult, timestamp));
+                partialEvent,
+                finalEvent);
     }
 
     public AsrPartialEvent toAsrPartialEvent(AudioIngressRawEvent ingressEvent) {
@@ -67,7 +80,9 @@ public class AsrPipelineService {
 
     private AsrPartialEvent toAsrPartialEvent(
             AudioIngressRawEvent ingressEvent,
-            AsrInferenceEngine.AsrInferenceResult inferenceResult,
+            String text,
+            String language,
+            double confidence,
             long timestamp) {
         return new AsrPartialEvent(
                 prefixedId("evt"),
@@ -82,15 +97,17 @@ public class AsrPipelineService {
                 timestamp,
                 idempotencyKey(ingressEvent, OUTPUT_EVENT_TYPE_PARTIAL),
                 new AsrPartialPayload(
-                        coalesceText(inferenceResult.text()),
-                        normalizeLanguage(inferenceResult.language()),
-                        normalizeConfidence(inferenceResult.confidence()),
+                        text,
+                        language,
+                        confidence,
                         false));
     }
 
     private AsrFinalEvent toAsrFinalEvent(
             AudioIngressRawEvent ingressEvent,
-            AsrInferenceEngine.AsrInferenceResult inferenceResult,
+            String text,
+            String language,
+            double confidence,
             long timestamp) {
         return new AsrFinalEvent(
                 prefixedId("evt"),
@@ -105,10 +122,17 @@ public class AsrPipelineService {
                 timestamp,
                 idempotencyKey(ingressEvent, OUTPUT_EVENT_TYPE_FINAL),
                 new AsrFinalPayload(
-                        coalesceText(inferenceResult.text()),
-                        normalizeLanguage(inferenceResult.language()),
-                        normalizeConfidence(inferenceResult.confidence()),
-                        inferenceResult.stable()));
+                        text,
+                        language,
+                        confidence,
+                        true));
+    }
+
+    private boolean shouldEmitFinal(
+            AudioIngressRawEvent ingressEvent,
+            AsrInferenceEngine.AsrInferenceResult inferenceResult) {
+        boolean endOfStream = ingressEvent.payload() != null && ingressEvent.payload().endOfStream();
+        return inferenceResult.stable() || endOfStream;
     }
 
     private String idempotencyKey(AudioIngressRawEvent ingressEvent, String eventType) {

@@ -84,6 +84,11 @@
 | `translation.result` | 翻译结果 | `translation.result` | `sessionId` |
 | `tts.request` | TTS 合成请求 | `tts.request` | `sessionId` |
 
+当前实现语义（`asr-worker`）：
+
+- 非稳定识别结果发布为 `asr.partial`
+- 稳定结果或 `endOfStream=true` 的终态识别结果发布为 `asr.final`
+
 完整 JSON Schema 与 Protobuf 见第 8 节。
 
 ## 5. WebSocket 协议（v1）
