@@ -3,7 +3,6 @@ package com.kafkaasr.tts.kafka;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.tts.events.TtsKafkaProperties;
-import com.kafkaasr.tts.events.TtsRequestEvent;
 import com.kafkaasr.tts.events.TranslationResultEvent;
 import com.kafkaasr.tts.pipeline.TtsRequestPipelineService;
 import com.kafkaasr.tts.policy.TenantReliabilityPolicy;
@@ -25,6 +24,8 @@ public class TranslationResultConsumer {
     private final ObjectMapper objectMapper;
     private final TtsRequestPipelineService pipelineService;
     private final TtsRequestPublisher ttsRequestPublisher;
+    private final TtsChunkPublisher ttsChunkPublisher;
+    private final TtsReadyPublisher ttsReadyPublisher;
     private final TtsCompensationPublisher compensationPublisher;
     private final TtsKafkaProperties kafkaProperties;
     private final TenantReliabilityPolicyResolver reliabilityPolicyResolver;
@@ -35,6 +36,8 @@ public class TranslationResultConsumer {
             ObjectMapper objectMapper,
             TtsRequestPipelineService pipelineService,
             TtsRequestPublisher ttsRequestPublisher,
+            TtsChunkPublisher ttsChunkPublisher,
+            TtsReadyPublisher ttsReadyPublisher,
             TtsCompensationPublisher compensationPublisher,
             TtsKafkaProperties kafkaProperties,
             TenantReliabilityPolicyResolver reliabilityPolicyResolver,
@@ -42,6 +45,8 @@ public class TranslationResultConsumer {
         this.objectMapper = objectMapper;
         this.pipelineService = pipelineService;
         this.ttsRequestPublisher = ttsRequestPublisher;
+        this.ttsChunkPublisher = ttsChunkPublisher;
+        this.ttsReadyPublisher = ttsReadyPublisher;
         this.compensationPublisher = compensationPublisher;
         this.kafkaProperties = kafkaProperties;
         this.reliabilityPolicyResolver = reliabilityPolicyResolver;
@@ -115,8 +120,10 @@ public class TranslationResultConsumer {
     }
 
     private void processOnce(TranslationResultEvent translationResultEvent) {
-        TtsRequestEvent requestEvent = pipelineService.toTtsRequestEvent(translationResultEvent);
-        ttsRequestPublisher.publish(requestEvent).block();
+        TtsRequestPipelineService.PipelineOutput pipelineOutput = pipelineService.toPipelineEvents(translationResultEvent);
+        ttsRequestPublisher.publish(pipelineOutput.requestEvent()).block();
+        ttsChunkPublisher.publish(pipelineOutput.chunkEvent()).block();
+        ttsReadyPublisher.publish(pipelineOutput.readyEvent()).block();
         idempotencyGuard.markProcessed(translationResultEvent.idempotencyKey());
         meterRegistry.counter(
                         "tts.pipeline.messages.total",
@@ -126,9 +133,9 @@ public class TranslationResultConsumer {
                         "OK")
                 .increment();
         log.debug(
-                "Published tts.request event sessionId={} seq={}",
-                requestEvent.sessionId(),
-                requestEvent.seq());
+                "Published tts.request/tts.chunk/tts.ready events sessionId={} seq={}",
+                pipelineOutput.requestEvent().sessionId(),
+                pipelineOutput.requestEvent().seq());
     }
 
     private TranslationResultEvent parse(String payload) {

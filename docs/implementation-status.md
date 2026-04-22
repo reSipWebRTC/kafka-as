@@ -2,7 +2,7 @@
 
 ## 1. 当前基线
 
-截至 `2026-04-22`，仓库已经从“纯资料收敛”演进为“文档 + 契约 + 服务骨架并存”的工程仓库。
+截至 `2026-04-23`，仓库已经从“纯资料收敛”演进为“文档 + 契约 + 服务骨架并存”的工程仓库。
 
 当前已实现的主链路是：
 
@@ -15,7 +15,7 @@
 这条链路已经具备：
 
 - 统一 v1 事件 Envelope
-- 6 个已落地 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
+- 8 个已落地 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`
 - 低频控制 API：会话 start/stop、租户策略 get/put
 - 网关 `audio.frame` 会话级限流/背压保护（`RATE_LIMITED` / `BACKPRESSURE_DROP`）
 - 核心 Kafka 消费链路已落地重试与按源 Topic 的 `.dlq` 死信回退（`asr-worker`、`translation-worker`、`tts-orchestrator` 已升级到按租户策略驱动重试/DLQ）
@@ -34,7 +34,7 @@
 | `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、控制面熔断与缓存回退、Redis 会话状态、`session.control` Kafka 发布 | 超时编排、结果聚合、补偿工作流 |
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配（含 FunASR v2 响应兼容与错误语义加固）、按稳定度分流发布 `asr.partial` / `asr.final`、按租户策略驱动重试/DLQ（含控制面失败回退） | FunASR 生产联调、VAD 分段 |
 | `translation-worker` | `8083` | 消费 `asr.final`、默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容与错误语义加固）、发布 `translation.result`、按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 生产联调、术语治理、上下文增强 |
-| `tts-orchestrator` | `8084` | 消费 `translation.result`、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容与错误语义加固）、生成 cacheKey、发布 `tts.request`、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS synthesis 生产联调、`tts.chunk` / `tts.ready`、对象存储、CDN |
+| `tts-orchestrator` | `8084` | 消费 `translation.result`、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容与错误语义加固）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS synthesis 生产联调、对象存储、CDN |
 | `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、Redis 策略存储、版本化 upsert、灰度/回退/可靠性策略字段 | 认证鉴权、持久化数据库、动态策略下发 |
 
 ## 3. 当前协议与接口面
@@ -81,6 +81,8 @@
 | `asr.final` | `asr-worker` | `translation-worker` | 当前翻译入口 |
 | `translation.result` | `translation-worker` | `tts-orchestrator` | 当前 TTS 入口 |
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | TTS 编排输出，等待真实引擎接入 |
+| `tts.chunk` | `tts-orchestrator` | 暂无仓库内下游 | TTS 分片输出，供实时播放链路接入 |
+| `tts.ready` | `tts-orchestrator` | 暂无仓库内下游 | TTS 回放就绪输出，供对象存储/CDN 链路接入 |
 
 同时，`speech-gateway` 当前也消费以下下行 Topic 并回推 WebSocket：
 
@@ -90,7 +92,7 @@
 
 ## 5. 当前缺口
 
-- `translation.request`、`tts.chunk`、`tts.ready` 仍是计划扩展 Topic
+- `translation.request` 仍是计划扩展 Topic
 - ASR / Translation / TTS 尚未完成生产级真实引擎闭环，当前是“placeholder/规则默认 + provider 适配入口（ASR 含 FunASR mode，Translation 含 OpenAI mode，TTS 含 synthesis mode）”阶段
 - 尚未接入对象存储、CDN、完整补偿编排、自适应熔断/灰度治理和压测体系
 

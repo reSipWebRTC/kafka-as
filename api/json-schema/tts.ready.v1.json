@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kafka-asr.local/schemas/tts.ready.v1.json",
+  "title": "tts.ready.v1",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "traceId",
+    "sessionId",
+    "tenantId",
+    "producer",
+    "seq",
+    "ts",
+    "idempotencyKey",
+    "payload"
+  ],
+  "properties": {
+    "eventId": { "type": "string", "minLength": 1 },
+    "eventType": { "const": "tts.ready" },
+    "eventVersion": { "const": "v1" },
+    "traceId": { "type": "string", "minLength": 1 },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "tenantId": { "type": "string", "minLength": 1 },
+    "roomId": { "type": "string" },
+    "producer": { "type": "string", "minLength": 1 },
+    "seq": { "type": "integer", "minimum": 0 },
+    "ts": { "type": "integer", "minimum": 0 },
+    "idempotencyKey": { "type": "string", "minLength": 1 },
+    "payload": {
+      "type": "object",
+      "required": ["playbackUrl", "codec", "sampleRate", "durationMs", "cacheKey"],
+      "properties": {
+        "playbackUrl": { "type": "string", "minLength": 1 },
+        "codec": { "type": "string", "minLength": 1 },
+        "sampleRate": { "type": "integer", "minimum": 8000 },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "cacheKey": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -66,7 +66,7 @@
 - Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行
 - 下行链路仓库内 E2E smoke 基线（顺序、终态、重复与异常计数）
 - 会话 start/stop 控制
-- `audio.ingress.raw -> asr.partial / asr.final -> translation.result -> tts.request`
+- `audio.ingress.raw -> asr.partial / asr.final -> translation.result -> tts.request / tts.chunk / tts.ready`
 - 基础管理端点和服务指标
 
 当前仍缺：
@@ -123,8 +123,8 @@
 当前判断：
 
 - `tts-orchestrator` 模块已存在
-- 已具备 `translation.result -> tts.request` 编排与 HTTP synthesis 适配入口
-- 下一步是完成 TTS 引擎生产联调与 `tts.chunk` / `tts.ready` 分发闭环
+- 已具备 `translation.result -> tts.request / tts.chunk / tts.ready` 编排与 HTTP synthesis 适配入口
+- 下一步是完成 TTS 引擎生产联调与对象存储/CDN 回放分发闭环
 
 ## 6. Phase 4：控制面与多租户
 

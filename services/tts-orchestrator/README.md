@@ -1,6 +1,6 @@
 # tts-orchestrator
 
-`tts-orchestrator` consumes `translation.result` events and produces `tts.request` events.
+`tts-orchestrator` consumes `translation.result` events and produces `tts.request`, `tts.chunk`, and `tts.ready` events.
 
 Current scope:
 
@@ -12,5 +12,4 @@ Current scope:
 Out of scope in this phase:
 
 - Production TTS runtime validation and model-side scaling controls
-- `tts.chunk` and `tts.ready` event publishing
 - Object storage/CDN distribution flow

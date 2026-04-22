@@ -11,7 +11,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kafkaasr.tts.events.TtsChunkEvent;
+import com.kafkaasr.tts.events.TtsChunkPayload;
 import com.kafkaasr.tts.events.TtsKafkaProperties;
+import com.kafkaasr.tts.events.TtsReadyEvent;
+import com.kafkaasr.tts.events.TtsReadyPayload;
 import com.kafkaasr.tts.events.TtsRequestEvent;
 import com.kafkaasr.tts.events.TtsRequestPayload;
 import com.kafkaasr.tts.events.TranslationResultEvent;
@@ -37,6 +41,12 @@ class TranslationResultConsumerTests {
     private TtsRequestPublisher ttsRequestPublisher;
 
     @Mock
+    private TtsChunkPublisher ttsChunkPublisher;
+
+    @Mock
+    private TtsReadyPublisher ttsReadyPublisher;
+
+    @Mock
     private TtsCompensationPublisher compensationPublisher;
 
     @Mock
@@ -54,6 +64,8 @@ class TranslationResultConsumerTests {
                 objectMapper,
                 pipelineService,
                 ttsRequestPublisher,
+                ttsChunkPublisher,
+                ttsReadyPublisher,
                 compensationPublisher,
                 properties,
                 reliabilityPolicyResolver,
@@ -92,22 +104,57 @@ class TranslationResultConsumerTests {
                 "sess-1:tts.request:3",
                 new TtsRequestPayload("hello", "en-US", "voice-a", "tts:v1:abc", true));
 
+        TtsChunkEvent chunkEvent = new TtsChunkEvent(
+                "evt-out-2",
+                "tts.chunk",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "tts-orchestrator",
+                3L,
+                1713744001000L,
+                "sess-1:tts.chunk:3",
+                new TtsChunkPayload("aGVsbG8=", "audio/pcm", 16000, 0, true));
+
+        TtsReadyEvent readyEvent = new TtsReadyEvent(
+                "evt-out-3",
+                "tts.ready",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "tts-orchestrator",
+                3L,
+                1713744001000L,
+                "sess-1:tts.ready:3",
+                new TtsReadyPayload("https://cdn.local/tts/tts:v1:abc.wav", "audio/pcm", 16000, 400L, "tts:v1:abc"));
+
         String payload = objectMapper.writeValueAsString(input);
-        when(pipelineService.toTtsRequestEvent(any())).thenReturn(output);
+        when(pipelineService.toPipelineEvents(any())).thenReturn(
+                new TtsRequestPipelineService.PipelineOutput(output, chunkEvent, readyEvent));
         when(ttsRequestPublisher.publish(output)).thenReturn(Mono.empty());
+        when(ttsChunkPublisher.publish(chunkEvent)).thenReturn(Mono.empty());
+        when(ttsReadyPublisher.publish(readyEvent)).thenReturn(Mono.empty());
 
         consumer.onMessage(payload);
 
-        verify(pipelineService).toTtsRequestEvent(any());
+        verify(pipelineService).toPipelineEvents(any());
         verify(ttsRequestPublisher).publish(output);
+        verify(ttsChunkPublisher).publish(chunkEvent);
+        verify(ttsReadyPublisher).publish(readyEvent);
     }
 
     @Test
     void rejectsMalformedTranslationResultPayload() {
         assertThrows(IllegalArgumentException.class, () -> consumer.onMessage("{invalid-json"));
 
-        verify(pipelineService, never()).toTtsRequestEvent(any());
+        verify(pipelineService, never()).toPipelineEvents(any());
         verify(ttsRequestPublisher, never()).publish(any());
+        verify(ttsChunkPublisher, never()).publish(any());
+        verify(ttsReadyPublisher, never()).publish(any());
     }
 
     @Test
@@ -140,15 +187,48 @@ class TranslationResultConsumerTests {
                 "sess-1:tts.request:3",
                 new TtsRequestPayload("hello", "en-US", "voice-a", "tts:v1:abc", true));
 
+        TtsChunkEvent chunkEvent = new TtsChunkEvent(
+                "evt-out-2",
+                "tts.chunk",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "tts-orchestrator",
+                3L,
+                1713744001000L,
+                "sess-1:tts.chunk:3",
+                new TtsChunkPayload("aGVsbG8=", "audio/pcm", 16000, 0, true));
+
+        TtsReadyEvent readyEvent = new TtsReadyEvent(
+                "evt-out-3",
+                "tts.ready",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "tts-orchestrator",
+                3L,
+                1713744001000L,
+                "sess-1:tts.ready:3",
+                new TtsReadyPayload("https://cdn.local/tts/tts:v1:abc.wav", "audio/pcm", 16000, 400L, "tts:v1:abc"));
+
         String payload = objectMapper.writeValueAsString(input);
-        when(pipelineService.toTtsRequestEvent(any())).thenReturn(output);
+        when(pipelineService.toPipelineEvents(any())).thenReturn(
+                new TtsRequestPipelineService.PipelineOutput(output, chunkEvent, readyEvent));
         when(ttsRequestPublisher.publish(output)).thenReturn(Mono.empty());
+        when(ttsChunkPublisher.publish(chunkEvent)).thenReturn(Mono.empty());
+        when(ttsReadyPublisher.publish(readyEvent)).thenReturn(Mono.empty());
 
         consumer.onMessage(payload);
         consumer.onMessage(payload);
 
-        verify(pipelineService, times(1)).toTtsRequestEvent(any());
+        verify(pipelineService, times(1)).toPipelineEvents(any());
         verify(ttsRequestPublisher, times(1)).publish(output);
+        verify(ttsChunkPublisher, times(1)).publish(chunkEvent);
+        verify(ttsReadyPublisher, times(1)).publish(readyEvent);
     }
 
     @Test
@@ -169,11 +249,11 @@ class TranslationResultConsumerTests {
         String payload = objectMapper.writeValueAsString(input);
         when(reliabilityPolicyResolver.resolve("tenant-a"))
                 .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
-        when(pipelineService.toTtsRequestEvent(any())).thenThrow(new IllegalStateException("tts failed"));
+        when(pipelineService.toPipelineEvents(any())).thenThrow(new IllegalStateException("tts failed"));
 
         assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
 
-        verify(pipelineService, times(2)).toTtsRequestEvent(any());
+        verify(pipelineService, times(2)).toPipelineEvents(any());
         verify(compensationPublisher).publish(
                 eq("translation.result"),
                 eq("translation.result.tenant-a.dlq"),

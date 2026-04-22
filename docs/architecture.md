@@ -168,7 +168,7 @@ flowchart TB
 
 当前基线：
 
-- 已承接 `audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
+- 已承接 `audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`
 - 已落地消费侧固定重试、`.dlq` 死信回退、`idempotencyKey` 判重和补偿信号
 - 暂未落地统一重放流程和 Lag 治理文档化闭环
 
@@ -207,7 +207,7 @@ flowchart TB
 
 当前基线：
 
-- 已实现 `translation.result -> tts.request`（规则 voice + 可切换 HTTP voice-policy 适配）
+- 已实现 `translation.result -> tts.request / tts.chunk / tts.ready`（规则 voice + 可切换 HTTP voice-policy 适配）
 - 未实现真实引擎、对象存储、CDN 和回放分发
 
 ### Control Plane

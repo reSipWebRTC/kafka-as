@@ -11,7 +11,7 @@
 - 第一批核心事件类型与字段
 - 错误码与版本演进规则
 
-## 1.1 当前实现注记（2026-04-22）
+## 1.1 当前实现注记（2026-04-23）
 
 本文件仍然是外部行为的权威定义，但当前仓库只实现了其中一部分。
 
@@ -20,7 +20,7 @@
 - WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`
 - WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`session.closed`
 - 低频控制 API：会话 start/stop、租户策略 get/put
-- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
+- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`
 - 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
 - 核心 Kafka consumer 已落地重试与按源 Topic 的 `.dlq` 死信回退；`asr-worker`、`translation-worker`、`tts-orchestrator` 已支持按租户策略驱动重试参数与 DLQ 后缀
 - 核心 Kafka consumer 已落地 `idempotencyKey` 判重（TTL 窗口）与重复消息丢弃
@@ -30,10 +30,9 @@
 - 下行 `asr.partial -> subtitle.partial`、`translation.result -> subtitle.final`、`session.control(CLOSED) -> session.closed` 已有仓库内 E2E 稳定性回归测试
 - `session.closed` 触发后下行通道会终止并丢弃晚到消息
 
-仍在 v1 契约中保留但尚未打通：
+新增说明：
 
-- `tts.chunk`
-- `tts.ready`
+- `tts-orchestrator` 已实现 `translation.result` 同步产出 `tts.request`、`tts.chunk`、`tts.ready` 三类事件
 
 ## 2. 主数据路径（冻结）
 
@@ -83,6 +82,8 @@
 | `asr.final` | ASR 最终识别结果 | `asr.final` | `sessionId` |
 | `translation.result` | 翻译结果 | `translation.result` | `sessionId` |
 | `tts.request` | TTS 合成请求 | `tts.request` | `sessionId` |
+| `tts.chunk` | TTS 流式音频分片 | `tts.chunk` | `sessionId` |
+| `tts.ready` | TTS 回放就绪事件 | `tts.ready` | `sessionId` |
 
 当前实现语义（`asr-worker`）：
 
@@ -152,3 +153,5 @@
   - `api/json-schema/asr.final.v1.json`
   - `api/json-schema/translation.result.v1.json`
   - `api/json-schema/tts.request.v1.json`
+  - `api/json-schema/tts.chunk.v1.json`
+  - `api/json-schema/tts.ready.v1.json`
