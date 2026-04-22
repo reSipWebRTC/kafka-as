@@ -41,6 +41,12 @@ logging:
     level: "%5p [service=${spring.application.name:-unknown},traceId=%X{traceId:-},spanId=%X{spanId:-}]"
 
 tts:
+  control-plane:
+    enabled: ${TTS_CONTROL_PLANE_ENABLED:true}
+    base-url: ${TTS_CONTROL_PLANE_BASE_URL:http://localhost:8085}
+    request-timeout: ${TTS_CONTROL_PLANE_REQUEST_TIMEOUT:800ms}
+    policy-cache-ttl: ${TTS_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
+    fallback-fail-open: ${TTS_CONTROL_PLANE_FALLBACK_FAIL_OPEN:true}
   kafka:
     enabled: ${TTS_KAFKA_ENABLED:true}
     translation-result-topic: ${TTS_TRANSLATION_RESULT_TOPIC:translation.result}

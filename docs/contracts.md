@@ -22,7 +22,7 @@
 - 低频控制 API：会话 start/stop、租户策略 get/put
 - 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
 - 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
-- 核心 Kafka consumer 已落地重试与按源 Topic 的 `.dlq` 死信回退；其中 `asr-worker` 已支持按租户策略驱动重试参数与 DLQ 后缀
+- 核心 Kafka consumer 已落地重试与按源 Topic 的 `.dlq` 死信回退；`asr-worker`、`translation-worker`、`tts-orchestrator` 已支持按租户策略驱动重试参数与 DLQ 后缀
 - 核心 Kafka consumer 已落地 `idempotencyKey` 判重（TTL 窗口）与重复消息丢弃
 - 核心 Kafka consumer 重复失败达到阈值后会发送 `ops.compensation` 信号到 `platform.compensation`
 - `control-plane` 租户策略已包含灰度/回退与可靠性字段：`grayEnabled`、`grayTrafficPercent`、`controlPlaneFallbackFailOpen`、`controlPlaneFallbackCacheTtlMs`、`retryMaxAttempts`、`retryBackoffMs`、`dlqTopicSuffix`

@@ -110,6 +110,7 @@
 - `asr.final` 消费
 - 默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配入口
 - `translation.result` 发布
+- 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
@@ -134,6 +135,7 @@
 - 可切换 HTTP TTS synthesis 适配入口
 - cacheKey 生成
 - `tts.request` 发布
+- 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
@@ -176,7 +178,7 @@
 
 - `Kafka`
   当前主异步总线，已落地 6 个 Topic。
-  核心 consumer 已落地 `.dlq` 死信回退、`idempotencyKey` 判重和补偿信号基线；`asr-worker` 已升级到租户策略驱动重试/DLQ，其他服务仍使用固定策略。
+  核心 consumer 已落地 `.dlq` 死信回退、`idempotencyKey` 判重和补偿信号基线；`asr-worker`、`translation-worker`、`tts-orchestrator` 已升级到租户策略驱动重试/DLQ。
 - `HTTP`
   当前用于 `speech-gateway -> session-orchestrator` 和 `session-orchestrator -> control-plane` 的低频调用。
 

@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -16,6 +17,8 @@ import com.kafkaasr.tts.events.TtsRequestPayload;
 import com.kafkaasr.tts.events.TranslationResultEvent;
 import com.kafkaasr.tts.events.TranslationResultPayload;
 import com.kafkaasr.tts.pipeline.TtsRequestPipelineService;
+import com.kafkaasr.tts.policy.TenantReliabilityPolicy;
+import com.kafkaasr.tts.policy.TenantReliabilityPolicyResolver;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +39,9 @@ class TranslationResultConsumerTests {
     @Mock
     private TtsCompensationPublisher compensationPublisher;
 
+    @Mock
+    private TenantReliabilityPolicyResolver reliabilityPolicyResolver;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private TranslationResultConsumer consumer;
     private TtsKafkaProperties properties;
@@ -50,7 +56,10 @@ class TranslationResultConsumerTests {
                 ttsRequestPublisher,
                 compensationPublisher,
                 properties,
+                reliabilityPolicyResolver,
                 new SimpleMeterRegistry());
+        lenient().when(reliabilityPolicyResolver.resolve(anyString()))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".dlq"));
     }
 
     @Test
@@ -158,11 +167,17 @@ class TranslationResultConsumerTests {
                 "sess-1:translation.result:3",
                 new TranslationResultPayload("你好", "hello", "zh-CN", "en-US", "placeholder"));
         String payload = objectMapper.writeValueAsString(input);
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
         when(pipelineService.toTtsRequestEvent(any())).thenThrow(new IllegalStateException("tts failed"));
 
-        assertThrows(IllegalStateException.class, () -> consumer.onMessage(payload));
-        assertThrows(IllegalStateException.class, () -> consumer.onMessage(payload));
+        assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
 
-        verify(compensationPublisher).publish(anyString(), eq(payload), any(RuntimeException.class));
+        verify(pipelineService, times(2)).toTtsRequestEvent(any());
+        verify(compensationPublisher).publish(
+                eq("translation.result"),
+                eq("translation.result.tenant-a.dlq"),
+                eq(payload),
+                any(RuntimeException.class));
     }
 }
