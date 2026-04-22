@@ -46,6 +46,18 @@ message SessionControlEvent {
   SessionControlPayload payload = 2;
 }
 
+message AsrPartialPayload {
+  string text = 1;
+  string language = 2;
+  float confidence = 3;
+  bool stable = 4;
+}
+
+message AsrPartialEvent {
+  EventEnvelope envelope = 1;
+  AsrPartialPayload payload = 2;
+}
+
 message AsrFinalPayload {
   string text = 1;
   string language = 2;

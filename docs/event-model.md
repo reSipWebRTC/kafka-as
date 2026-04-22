@@ -43,6 +43,7 @@
 | --- | --- | --- | --- | --- |
 | `audio.ingress.raw` | `speech-gateway` | `asr-worker` | `sessionId` | 高频音频主链路 |
 | `session.control` | `session-orchestrator` | 暂无仓库内下游 | `sessionId` | 生命周期控制事件 |
+| `asr.partial` | `asr-worker` | `speech-gateway` | `sessionId` | 中间识别结果，用于 `subtitle.partial` |
 | `asr.final` | `asr-worker` | `translation-worker` | `sessionId` | 当前翻译入口 |
 | `translation.result` | `translation-worker` | `tts-orchestrator` | `sessionId` | 当前 TTS 入口 |
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 编排输出 |
@@ -52,6 +53,9 @@
 - 当前所有已落地 publisher 都按 `sessionId` 发送 Kafka Key
 - `translation-worker` 当前直接消费 `asr.final`，尚未引入独立 `translation.request`
 - `tts.request` 当前仍是中间编排事件，还未接入真实引擎链路
+- `asr-worker`、`translation-worker`、`tts-orchestrator`、`speech-gateway` 下行消费者已接入固定重试 + `<source-topic>.dlq` 死信回退
+- 上述核心消费者均已接入基于 `idempotencyKey` 的 TTL 判重，重复消息按成功路径 no-op
+- 上述核心消费者在重复失败达到阈值后会发出 `ops.compensation` 信号到 `platform.compensation`
 
 ## 4. 计划扩展 Topic
 
@@ -60,7 +64,6 @@
 | Topic | 说明 | 计划用途 |
 | --- | --- | --- |
 | `audio.vad.segmented` | VAD 切分后的语音段 | 支撑更细粒度 ASR 管线 |
-| `asr.partial` | 流式中间识别结果 | 实时字幕体验优化 |
 | `translation.request` | 待翻译文本 | 将翻译入队与 ASR 最终结果解耦 |
 | `tts.chunk` | 流式音频分片 | 实时播放 |
 | `tts.ready` | 音频文件可回放 | 对象存储/CDN 分发 |
@@ -130,7 +133,18 @@
 
 ### 死信
 
-以下情况应进入 `platform.dlq`：
+当前实现（`2026-04-22`）：
+
+- 核心 consumer 失败后会写入 `<source-topic>.dlq`
+- `IllegalArgumentException`（如 payload 非法）按不可重试处理，直接进入对应 DLQ
+- 核心 consumer 失败达到重试阈值后会额外发送 `ops.compensation` 信号
+
+目标形态（规划中）：
+
+- 统一汇聚到 `platform.dlq` 进行跨服务补偿与排障
+- 建立标准化重放与审计流程
+
+以下情况最终都应进入统一死信治理：
 
 - 超出最大重试次数
 - 反序列化失败
@@ -172,13 +186,12 @@ FAILED
 
 1. `speech-gateway` 发布 `audio.ingress.raw`
 2. `session-orchestrator` 发布 `session.control`
-3. `asr-worker` 消费 `audio.ingress.raw` 并产出 `asr.final`
+3. `asr-worker` 消费 `audio.ingress.raw` 并产出 `asr.partial` 与 `asr.final`
 4. `translation-worker` 消费 `asr.final` 并发布 `translation.result`
 5. `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`
 
 仍未打通的部分：
 
-- `asr.partial`
-- 字幕下行回推
+- `translation.request`
 - `tts.request -> tts.chunk / tts.ready`
 - DLQ、补偿和故障恢复链路

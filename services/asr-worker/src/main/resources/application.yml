@@ -44,5 +44,12 @@ asr:
   kafka:
     enabled: ${ASR_KAFKA_ENABLED:true}
     audio-ingress-topic: ${ASR_AUDIO_INGRESS_TOPIC:audio.ingress.raw}
+    asr-partial-topic: ${ASR_PARTIAL_TOPIC:asr.partial}
     asr-final-topic: ${ASR_FINAL_TOPIC:asr.final}
     producer-id: ${ASR_PRODUCER_ID:asr-worker}
+    retry-max-attempts: ${ASR_RETRY_MAX_ATTEMPTS:3}
+    retry-backoff-ms: ${ASR_RETRY_BACKOFF_MS:200}
+    dlq-topic-suffix: ${ASR_DLQ_TOPIC_SUFFIX:.dlq}
+    idempotency-enabled: ${ASR_IDEMPOTENCY_ENABLED:true}
+    idempotency-ttl-ms: ${ASR_IDEMPOTENCY_TTL_MS:300000}
+    compensation-topic: ${ASR_COMPENSATION_TOPIC:platform.compensation}

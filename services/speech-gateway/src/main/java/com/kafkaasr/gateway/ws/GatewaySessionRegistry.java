@@ -2,6 +2,7 @@ package com.kafkaasr.gateway.ws;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.CloseStatus;
@@ -22,12 +23,12 @@ public class GatewaySessionRegistry {
                 connectionId,
                 session,
                 Sinks.many().unicast().onBackpressureBuffer(),
-                new AtomicReference<>());
+                new AtomicReference<>(),
+                new AtomicBoolean(false));
 
         ConnectionState previous = connectionsById.put(connectionId, state);
         if (previous != null) {
-            unbindSession(previous.connectionId, previous.boundSessionId.get());
-            previous.outbound.tryEmitComplete();
+            terminate(previous);
         }
 
         return new ConnectionContext(connectionId, state.outbound.asFlux());
@@ -39,7 +40,7 @@ public class GatewaySessionRegistry {
         }
 
         ConnectionState state = connectionsById.get(connectionId);
-        if (state == null) {
+        if (state == null || state.closed.get()) {
             return;
         }
 
@@ -52,7 +53,7 @@ public class GatewaySessionRegistry {
 
     public Mono<Void> emitToConnection(String connectionId, String payload) {
         ConnectionState state = connectionsById.get(connectionId);
-        if (state == null) {
+        if (state == null || state.closed.get()) {
             return Mono.empty();
         }
 
@@ -62,7 +63,7 @@ public class GatewaySessionRegistry {
 
     public Mono<Void> emitToSession(String sessionId, String payload) {
         ConnectionState state = resolveBySessionId(sessionId);
-        if (state == null) {
+        if (state == null || state.closed.get()) {
             return Mono.empty();
         }
 
@@ -76,6 +77,9 @@ public class GatewaySessionRegistry {
             return Mono.empty();
         }
 
+        connectionsById.remove(state.connectionId, state);
+        terminate(state);
+
         return state.session.close(closeStatus)
                 .onErrorResume(ignored -> Mono.empty());
     }
@@ -86,8 +90,7 @@ public class GatewaySessionRegistry {
             return;
         }
 
-        unbindSession(connectionId, removed.boundSessionId.get());
-        removed.outbound.tryEmitComplete();
+        terminate(removed);
     }
 
     private ConnectionState resolveBySessionId(String sessionId) {
@@ -108,6 +111,12 @@ public class GatewaySessionRegistry {
         connectionIdBySessionId.remove(sessionId, connectionId);
     }
 
+    private void terminate(ConnectionState state) {
+        state.closed.set(true);
+        unbindSession(state.connectionId, state.boundSessionId.get());
+        state.outbound.tryEmitComplete();
+    }
+
     public record ConnectionContext(String connectionId, Flux<String> outbound) {
     }
 
@@ -115,6 +124,7 @@ public class GatewaySessionRegistry {
             String connectionId,
             WebSocketSession session,
             Sinks.Many<String> outbound,
-            AtomicReference<String> boundSessionId) {
+            AtomicReference<String> boundSessionId,
+            AtomicBoolean closed) {
     }
 }

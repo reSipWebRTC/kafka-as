@@ -54,6 +54,16 @@ gateway:
   downlink:
     enabled: ${GATEWAY_DOWNLINK_ENABLED:true}
     consumer-group-id: ${GATEWAY_DOWNLINK_CONSUMER_GROUP_ID:speech-gateway-downlink}
-    asr-final-topic: ${GATEWAY_DOWNLINK_ASR_FINAL_TOPIC:asr.final}
+    asr-partial-topic: ${GATEWAY_DOWNLINK_ASR_PARTIAL_TOPIC:asr.partial}
     translation-result-topic: ${GATEWAY_DOWNLINK_TRANSLATION_RESULT_TOPIC:translation.result}
     session-control-topic: ${GATEWAY_DOWNLINK_SESSION_CONTROL_TOPIC:session.control}
+    retry-max-attempts: ${GATEWAY_DOWNLINK_RETRY_MAX_ATTEMPTS:3}
+    retry-backoff-ms: ${GATEWAY_DOWNLINK_RETRY_BACKOFF_MS:200}
+    dlq-topic-suffix: ${GATEWAY_DOWNLINK_DLQ_TOPIC_SUFFIX:.dlq}
+    idempotency-enabled: ${GATEWAY_DOWNLINK_IDEMPOTENCY_ENABLED:true}
+    idempotency-ttl-ms: ${GATEWAY_DOWNLINK_IDEMPOTENCY_TTL_MS:300000}
+    compensation-topic: ${GATEWAY_DOWNLINK_COMPENSATION_TOPIC:platform.compensation}
+  flow-control:
+    enabled: ${GATEWAY_FLOW_CONTROL_ENABLED:true}
+    audio-frame-rate-limit-per-second: ${GATEWAY_AUDIO_FRAME_RATE_LIMIT_PER_SECOND:50}
+    audio-frame-max-inflight: ${GATEWAY_AUDIO_FRAME_MAX_INFLIGHT:8}

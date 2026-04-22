@@ -20,11 +20,18 @@
 - WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`
 - WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`session.closed`
 - 低频控制 API：会话 start/stop、租户策略 get/put
-- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.final`、`translation.result`、`tts.request`
+- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
+- 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
+- 核心 Kafka consumer 固定重试与按源 Topic 的 `.dlq` 死信回退
+- 核心 Kafka consumer 已落地 `idempotencyKey` 判重（TTL 窗口）与重复消息丢弃
+- 核心 Kafka consumer 重复失败达到阈值后会发送 `ops.compensation` 信号到 `platform.compensation`
+- `control-plane` 租户策略已包含灰度/回退字段：`grayEnabled`、`grayTrafficPercent`、`controlPlaneFallbackFailOpen`、`controlPlaneFallbackCacheTtlMs`
+- `session-orchestrator` 查询租户策略时已落地第一版熔断与缓存回退（支持 fail-open/fail-closed）
+- 下行 `asr.partial -> subtitle.partial`、`translation.result -> subtitle.final`、`session.control(CLOSED) -> session.closed` 已有仓库内 E2E 稳定性回归测试
+- `session.closed` 触发后下行通道会终止并丢弃晚到消息
 
 仍在 v1 契约中保留但尚未打通：
 
-- `asr.partial`
 - `tts.chunk`
 - `tts.ready`
 
@@ -72,6 +79,7 @@
 | --- | --- | --- | --- |
 | `audio.ingress.raw` | 网关接收原始音频分片 | `audio.ingress.raw` | `sessionId` |
 | `session.control` | 会话生命周期控制事件（start/stop 等） | `session.control` | `sessionId` |
+| `asr.partial` | ASR 中间识别结果 | `asr.partial` | `sessionId` |
 | `asr.final` | ASR 最终识别结果 | `asr.final` | `sessionId` |
 | `translation.result` | 翻译结果 | `translation.result` | `sessionId` |
 | `tts.request` | TTS 合成请求 | `tts.request` | `sessionId` |
@@ -135,6 +143,7 @@
 - JSON Schema
   - `api/json-schema/audio.ingress.raw.v1.json`
   - `api/json-schema/session.control.v1.json`
+  - `api/json-schema/asr.partial.v1.json`
   - `api/json-schema/asr.final.v1.json`
   - `api/json-schema/translation.result.v1.json`
   - `api/json-schema/tts.request.v1.json`

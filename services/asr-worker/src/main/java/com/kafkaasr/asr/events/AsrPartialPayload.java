@@ -1,6 +1,6 @@
-package com.kafkaasr.gateway.ws.downlink.events;
+package com.kafkaasr.asr.events;
 
-public record AsrFinalPayload(
+public record AsrPartialPayload(
         String text,
         String language,
         double confidence,

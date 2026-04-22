@@ -13,9 +13,9 @@
 
 | 服务名 | 当前状态 | 当前已实现能力 | 主要依赖 |
 | --- | --- | --- | --- |
-| `speech-gateway` | 已落地骨架 | WebSocket 接入、Kafka 音频发布、会话 start/stop 转发 | Kafka、`session-orchestrator` |
+| `speech-gateway` | 已落地骨架 | WebSocket 接入、Kafka 音频发布、会话 start/stop 转发、会话级限流/背压 | Kafka、`session-orchestrator` |
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
-| `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、placeholder ASR、发布 `asr.final` | Kafka |
+| `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、placeholder ASR、发布 `asr.partial` / `asr.final` | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、placeholder 翻译、发布 `translation.result` | Kafka |
 | `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、发布 `tts.request` | Kafka |
 | `control-plane` | 已落地骨架 | 租户策略 HTTP API、Redis 存储、版本化 upsert | Redis |
@@ -43,14 +43,16 @@
 - `/ws/audio`
 - `session.start` / `session.ping` / `audio.frame` / `session.stop`
 - `audio.ingress.raw` 发布
+- `audio.frame` 会话级限流与背压保护
 - `session.error` 下行
-- `asr.final` -> `subtitle.partial`
+- `asr.partial` -> `subtitle.partial`
 - `translation.result` -> `subtitle.final`
 - `session.control(status=CLOSED)` -> `session.closed`
+- 下行链路顺序/终态/重复语义的仓库内 E2E 回归测试
 
 当前未实现：
 
-- 真正的鉴权、限流、背压
+- 真正的鉴权
 - 更完整的结果聚合和多路下行策略
 
 ### session-orchestrator
@@ -65,6 +67,7 @@
 
 - start/stop 生命周期 API
 - 租户策略查询与校验
+- 查询控制面的第一版熔断与缓存回退
 - Redis 会话状态存储
 - `session.control` Kafka 发布
 
@@ -86,12 +89,12 @@
 
 - `audio.ingress.raw` 消费
 - placeholder 推理
-- `asr.final` 发布
+- `asr.partial` / `asr.final` 发布
+- `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
 - FunASR 真正接入
-- `asr.partial`
 - VAD/切段/上下文管理
 
 ### translation-worker
@@ -106,6 +109,7 @@
 - `asr.final` 消费
 - placeholder 翻译
 - `translation.result` 发布
+- `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
@@ -128,6 +132,7 @@
 - voice 选择
 - cacheKey 生成
 - `tts.request` 发布
+- `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
@@ -147,6 +152,7 @@
 - 租户策略的 GET / PUT API
 - Redis 持久化抽象
 - 版本化更新语义
+- 灰度与控制面回退策略字段（canary percent / fail-open / cache ttl）
 
 当前未实现：
 
@@ -166,7 +172,8 @@
 ### 内部通信
 
 - `Kafka`
-  当前主异步总线，已落地 5 个 Topic。
+  当前主异步总线，已落地 6 个 Topic。
+  核心 consumer 已落地固定重试、`.dlq` 死信回退、`idempotencyKey` 判重和补偿信号基线。
 - `HTTP`
   当前用于 `speech-gateway -> session-orchestrator` 和 `session-orchestrator -> control-plane` 的低频调用。
 
@@ -230,4 +237,4 @@ flowchart LR
 - 把网关做成“超级服务”，同时承担接入、状态、推理与缓存
 - 让编排层继续承担音频中转
 - 在没有统一事件头和版本规则时让各服务自行扩展消息体
-- 把还未落地的 TTS 分发、DLQ、压测能力写成已完成
+- 把还未落地的 TTS 分发、高级补偿/治理和压测能力写成已完成

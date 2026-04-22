@@ -17,7 +17,7 @@
 
 - `Phase 0` 基本完成
 - `Phase 1` 已经启动并跑通了“骨架链路”
-- 距离“生产可运行闭环”还差下行字幕、真实引擎、治理能力和压测证据
+- 距离“生产可运行闭环”还差真实引擎、治理能力和压测证据
 
 ## 2. Phase 0：文档与契约冻结
 
@@ -63,14 +63,14 @@
 - WebSocket 音频上行
 - WebSocket `session.ping`
 - Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行
+- 下行链路仓库内 E2E smoke 基线（顺序、终态、重复与异常计数）
 - 会话 start/stop 控制
-- `audio.ingress.raw -> asr.final -> translation.result -> tts.request`
+- `audio.ingress.raw -> asr.partial / asr.final -> translation.result -> tts.request`
 - 基础管理端点和服务指标
 
 当前仍缺：
 
-- `asr.partial`
-- 明确的端到端 demo 与用户可见闭环
+- 面向浏览器/SDK 的明确端到端 demo 与用户可见闭环
 - 压测窗口下的延迟和稳定性证据
 
 退出标准保持不变，但当前还未达成：
@@ -100,8 +100,9 @@
 当前判断：
 
 - 文档已经冻结方向
-- 代码基线尚未落地这些治理能力
-- 这是当前最值得优先推进的一阶段
+- 代码基线已落地第一版重试、DLQ、限流、背压
+- 代码基线已落地第一版幂等判重、补偿信号、控制面熔断与灰度字段
+- 下一步是把治理从“固定策略”升级到“自适应策略 + 补偿编排 + 动态灰度路由”
 
 ## 5. Phase 3：TTS 与分发体系
 
@@ -141,7 +142,7 @@
 当前判断：
 
 - `control-plane` 模块已存在
-- 但当前只覆盖租户策略的最小 GET / PUT 基线
+- 当前已覆盖租户策略 GET / PUT、版本化 upsert 以及灰度/回退策略字段
 
 ## 7. Phase 5：容量、压测与弹性
 
@@ -166,13 +167,12 @@
 
 如果资源有限，建议优先顺序如下：
 
-1. 引入 `asr.partial` 并优化字幕链路抖动
-2. 补齐下行链路的稳定性与端到端验证
-3. 补齐重试、DLQ、限流、背压
-4. 替换 placeholder 的 ASR / Translation / TTS 引擎
-5. 建立 Kafka lag、延迟、错误率看板与告警
-6. 落地压测与故障演练
-7. 补齐 TTS 分发与控制面高级能力
+1. 补齐下行链路的稳定性与端到端验证
+2. 补齐幂等、补偿、熔断与灰度治理
+3. 替换 placeholder 的 ASR / Translation / TTS 引擎
+4. 建立 Kafka lag、延迟、错误率看板与告警
+5. 落地压测与故障演练
+6. 补齐 TTS 分发与控制面高级能力
 
 ## 9. 主要风险
 

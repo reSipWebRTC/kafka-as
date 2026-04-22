@@ -54,6 +54,20 @@ Checks:
 - required contract files exist
 - `./gradlew test --no-daemon`
 
+### Run downlink E2E smoke verification
+
+Run from repository root or from a feature worktree:
+
+```bash
+tools/downlink-e2e-smoke.sh
+```
+
+Checks:
+
+- deterministic downlink integration harness (`DownlinkE2EStabilityTests`)
+- user-visible downlink payload mapping (`subtitle.partial` / `subtitle.final` / `session.closed`)
+- duplicate / malformed payload stability regressions in downlink consumers
+
 ### Finish a feature branch
 
 ```bash

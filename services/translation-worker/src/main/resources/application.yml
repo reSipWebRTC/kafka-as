@@ -48,3 +48,9 @@ translation:
     producer-id: ${TRANSLATION_PRODUCER_ID:translation-worker}
     default-target-lang: ${TRANSLATION_DEFAULT_TARGET_LANG:en-US}
     engine-name: ${TRANSLATION_ENGINE_NAME:placeholder}
+    retry-max-attempts: ${TRANSLATION_RETRY_MAX_ATTEMPTS:3}
+    retry-backoff-ms: ${TRANSLATION_RETRY_BACKOFF_MS:200}
+    dlq-topic-suffix: ${TRANSLATION_DLQ_TOPIC_SUFFIX:.dlq}
+    idempotency-enabled: ${TRANSLATION_IDEMPOTENCY_ENABLED:true}
+    idempotency-ttl-ms: ${TRANSLATION_IDEMPOTENCY_TTL_MS:300000}
+    compensation-topic: ${TRANSLATION_COMPENSATION_TOPIC:platform.compensation}
