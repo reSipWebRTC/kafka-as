@@ -8,6 +8,9 @@ import com.kafkaasr.orchestrator.events.OrchestratorKafkaProperties;
 import com.kafkaasr.orchestrator.events.SessionControlEvent;
 import com.kafkaasr.orchestrator.events.SessionControlPayload;
 import com.kafkaasr.orchestrator.events.SessionControlPublisher;
+import com.kafkaasr.orchestrator.policy.TenantPolicy;
+import com.kafkaasr.orchestrator.policy.TenantPolicyClient;
+import com.kafkaasr.orchestrator.policy.TenantPolicyClientException;
 import com.kafkaasr.orchestrator.session.SessionState;
 import com.kafkaasr.orchestrator.session.SessionStateRepository;
 import com.kafkaasr.orchestrator.session.SessionStatus;
@@ -30,6 +33,7 @@ public class SessionLifecycleService {
 
     private final SessionControlPublisher sessionControlPublisher;
     private final OrchestratorKafkaProperties kafkaProperties;
+    private final TenantPolicyClient tenantPolicyClient;
     private final SessionStateRepository sessionStateRepository;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
@@ -38,19 +42,28 @@ public class SessionLifecycleService {
     public SessionLifecycleService(
             SessionControlPublisher sessionControlPublisher,
             OrchestratorKafkaProperties kafkaProperties,
+            TenantPolicyClient tenantPolicyClient,
             SessionStateRepository sessionStateRepository,
             MeterRegistry meterRegistry) {
-        this(sessionControlPublisher, kafkaProperties, sessionStateRepository, Clock.systemUTC(), meterRegistry);
+        this(
+                sessionControlPublisher,
+                kafkaProperties,
+                tenantPolicyClient,
+                sessionStateRepository,
+                Clock.systemUTC(),
+                meterRegistry);
     }
 
     SessionLifecycleService(
             SessionControlPublisher sessionControlPublisher,
             OrchestratorKafkaProperties kafkaProperties,
+            TenantPolicyClient tenantPolicyClient,
             SessionStateRepository sessionStateRepository,
             Clock clock,
             MeterRegistry meterRegistry) {
         this.sessionControlPublisher = sessionControlPublisher;
         this.kafkaProperties = kafkaProperties;
+        this.tenantPolicyClient = tenantPolicyClient;
         this.sessionStateRepository = sessionStateRepository;
         this.clock = clock;
         this.meterRegistry = meterRegistry;
@@ -58,54 +71,22 @@ public class SessionLifecycleService {
 
     public Mono<SessionStartResponse> startSession(SessionStartRequest request) {
         Timer.Sample sample = Timer.start(meterRegistry);
-        try {
-            StartResult result;
-            SessionState current = sessionStateRepository.findBySessionId(request.sessionId());
-            if (current == null) {
-                StartResult created = createSession(request);
-                if (sessionStateRepository.createIfAbsent(created.state())) {
-                    result = created;
-                } else {
-                    SessionState existing = sessionStateRepository.findBySessionId(request.sessionId());
-                    if (existing == null) {
-                        throw new IllegalStateException("Session state lost during start race for " + request.sessionId());
-                    }
-                    result = handleRepeatedStart(request, existing);
-                }
-            } else {
-                result = handleRepeatedStart(request, current);
-            }
-
-            Mono<Void> publish = result.event() == null
-                    ? Mono.empty()
-                    : sessionControlPublisher.publish(result.event());
-            return publish.thenReturn(result.response())
-                    .doOnSuccess(response -> meterRegistry.counter(
-                                    "orchestrator.session.start.total",
-                                    "result",
-                                    response.created() ? "created" : "idempotent",
-                                    "code",
-                                    "OK")
-                            .increment())
-                    .doOnError(exception -> meterRegistry.counter(
-                                    "orchestrator.session.start.total",
-                                    "result",
-                                    "error",
-                                    "code",
-                                    normalizeErrorCode(exception))
-                            .increment())
-                    .doFinally(signalType -> sample.stop(meterRegistry.timer("orchestrator.session.start.duration")));
-        } catch (RuntimeException exception) {
-            meterRegistry.counter(
-                            "orchestrator.session.start.total",
-                            "result",
-                            "error",
-                            "code",
-                            normalizeErrorCode(exception))
-                    .increment();
-            sample.stop(meterRegistry.timer("orchestrator.session.start.duration"));
-            throw exception;
-        }
+        return Mono.defer(() -> startSessionInternal(request))
+                .doOnSuccess(response -> meterRegistry.counter(
+                                "orchestrator.session.start.total",
+                                "result",
+                                response.created() ? "created" : "idempotent",
+                                "code",
+                                "OK")
+                        .increment())
+                .doOnError(exception -> meterRegistry.counter(
+                                "orchestrator.session.start.total",
+                                "result",
+                                "error",
+                                "code",
+                                normalizeErrorCode(exception))
+                        .increment())
+                .doFinally(signalType -> sample.stop(meterRegistry.timer("orchestrator.session.start.duration")));
     }
 
     public Mono<SessionStopResponse> stopSession(String sessionId, SessionStopRequest request) {
@@ -183,6 +164,42 @@ public class SessionLifecycleService {
         return new StartResult(state, response, event);
     }
 
+    private Mono<SessionStartResponse> startSessionInternal(SessionStartRequest request) {
+        SessionState current = sessionStateRepository.findBySessionId(request.sessionId());
+        if (current != null) {
+            return publishStartResult(handleRepeatedStart(request, current));
+        }
+
+        return tenantPolicyClient.getTenantPolicy(request.tenantId())
+                .onErrorMap(
+                        TenantPolicyClientException.class,
+                        exception -> mapTenantPolicyException(exception, request.sessionId()))
+                .flatMap(policy -> createSessionWithPolicy(request, policy));
+    }
+
+    private Mono<SessionStartResponse> createSessionWithPolicy(SessionStartRequest request, TenantPolicy policy) {
+        validatePolicy(request, policy);
+        enforceConcurrentSessionLimit(request.sessionId(), policy);
+
+        StartResult created = createSession(request);
+        if (sessionStateRepository.createIfAbsent(created.state())) {
+            return publishStartResult(created);
+        }
+
+        SessionState existing = sessionStateRepository.findBySessionId(request.sessionId());
+        if (existing == null) {
+            throw new IllegalStateException("Session state lost during start race for " + request.sessionId());
+        }
+        return publishStartResult(handleRepeatedStart(request, existing));
+    }
+
+    private Mono<SessionStartResponse> publishStartResult(StartResult result) {
+        Mono<Void> publish = result.event() == null
+                ? Mono.empty()
+                : sessionControlPublisher.publish(result.event());
+        return publish.thenReturn(result.response());
+    }
+
     private StartResult handleRepeatedStart(SessionStartRequest request, SessionState current) {
         if (current.status() == SessionStatus.CLOSED) {
             throw SessionControlException.conflict(
@@ -207,6 +224,39 @@ public class SessionLifecycleService {
                 current.lastSeq(),
                 current.startedAtMs());
         return new StartResult(current, response, null);
+    }
+
+    private void validatePolicy(SessionStartRequest request, TenantPolicy policy) {
+        if (!policy.enabled()) {
+            throw SessionControlException.invalidMessage(
+                    "Tenant policy is disabled: " + request.tenantId(),
+                    request.sessionId());
+        }
+
+        if (!policy.sourceLang().equals(request.sourceLang())
+                || !policy.targetLang().equals(request.targetLang())) {
+            throw SessionControlException.invalidMessage(
+                    "Session language pair is not allowed by tenant policy",
+                    request.sessionId());
+        }
+    }
+
+    private void enforceConcurrentSessionLimit(String sessionId, TenantPolicy policy) {
+        long activeSessions = sessionStateRepository.countActiveSessionsByTenantId(policy.tenantId());
+        if (activeSessions >= policy.maxConcurrentSessions()) {
+            throw SessionControlException.rateLimited(
+                    "Tenant active session limit exceeded for " + policy.tenantId(),
+                    sessionId);
+        }
+    }
+
+    private SessionControlException mapTenantPolicyException(
+            TenantPolicyClientException exception,
+            String sessionId) {
+        return switch (exception.kind()) {
+            case NOT_FOUND, REJECTED -> SessionControlException.invalidMessage(exception.getMessage(), sessionId);
+            case UNAVAILABLE -> SessionControlException.internalError(exception.getMessage(), sessionId);
+        };
     }
 
     private StopResult closeSession(SessionState current, SessionStopRequest request) {
@@ -288,6 +338,12 @@ public class SessionLifecycleService {
     private String normalizeErrorCode(Throwable throwable) {
         if (throwable instanceof SessionControlException exception) {
             return exception.code();
+        }
+        if (throwable instanceof TenantPolicyClientException exception) {
+            return switch (exception.kind()) {
+                case NOT_FOUND, REJECTED -> "INVALID_MESSAGE";
+                case UNAVAILABLE -> "INTERNAL_ERROR";
+            };
         }
         if (throwable instanceof IllegalArgumentException) {
             return "INVALID_MESSAGE";

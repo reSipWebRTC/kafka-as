@@ -31,6 +31,14 @@ public class SessionControlException extends RuntimeException {
         return new SessionControlException("INVALID_MESSAGE", message, sessionId, HttpStatus.BAD_REQUEST);
     }
 
+    public static SessionControlException rateLimited(String message, String sessionId) {
+        return new SessionControlException("RATE_LIMITED", message, sessionId, HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    public static SessionControlException internalError(String message, String sessionId) {
+        return new SessionControlException("INTERNAL_ERROR", message, sessionId, HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
     public String code() {
         return code;
     }

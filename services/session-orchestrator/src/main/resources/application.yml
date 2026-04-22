@@ -46,3 +46,6 @@ orchestrator:
   session-store:
     key-prefix: ${ORCHESTRATOR_SESSION_STORE_KEY_PREFIX:orchestrator:session:}
     ttl: ${ORCHESTRATOR_SESSION_STORE_TTL:12h}
+  control-plane:
+    base-url: ${ORCHESTRATOR_CONTROL_PLANE_BASE_URL:http://localhost:8085}
+    request-timeout: ${ORCHESTRATOR_CONTROL_PLANE_REQUEST_TIMEOUT:2s}

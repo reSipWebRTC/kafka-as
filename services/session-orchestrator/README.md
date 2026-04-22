@@ -6,6 +6,8 @@ Current scope:
 
 - `POST /api/v1/sessions:start`
 - `POST /api/v1/sessions/{sessionId}:stop`
+- tenant policy fetch from `control-plane` during session start
+- policy enforcement: enabled flag, language pair match, max concurrent sessions
 - Redis-backed lifecycle state machine
 - Kafka publication for `session.control`
 
