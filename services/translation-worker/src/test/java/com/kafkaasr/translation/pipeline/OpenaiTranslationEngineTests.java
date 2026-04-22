@@ -106,6 +106,60 @@ class OpenaiTranslationEngineTests {
         assertTrue(exception.getMessage().contains("Empty OpenAI translated text"));
     }
 
+    @Test
+    void translateParsesChatMessageContentArrayShape() {
+        ExchangeFunction exchangeFunction = request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .body("{\"choices\":[{\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hola\"}]}}]}")
+                .build());
+
+        OpenaiTranslationEngine engine = new OpenaiTranslationEngine(
+                openaiProperties(""),
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper());
+
+        TranslationEngine.TranslationResult result = engine.translate(sampleAsrFinalEvent("zh-CN"), "es-ES");
+        assertEquals("hola", result.translatedText());
+        assertEquals("es-ES", result.targetLang());
+    }
+
+    @Test
+    void translateRejectsProviderErrorPayload() {
+        ExchangeFunction exchangeFunction = request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .body("{\"error\":{\"message\":\"rate limit exceeded\",\"type\":\"rate_limit_error\"}}")
+                .build());
+
+        OpenaiTranslationEngine engine = new OpenaiTranslationEngine(
+                openaiProperties(""),
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper());
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> engine.translate(sampleAsrFinalEvent("zh-CN"), "en-US"));
+        assertTrue(exception.getMessage().contains("provider error"));
+        assertTrue(exception.getMessage().contains("rate limit exceeded"));
+    }
+
+    @Test
+    void translateRejectsFailedProviderStatus() {
+        ExchangeFunction exchangeFunction = request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .body("{\"status\":\"failed\",\"output\":[{\"content\":[{\"text\":\"ciao\"}]}]}")
+                .build());
+
+        OpenaiTranslationEngine engine = new OpenaiTranslationEngine(
+                openaiProperties(""),
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper());
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> engine.translate(sampleAsrFinalEvent("zh-CN"), "it-IT"));
+        assertTrue(exception.getMessage().contains("status is not successful"));
+    }
+
     private static TranslationEngineProperties openaiProperties(String apiKey) {
         TranslationEngineProperties properties = new TranslationEngineProperties();
         properties.setMode("openai");

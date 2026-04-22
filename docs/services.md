@@ -110,13 +110,14 @@
 
 - `asr.final` 消费
 - 默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配入口
+- OpenAI 响应兼容与错误语义加固（content 数组/Responses output 兼容、`error` 与失败 `status` 快速失败）
 - `translation.result` 发布
 - 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
-- OpenAI 生产联调与模型侧运行保障
+- OpenAI 生产联调与模型侧运行保障（真实配额、限流与故障演练）
 - glossary / context / fallback 策略
 
 ### tts-orchestrator

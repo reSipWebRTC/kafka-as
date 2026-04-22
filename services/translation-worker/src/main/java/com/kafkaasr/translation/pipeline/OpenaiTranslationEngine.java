@@ -43,6 +43,9 @@ public class OpenaiTranslationEngine implements TranslationEngine {
 
     @Override
     public TranslationResult translate(AsrFinalEvent asrFinalEvent, String targetLang) {
+        if (asrFinalEvent == null) {
+            throw new IllegalArgumentException("asr.final event must not be null");
+        }
         AsrFinalPayload payload = asrFinalEvent.payload();
         if (payload == null) {
             throw new IllegalArgumentException("Missing asr.final payload for session " + asrFinalEvent.sessionId());
@@ -114,16 +117,21 @@ public class OpenaiTranslationEngine implements TranslationEngine {
             throw new IllegalStateException("Invalid OpenAI translation response for session " + sessionId, exception);
         }
 
+        assertProviderSuccess(root, sessionId);
+
         String translatedText = firstNonBlank(
                 root.path("choices").path(0).path("message").path("content").asText(""),
+                firstTextFromMessageContentArray(root.path("choices").path(0).path("message").path("content")),
                 root.path("choices").path(0).path("text").asText(""),
                 root.path("output_text").asText(""),
+                firstTextFromArray(root.path("output_text")),
                 root.path("output")
                         .path(0)
                         .path("content")
                         .path(0)
                         .path("text")
-                        .asText(""));
+                        .asText(""),
+                firstTextFromResponsesOutput(root.path("output")));
 
         if (translatedText.isBlank()) {
             throw new IllegalStateException("Empty OpenAI translated text for session " + sessionId);
@@ -145,5 +153,74 @@ public class OpenaiTranslationEngine implements TranslationEngine {
             }
         }
         return "";
+    }
+
+    private void assertProviderSuccess(JsonNode root, String sessionId) {
+        JsonNode errorNode = root.path("error");
+        if (!errorNode.isMissingNode() && !errorNode.isNull()) {
+            String message = firstNonBlank(
+                    errorNode.path("message").asText(""),
+                    errorNode.path("code").asText(""),
+                    errorNode.path("type").asText(""),
+                    "unknown");
+            throw new IllegalStateException(
+                    "OpenAI provider error for session " + sessionId + " (message=" + message + ")");
+        }
+
+        JsonNode statusNode = root.path("status");
+        if (statusNode.isMissingNode() || statusNode.isNull()) {
+            return;
+        }
+        String status = statusNode.asText("").trim();
+        if (status.isEmpty()) {
+            return;
+        }
+        if ("completed".equalsIgnoreCase(status)
+                || "succeeded".equalsIgnoreCase(status)
+                || "success".equalsIgnoreCase(status)
+                || "ok".equalsIgnoreCase(status)) {
+            return;
+        }
+        throw new IllegalStateException(
+                "OpenAI provider status is not successful for session " + sessionId + " (status=" + status + ")");
+    }
+
+    private String firstTextFromMessageContentArray(JsonNode contentNode) {
+        if (contentNode == null || !contentNode.isArray()) {
+            return "";
+        }
+        return firstTextFromArray(contentNode);
+    }
+
+    private String firstTextFromResponsesOutput(JsonNode outputNode) {
+        if (outputNode == null || !outputNode.isArray() || outputNode.isEmpty()) {
+            return "";
+        }
+        JsonNode firstOutput = outputNode.get(0);
+        if (firstOutput == null || firstOutput.isNull()) {
+            return "";
+        }
+
+        return firstNonBlank(
+                firstTextFromArray(firstOutput.path("content")),
+                firstOutput.path("text").asText(""),
+                firstOutput.path("output_text").asText(""));
+    }
+
+    private String firstTextFromArray(JsonNode arrayNode) {
+        if (arrayNode == null || !arrayNode.isArray() || arrayNode.isEmpty()) {
+            return "";
+        }
+        JsonNode first = arrayNode.get(0);
+        if (first == null || first.isNull()) {
+            return "";
+        }
+        if (first.isTextual()) {
+            return first.asText("");
+        }
+        return firstNonBlank(
+                first.path("text").asText(""),
+                first.path("output_text").asText(""),
+                first.path("value").asText(""));
     }
 }
