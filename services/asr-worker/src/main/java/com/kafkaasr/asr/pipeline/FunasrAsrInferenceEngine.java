@@ -101,15 +101,21 @@ public class FunasrAsrInferenceEngine implements AsrInferenceEngine {
             throw new IllegalStateException("Invalid FunASR response for session " + ingressEvent.sessionId(), exception);
         }
 
+        assertProviderSuccess(root, ingressEvent.sessionId());
+
         String text = firstNonBlank(
                 textField(root, "text"),
                 textField(root, "result"),
                 textField(root, "transcript"),
+                textField(root, "sentence"),
                 textField(root.path("data"), "text"),
                 textField(root.path("data"), "result"),
                 textField(root.path("data"), "transcript"),
+                textField(root.path("data"), "sentence"),
                 firstTextFromArray(root.path("result")),
-                firstTextFromArray(root.path("data").path("result")));
+                firstTextFromArray(root.path("data").path("result")),
+                firstTextFromArray(root.path("sentences")),
+                firstTextFromArray(root.path("data").path("sentences")));
 
         if (text == null || text.isBlank()) {
             throw new IllegalStateException("Empty FunASR transcript for session " + ingressEvent.sessionId());
@@ -125,22 +131,76 @@ public class FunasrAsrInferenceEngine implements AsrInferenceEngine {
         double confidence = firstNumber(
                 root.path("confidence"),
                 root.path("score"),
+                root.path("result").path(0).path("confidence"),
+                root.path("result").path(0).path("score"),
+                root.path("sentences").path(0).path("confidence"),
+                root.path("sentences").path(0).path("score"),
                 root.path("data").path("confidence"),
-                root.path("data").path("score"));
+                root.path("data").path("score"),
+                root.path("data").path("result").path(0).path("confidence"),
+                root.path("data").path("result").path(0).path("score"),
+                root.path("data").path("sentences").path(0).path("confidence"),
+                root.path("data").path("sentences").path(0).path("score"));
         if (confidence < 0d) {
             confidence = ingressEvent.payload().endOfStream() ? DEFAULT_CONFIDENCE_FINAL : DEFAULT_CONFIDENCE_NON_FINAL;
         }
 
-        Boolean stable = firstBoolean(
+        Boolean stable = firstBooleanLike(
                 root.path("stable"),
                 root.path("is_final"),
                 root.path("final"),
+                root.path("result").path(0).path("stable"),
+                root.path("result").path(0).path("is_final"),
+                root.path("result").path(0).path("final"),
+                root.path("sentences").path(0).path("stable"),
+                root.path("sentences").path(0).path("is_final"),
+                root.path("sentences").path(0).path("final"),
                 root.path("data").path("stable"),
                 root.path("data").path("is_final"),
-                root.path("data").path("final"));
+                root.path("data").path("final"),
+                root.path("data").path("result").path(0).path("stable"),
+                root.path("data").path("result").path(0).path("is_final"),
+                root.path("data").path("result").path(0).path("final"),
+                root.path("data").path("sentences").path(0).path("stable"),
+                root.path("data").path("sentences").path(0).path("is_final"),
+                root.path("data").path("sentences").path(0).path("final"));
         boolean resolvedStable = stable == null ? ingressEvent.payload().endOfStream() : stable;
 
         return new AsrInferenceResult(text, language, confidence, resolvedStable);
+    }
+
+    private void assertProviderSuccess(JsonNode root, String sessionId) {
+        JsonNode codeNode = firstPresentNode(
+                root.path("code"),
+                root.path("status"),
+                root.path("status_code"),
+                root.path("data").path("code"),
+                root.path("data").path("status"),
+                root.path("data").path("status_code"));
+        if (codeNode == null) {
+            return;
+        }
+
+        if (isSuccessCode(codeNode)) {
+            return;
+        }
+
+        String message = firstNonBlank(
+                textField(root, "message"),
+                textField(root, "msg"),
+                textField(root, "error"),
+                textField(root.path("data"), "message"),
+                textField(root.path("data"), "msg"),
+                textField(root.path("data"), "error"),
+                "unknown");
+        throw new IllegalStateException(
+                "FunASR provider error for session "
+                        + sessionId
+                        + " (code="
+                        + codeNode.asText()
+                        + ", message="
+                        + message
+                        + ")");
     }
 
     private void validateBase64(String audioBase64, String sessionId) {
@@ -189,7 +249,11 @@ public class FunasrAsrInferenceEngine implements AsrInferenceEngine {
         if (first.isTextual()) {
             return first.asText();
         }
-        return first.path("text").asText("");
+        return firstNonBlank(
+                first.path("text").asText(""),
+                first.path("sentence").asText(""),
+                first.path("transcript").asText(""),
+                first.path("result").asText(""));
     }
 
     private String firstNonBlank(String... values) {
@@ -203,19 +267,85 @@ public class FunasrAsrInferenceEngine implements AsrInferenceEngine {
 
     private double firstNumber(JsonNode... nodes) {
         for (JsonNode node : nodes) {
-            if (node != null && node.isNumber()) {
+            if (node == null || node.isMissingNode() || node.isNull()) {
+                continue;
+            }
+            if (node.isNumber()) {
                 return node.asDouble();
+            }
+            if (node.isTextual()) {
+                try {
+                    return Double.parseDouble(node.asText().trim());
+                } catch (NumberFormatException ignored) {
+                    // ignored
+                }
             }
         }
         return -1d;
     }
 
-    private Boolean firstBoolean(JsonNode... nodes) {
+    private Boolean firstBooleanLike(JsonNode... nodes) {
         for (JsonNode node : nodes) {
-            if (node != null && node.isBoolean()) {
+            if (node == null || node.isMissingNode() || node.isNull()) {
+                continue;
+            }
+            if (node.isBoolean()) {
                 return node.asBoolean();
+            }
+            if (node.isNumber()) {
+                int numeric = node.asInt();
+                if (numeric == 1) {
+                    return true;
+                }
+                if (numeric == 0) {
+                    return false;
+                }
+            }
+            if (node.isTextual()) {
+                String raw = node.asText().trim();
+                if ("true".equalsIgnoreCase(raw) || "1".equals(raw) || "yes".equalsIgnoreCase(raw)) {
+                    return true;
+                }
+                if ("false".equalsIgnoreCase(raw) || "0".equals(raw) || "no".equalsIgnoreCase(raw)) {
+                    return false;
+                }
             }
         }
         return null;
+    }
+
+    private JsonNode firstPresentNode(JsonNode... nodes) {
+        for (JsonNode node : nodes) {
+            if (node != null && !node.isMissingNode() && !node.isNull()) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private boolean isSuccessCode(JsonNode codeNode) {
+        if (codeNode.isNumber()) {
+            int value = codeNode.asInt();
+            return value == 0 || value == 200;
+        }
+        if (codeNode.isBoolean()) {
+            return codeNode.asBoolean();
+        }
+        if (codeNode.isTextual()) {
+            String raw = codeNode.asText().trim();
+            if (raw.isEmpty()) {
+                return false;
+            }
+            if ("ok".equalsIgnoreCase(raw) || "success".equalsIgnoreCase(raw)) {
+                return true;
+            }
+            try {
+                int value = Integer.parseInt(raw);
+                return value == 0 || value == 200;
+            } catch (NumberFormatException ignored) {
+                return false;
+            }
+        }
+        return false;
     }
 }
