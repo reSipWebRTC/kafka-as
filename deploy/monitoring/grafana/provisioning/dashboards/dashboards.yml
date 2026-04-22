@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: kafka-asr
+    orgId: 1
+    folder: Kafka-ASR
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
