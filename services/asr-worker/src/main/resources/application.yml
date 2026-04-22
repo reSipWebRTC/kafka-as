@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: asr-worker
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      group-id: ${ASR_CONSUMER_GROUP_ID:asr-worker}
+      auto-offset-reset: latest
+      enable-auto-commit: false
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+server:
+  port: 8082
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+asr:
+  kafka:
+    enabled: ${ASR_KAFKA_ENABLED:true}
+    audio-ingress-topic: ${ASR_AUDIO_INGRESS_TOPIC:audio.ingress.raw}
+    asr-final-topic: ${ASR_FINAL_TOPIC:asr.final}
+    producer-id: ${ASR_PRODUCER_ID:asr-worker}
