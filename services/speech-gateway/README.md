@@ -6,20 +6,18 @@ Current scope:
 
 - WebFlux application bootstrap
 - Internal health endpoint
-- WebSocket entrypoint placeholder for `/ws/audio`
-- Kafka publishing seam for raw audio ingress
+- WebSocket entrypoint for `/ws/audio`
+- direct Kafka publishing for raw `audio.frame` ingress (`audio.ingress.raw`)
+- low-frequency `session.start` / `session.stop` forwarding to `session-orchestrator`
 
 Out of scope for this skeleton:
 
 - Real authentication
-- Session orchestration calls
-- Real Kafka publishing
 - Backpressure and rate limiting policies
-- Full client/server protocol handling
+- Full realtime response push handling (`subtitle.*`, `session.closed`)
 
 Before adding behavior, align with:
 
 - `docs/contracts.md`
 - `docs/architecture.md`
 - `docs/services.md`
-

@@ -23,3 +23,7 @@ gateway:
     tenant-id: ${GATEWAY_TENANT_ID:tenant-default}
     producer-id: ${GATEWAY_PRODUCER_ID:speech-gateway}
     channels: ${GATEWAY_AUDIO_CHANNELS:1}
+  session-orchestrator:
+    enabled: ${GATEWAY_SESSION_ORCHESTRATOR_ENABLED:true}
+    base-url: ${GATEWAY_SESSION_ORCHESTRATOR_BASE_URL:http://localhost:8081}
+    timeout: ${GATEWAY_SESSION_ORCHESTRATOR_TIMEOUT:2s}
