@@ -3,6 +3,7 @@ package com.kafkaasr.gateway.ws.protocol;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kafkaasr.gateway.ingress.AudioFrameIngressCommand;
 import com.kafkaasr.gateway.ingress.AudioIngressPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionControlClientException;
@@ -18,12 +19,14 @@ public class GatewayMessageRouter {
 
     private static final String AUDIO_FRAME_TYPE = "audio.frame";
     private static final String SESSION_START_TYPE = "session.start";
+    private static final String SESSION_PING_TYPE = "session.ping";
     private static final String SESSION_STOP_TYPE = "session.stop";
     private static final String INVALID_MESSAGE_CODE = "INVALID_MESSAGE";
 
     private final AudioIngressPublisher audioIngressPublisher;
     private final AudioFrameMessageDecoder audioFrameMessageDecoder;
     private final SessionStartMessageDecoder sessionStartMessageDecoder;
+    private final SessionPingMessageDecoder sessionPingMessageDecoder;
     private final SessionStopMessageDecoder sessionStopMessageDecoder;
     private final SessionControlClient sessionControlClient;
     private final ObjectMapper objectMapper;
@@ -33,6 +36,7 @@ public class GatewayMessageRouter {
             AudioIngressPublisher audioIngressPublisher,
             AudioFrameMessageDecoder audioFrameMessageDecoder,
             SessionStartMessageDecoder sessionStartMessageDecoder,
+            SessionPingMessageDecoder sessionPingMessageDecoder,
             SessionStopMessageDecoder sessionStopMessageDecoder,
             SessionControlClient sessionControlClient,
             ObjectMapper objectMapper,
@@ -40,13 +44,14 @@ public class GatewayMessageRouter {
         this.audioIngressPublisher = audioIngressPublisher;
         this.audioFrameMessageDecoder = audioFrameMessageDecoder;
         this.sessionStartMessageDecoder = sessionStartMessageDecoder;
+        this.sessionPingMessageDecoder = sessionPingMessageDecoder;
         this.sessionStopMessageDecoder = sessionStopMessageDecoder;
         this.sessionControlClient = sessionControlClient;
         this.objectMapper = objectMapper;
         this.meterRegistry = meterRegistry;
     }
 
-    public Mono<Void> route(String rawMessage) {
+    public Mono<Void> route(String rawMessage, SessionBinder sessionBinder) {
         InboundEnvelope envelope;
         try {
             envelope = parseEnvelope(rawMessage);
@@ -67,9 +72,14 @@ public class GatewayMessageRouter {
         Timer.Sample sample = Timer.start(meterRegistry);
 
         Mono<Void> routeResult = switch (envelope.type()) {
-            case AUDIO_FRAME_TYPE -> audioIngressPublisher.publishRawFrame(audioFrameMessageDecoder.decode(rawMessage));
+            case AUDIO_FRAME_TYPE -> {
+                AudioFrameIngressCommand request = audioFrameMessageDecoder.decode(rawMessage);
+                sessionBinder.bind(request.sessionId());
+                yield audioIngressPublisher.publishRawFrame(request);
+            }
             case SESSION_START_TYPE -> {
                 SessionStartMessage request = sessionStartMessageDecoder.decode(rawMessage);
+                sessionBinder.bind(request.sessionId());
                 yield sessionControlClient.startSession(new SessionStartCommand(
                         request.sessionId(),
                         request.tenantId(),
@@ -77,8 +87,14 @@ public class GatewayMessageRouter {
                         request.targetLang(),
                         request.traceId()));
             }
+            case SESSION_PING_TYPE -> {
+                SessionPingMessage request = sessionPingMessageDecoder.decode(rawMessage);
+                sessionBinder.bind(request.sessionId());
+                yield Mono.empty();
+            }
             case SESSION_STOP_TYPE -> {
                 SessionStopMessage request = sessionStopMessageDecoder.decode(rawMessage);
+                sessionBinder.bind(request.sessionId());
                 yield sessionControlClient.stopSession(new SessionStopCommand(
                         request.sessionId(),
                         request.traceId(),
@@ -145,7 +161,7 @@ public class GatewayMessageRouter {
 
     private String normalizeType(String type) {
         return switch (type) {
-            case AUDIO_FRAME_TYPE, SESSION_START_TYPE, SESSION_STOP_TYPE -> type;
+            case AUDIO_FRAME_TYPE, SESSION_START_TYPE, SESSION_PING_TYPE, SESSION_STOP_TYPE -> type;
             default -> "unsupported";
         };
     }
@@ -164,5 +180,10 @@ public class GatewayMessageRouter {
     }
 
     private record InboundEnvelope(String type, String sessionId) {
+    }
+
+    @FunctionalInterface
+    public interface SessionBinder {
+        void bind(String sessionId);
     }
 }

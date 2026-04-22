@@ -17,17 +17,13 @@
 
 当前已经落地：
 
-- WebSocket 上行：`session.start`、`audio.frame`、`session.stop`
-- WebSocket 下行：`session.error`
+- WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`
+- WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`session.closed`
 - 低频控制 API：会话 start/stop、租户策略 get/put
 - 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.final`、`translation.result`、`tts.request`
 
 仍在 v1 契约中保留但尚未打通：
 
-- `session.ping`
-- `subtitle.partial`
-- `subtitle.final`
-- `session.closed`
 - `asr.partial`
 - `tts.chunk`
 - `tts.ready`
@@ -95,8 +91,7 @@
 
 当前实现说明：
 
-- `speech-gateway` 目前只接受 `session.start`、`audio.frame`、`session.stop`
-- `session.ping` 仍是 v1 预留消息，当前收到会被视为 `INVALID_MESSAGE`
+- `speech-gateway` 当前已接受 `session.start`、`session.ping`、`audio.frame`、`session.stop`
 
 ### 5.2 服务端下行消息
 
@@ -110,7 +105,7 @@
 当前实现说明：
 
 - `session.error` 已由 `speech-gateway` 落地，用于协议校验和控制面错误
-- `subtitle.partial`、`subtitle.final`、`session.closed` 仍是目标下行消息，当前尚未从下游结果链路回推到 WebSocket 客户端
+- `subtitle.partial`、`subtitle.final`、`session.closed` 已通过 Kafka 下游事件回推到 WebSocket 客户端
 
 ## 6. 错误码（v1）
 

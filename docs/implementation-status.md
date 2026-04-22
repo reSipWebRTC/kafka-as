@@ -23,7 +23,7 @@
 
 | 服务 | 端口 | 当前已实现 | 当前未实现 |
 | --- | --- | --- | --- |
-| `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `audio.frame` / `session.stop` 路由、`audio.ingress.raw` Kafka 发布、错误下行 `session.error` | 鉴权、限流、背压、`session.ping`、`subtitle.*` 推送、`session.closed` |
+| `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `session.ping` / `audio.frame` / `session.stop` 路由、`audio.ingress.raw` Kafka 发布、错误下行 `session.error`、Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行 | 鉴权、限流、背压、更完整的下行聚合策略 |
 | `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、Redis 会话状态、`session.control` Kafka 发布 | 超时编排、结果聚合、补偿工作流 |
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、placeholder 推理、发布 `asr.final` | 真实 FunASR、`asr.partial`、VAD 分段 |
 | `translation-worker` | `8083` | 消费 `asr.final`、placeholder 翻译、发布 `translation.result` | 真实 LLM/MT、术语治理、上下文增强 |
@@ -42,16 +42,13 @@
 当前已接收：
 
 - `session.start`
+- `session.ping`
 - `audio.frame`
 - `session.stop`
 
 当前已下发：
 
 - `session.error`
-
-仍在契约里但尚未打通：
-
-- `session.ping`
 - `subtitle.partial`
 - `subtitle.final`
 - `session.closed`
@@ -77,11 +74,14 @@
 | `translation.result` | `translation-worker` | `tts-orchestrator` | 当前 TTS 入口 |
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | TTS 编排输出，等待真实引擎接入 |
 
+同时，`speech-gateway` 当前也消费以下下行 Topic 并回推 WebSocket：
+
+- `asr.final` -> `subtitle.partial`
+- `translation.result` -> `subtitle.final`
+- `session.control(status=CLOSED)` -> `session.closed`
+
 ## 5. 当前缺口
 
-- `session.ping` 已在 v1 契约中保留，但当前 `speech-gateway` 未实现路由
-- 实时字幕回推尚未打通，`subtitle.partial` / `subtitle.final` 仍停留在契约层
-- `session.closed` 未由 orchestrator 到 gateway 回传
 - `asr.partial`、`translation.request`、`tts.chunk`、`tts.ready` 仍是计划扩展 Topic
 - ASR / Translation / TTS 仍是 placeholder 引擎，不是生产推理链路
 - 尚未接入对象存储、CDN、DLQ、重试策略、限流、背压和压测体系

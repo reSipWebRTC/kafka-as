@@ -49,14 +49,14 @@ flowchart LR
 
 - `speech-gateway` 直写 `audio.ingress.raw`
 - `speech-gateway -> session-orchestrator` 的低频会话控制
+- `speech-gateway` 的 `session.ping` 处理
+- `speech-gateway` 基于 Kafka 的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行回推
 - `session-orchestrator -> control-plane` 的租户策略查询
 - `session-orchestrator` 的 Redis 会话状态与 `session.control` 发布
 - `asr-worker -> translation-worker -> tts-orchestrator` 的占位事件链路
 
 当前尚未实现：
 
-- `session.ping`
-- `subtitle.partial` / `subtitle.final` / `session.closed` 回推
 - `asr.partial`
 - TTS 引擎、对象存储、CDN
 - 生产级限流、背压、DLQ、补偿
@@ -138,8 +138,8 @@ flowchart TB
 
 当前基线：
 
-- 已实现 `/ws/audio`、音频直写 Kafka、start/stop 调用 orchestrator、错误下行
-- 未实现鉴权、限流、背压和字幕回推
+- 已实现 `/ws/audio`、`session.ping`、音频直写 Kafka、start/stop 调用 orchestrator、错误下行、基于 Kafka 的字幕与会话关闭回推
+- 未实现鉴权、限流、背压和更细粒度下行编排
 
 ### Session Orchestrator
 
