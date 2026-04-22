@@ -27,6 +27,8 @@
 - 核心 Kafka consumer 重复失败达到阈值后会发送 `ops.compensation` 信号到 `platform.compensation`
 - `control-plane` 租户策略已包含灰度/回退字段：`grayEnabled`、`grayTrafficPercent`、`controlPlaneFallbackFailOpen`、`controlPlaneFallbackCacheTtlMs`
 - `session-orchestrator` 查询租户策略时已落地第一版熔断与缓存回退（支持 fail-open/fail-closed）
+- 下行 `asr.partial -> subtitle.partial`、`translation.result -> subtitle.final`、`session.control(CLOSED) -> session.closed` 已有仓库内 E2E 稳定性回归测试
+- `session.closed` 触发后下行通道会终止并丢弃晚到消息
 
 仍在 v1 契约中保留但尚未打通：
 

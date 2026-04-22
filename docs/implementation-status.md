@@ -22,13 +22,14 @@
 - 核心 Kafka 消费链路 `idempotencyKey` 判重与重复消息 no-op
 - 核心 Kafka 消费链路重复失败阈值补偿信号（`ops.compensation -> platform.compensation`）
 - `session-orchestrator` 查询 `control-plane` 已落地第一版熔断 + 缓存回退（fail-open/fail-closed）
+- `speech-gateway` 下行链路已补充仓库内 E2E 稳定性验证（顺序、终态、重复/异常计数）
 - 全仓测试与 `tools/verify.sh` 校验基线
 
 ## 2. 服务模块现状
 
 | 服务 | 端口 | 当前已实现 | 当前未实现 |
 | --- | --- | --- | --- |
-| `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `session.ping` / `audio.frame` / `session.stop` 路由、`audio.ingress.raw` Kafka 发布、会话级限流/背压控制、错误下行 `session.error`、Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行 | 鉴权、更完整的下行聚合策略 |
+| `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `session.ping` / `audio.frame` / `session.stop` 路由、`audio.ingress.raw` Kafka 发布、会话级限流/背压控制、错误下行 `session.error`、Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行、下行 E2E 稳定性测试基线 | 鉴权、更完整的下行聚合策略 |
 | `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、控制面熔断与缓存回退、Redis 会话状态、`session.control` Kafka 发布 | 超时编排、结果聚合、补偿工作流 |
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、placeholder 推理、发布 `asr.partial` / `asr.final` | 真实 FunASR、VAD 分段 |
 | `translation-worker` | `8083` | 消费 `asr.final`、placeholder 翻译、发布 `translation.result` | 真实 LLM/MT、术语治理、上下文增强 |

@@ -48,6 +48,7 @@
 - `asr.partial` -> `subtitle.partial`
 - `translation.result` -> `subtitle.final`
 - `session.control(status=CLOSED)` -> `session.closed`
+- 下行链路顺序/终态/重复语义的仓库内 E2E 回归测试
 
 当前未实现：
 
