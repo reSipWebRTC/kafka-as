@@ -2,6 +2,8 @@ package com.kafkaasr.tts.pipeline;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.tts.events.TranslationResultEvent;
@@ -57,14 +59,12 @@ class HttpTtsSynthesisEngineTests {
                 WebClient.builder().exchangeFunction(exchangeFunction),
                 new ObjectMapper());
 
-        TtsSynthesisEngine.SynthesisPlan plan = engine.synthesize(
-                sampleEvent(),
-                new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true));
-
-        assertEquals("hello", plan.text());
-        assertEquals("en-US", plan.language());
-        assertEquals("en-US-neural-a", plan.voice());
-        assertEquals(true, plan.stream());
+        RuntimeException exception = assertThrows(
+                RuntimeException.class,
+                () -> engine.synthesize(
+                        sampleEvent(),
+                        new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true)));
+        assertTrue(exception.getMessage().contains("upstream unavailable"));
     }
 
     @Test
@@ -88,6 +88,69 @@ class HttpTtsSynthesisEngineTests {
                 new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true));
 
         assertNull(capturedRequest.get().headers().getFirst(HttpHeaders.AUTHORIZATION));
+    }
+
+    @Test
+    void synthesizeParsesDataShapeAndBooleanLikeStream() {
+        ExchangeFunction exchangeFunction = request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .body("{\"code\":\"0\",\"data\":{\"result_text\":\"hello synth\",\"locale\":\"en-US\",\"voice_id\":\"en-US-neural-c\",\"is_stream\":\"0\"}}")
+                .build());
+
+        HttpTtsSynthesisEngine engine = new HttpTtsSynthesisEngine(
+                httpProperties(""),
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper());
+
+        TtsSynthesisEngine.SynthesisPlan plan = engine.synthesize(
+                sampleEvent(),
+                new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true));
+
+        assertEquals("hello synth", plan.text());
+        assertEquals("en-US", plan.language());
+        assertEquals("en-US-neural-c", plan.voice());
+        assertEquals(false, plan.stream());
+    }
+
+    @Test
+    void synthesizeRejectsProviderErrorPayload() {
+        ExchangeFunction exchangeFunction = request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .body("{\"error\":{\"message\":\"quota exceeded\"}}")
+                .build());
+
+        HttpTtsSynthesisEngine engine = new HttpTtsSynthesisEngine(
+                httpProperties(""),
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper());
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> engine.synthesize(
+                        sampleEvent(),
+                        new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true)));
+        assertTrue(exception.getMessage().contains("provider error"));
+        assertTrue(exception.getMessage().contains("quota exceeded"));
+    }
+
+    @Test
+    void synthesizeRejectsFailedProviderStatus() {
+        ExchangeFunction exchangeFunction = request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+                .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                .body("{\"status\":\"failed\",\"text\":\"hello\"}")
+                .build());
+
+        HttpTtsSynthesisEngine engine = new HttpTtsSynthesisEngine(
+                httpProperties(""),
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper());
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> engine.synthesize(
+                        sampleEvent(),
+                        new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true)));
+        assertTrue(exception.getMessage().contains("status is not successful"));
     }
 
     private static TtsSynthesisProperties httpProperties(String authToken) {

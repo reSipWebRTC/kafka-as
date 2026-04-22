@@ -135,6 +135,7 @@
 - `translation.result` 消费
 - 规则 voice 选择 + 可切换 HTTP voice-policy 适配入口
 - 可切换 HTTP TTS synthesis 适配入口
+- TTS synthesis 响应兼容与错误语义加固（`code/status` 校验、`error` 快速失败、boolean-like stream 兼容）
 - cacheKey 生成
 - `tts.request` 发布
 - 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
@@ -142,7 +143,7 @@
 
 当前未实现：
 
-- TTS synthesis 生产联调与模型侧运行保障
+- TTS synthesis 生产联调与模型侧运行保障（真实配额、限流与故障演练）
 - `tts.chunk` / `tts.ready`
 - 对象存储和 CDN 分发
 
