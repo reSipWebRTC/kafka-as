@@ -8,8 +8,9 @@ Current scope:
 - Kafka integration foundation for ingest/publish flow
 - Health and metrics endpoints for worker runtime
 - Placeholder partial/final dual-event publishing
+- Configurable inference modes: `placeholder` / `http` / `funasr`
 
 Out of scope in this phase:
 
-- Real FunASR model runtime integration
+- Production FunASR runtime validation and model-side scaling controls
 - Translation and websocket downstream delivery
