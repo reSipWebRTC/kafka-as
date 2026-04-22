@@ -68,6 +68,31 @@ Checks:
 - user-visible downlink payload mapping (`subtitle.partial` / `subtitle.final` / `session.closed`)
 - duplicate / malformed payload stability regressions in downlink consumers
 
+### Start local monitoring baseline
+
+Run from repository root:
+
+```bash
+tools/monitoring-up.sh
+```
+
+Access:
+
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000` (`admin/admin`)
+
+Stop:
+
+```bash
+tools/monitoring-down.sh
+```
+
+Assets:
+
+- `deploy/monitoring/prometheus/prometheus.yml`
+- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`
+- `deploy/monitoring/grafana/dashboards/kafka-asr-overview.json`
+
 ### Finish a feature branch
 
 ```bash

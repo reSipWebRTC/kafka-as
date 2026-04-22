@@ -207,11 +207,18 @@
 - `controlplane.tenant.policy.upsert.total` / `controlplane.tenant.policy.upsert.duration`
 - `controlplane.tenant.policy.get.total` / `controlplane.tenant.policy.get.duration`
 
+### 已落地监控资产（2026-04-22）
+
+- `deploy/monitoring/docker-compose.yml`：本地 Prometheus + Grafana 启停
+- `deploy/monitoring/prometheus/prometheus.yml`：六服务 `/actuator/prometheus` 抓取
+- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`：错误率、P95 延迟、Kafka lag 与控制面回退告警
+- `deploy/monitoring/grafana/dashboards/kafka-asr-overview.json`：主链路吞吐/错误/延迟 + downlink + lag 看板
+- `tools/monitoring-up.sh` / `tools/monitoring-down.sh`：一键启停入口
+
 ### 当前仍缺失
 
 - 客户端可感知的字幕首包 / 最终字幕延迟指标
-- Kafka consumer lag 看板与告警
-- `subtitle.*` 下行链路观测
+- 告警阈值的生产环境标定与分级路由（通知/升级）
 - 结构化 JSON 日志
 - 压测报告与 SLO 达成证据
 - 故障注入与恢复演练基线
