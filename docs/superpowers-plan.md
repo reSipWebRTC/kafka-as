@@ -18,6 +18,8 @@ The goal is to avoid ambiguity between:
 - implementation execution
 - review and branch cleanup
 
+If this document conflicts with `AGENTS.md`, follow `AGENTS.md` first and then update this file to match.
+
 ## 2. What Superpowers Is Responsible For
 
 In this repository, `superpowers` is the execution workflow layer.
@@ -83,19 +85,21 @@ Project-local worktrees live under:
 
 - `.worktrees/`
 
+Use branch names in `feature/<domain>-<scope>` format.
+
 Examples:
 
-- `.worktrees/feature-gateway`
-- `.worktrees/feature-session-orchestrator`
-- `.worktrees/feature-asr-pipeline`
-
-The matching branch names should be:
-
-- `feature/gateway`
+- `feature/gateway-session-control`
 - `feature/session-orchestrator`
 - `feature/asr-pipeline`
 - `feature/translation-worker`
 - `feature/tts-orchestrator`
+
+The matching worktree paths should be:
+
+- `.worktrees/feature-gateway-session-control`
+- `.worktrees/feature-session-orchestrator`
+- `.worktrees/feature-asr-pipeline`
 
 ### Step 4: Write the implementation plan inside the worktree
 
@@ -104,6 +108,8 @@ Use `superpowers` `writing-plans`.
 Save plans under:
 
 - `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
+
+This folder is created automatically by `tools/new-feature.sh` inside the feature worktree.
 
 Each plan must reference exact files in this repository. Plans should follow the already approved architecture and contracts rather than inventing a second design.
 
@@ -134,6 +140,8 @@ Choose `executing-plans` when:
 - the task is short
 - the file set is small
 - subagent overhead is not worth it
+
+Use `subagent-driven-development` only when session policy and user authorization allow parallel delegated work.
 
 ### Step 6: Review between tasks
 
@@ -197,7 +205,7 @@ If Java, Gradle, Kafka, Docker, or other runtime dependencies are missing, the w
 
 For the current roadmap, use this sequence:
 
-1. `feature/gateway`
+1. `feature/gateway-session-control`
 2. `feature/session-orchestrator`
 3. `feature/asr-pipeline`
 4. `feature/translation-worker`
@@ -218,7 +226,7 @@ When starting a feature, use this shape:
 
 ```text
 Use superpowers workflow for this repository.
-Create a worktree for feature/gateway.
+Create a worktree for feature/<domain>-<scope>.
 Treat docs/ and api/ as the technical source of truth.
 If contracts change, update docs/contracts.md and api/ first.
 Then write the implementation plan and execute it.
@@ -226,9 +234,10 @@ Then write the implementation plan and execute it.
 
 ## 8. Current Status
 
-The repository is already prepared for this workflow:
+Status snapshot on 2026-04-22:
 
 - git repository initialized
 - `main` branch created
 - `.worktrees/` reserved and ignored
-- `feature/gateway` worktree already created
+- active worktree: `.worktrees/feature-gateway-session-control` (`feature/gateway-session-control`)
+- active worktree: `.worktrees/feature-session-orchestrator` (`feature/session-orchestrator`)
