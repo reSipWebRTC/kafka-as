@@ -120,6 +120,88 @@ class AudioIngressConsumerTests {
     }
 
     @Test
+    void publishesFinalOnlyWhenPartialEventIsAbsent() throws Exception {
+        AudioIngressRawEvent ingressEvent = new AudioIngressRawEvent(
+                "evt-in-1",
+                "audio.ingress.raw",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "speech-gateway",
+                2L,
+                1713744000000L,
+                "sess-1:audio.ingress.raw:2",
+                new AudioIngressRawPayload("pcm16le", 16000, 1, "AQID", true));
+
+        AsrFinalEvent finalEvent = new AsrFinalEvent(
+                "evt-out-1",
+                "asr.final",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "asr-worker",
+                2L,
+                1713744001000L,
+                "sess-1:asr.final:2",
+                new AsrFinalPayload("hello", "en-US", 0.9d, true));
+
+        String payload = objectMapper.writeValueAsString(ingressEvent);
+        AsrPipelineService.AsrPipelineEvents events = new AsrPipelineService.AsrPipelineEvents(null, finalEvent);
+        when(pipelineService.toAsrEvents(any())).thenReturn(events);
+        when(asrFinalPublisher.publish(finalEvent)).thenReturn(Mono.empty());
+
+        consumer.onMessage(payload);
+
+        verify(asrPartialPublisher, never()).publish(any());
+        verify(asrFinalPublisher).publish(finalEvent);
+    }
+
+    @Test
+    void publishesPartialOnlyWhenFinalEventIsAbsent() throws Exception {
+        AudioIngressRawEvent ingressEvent = new AudioIngressRawEvent(
+                "evt-in-1",
+                "audio.ingress.raw",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "speech-gateway",
+                3L,
+                1713744000000L,
+                "sess-1:audio.ingress.raw:3",
+                new AudioIngressRawPayload("pcm16le", 16000, 1, "AQID", false));
+
+        AsrPartialEvent partialEvent = new AsrPartialEvent(
+                "evt-out-0",
+                "asr.partial",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "asr-worker",
+                3L,
+                1713744000500L,
+                "sess-1:asr.partial:3",
+                new AsrPartialPayload("hell", "en-US", 0.8d, false));
+
+        String payload = objectMapper.writeValueAsString(ingressEvent);
+        AsrPipelineService.AsrPipelineEvents events = new AsrPipelineService.AsrPipelineEvents(partialEvent, null);
+        when(pipelineService.toAsrEvents(any())).thenReturn(events);
+        when(asrPartialPublisher.publish(partialEvent)).thenReturn(Mono.empty());
+
+        consumer.onMessage(payload);
+
+        verify(asrPartialPublisher).publish(partialEvent);
+        verify(asrFinalPublisher, never()).publish(any());
+    }
+
+    @Test
     void rejectsMalformedIngressPayload() {
         assertThrows(IllegalArgumentException.class, () -> consumer.onMessage("{invalid-json"));
 

@@ -73,8 +73,12 @@ public class AudioIngressConsumer {
             }
             AsrPipelineService.AsrPipelineEvents pipelineEvents = pipelineService.toAsrEvents(ingressEvent);
 
-            asrPartialPublisher.publish(pipelineEvents.partialEvent()).block();
-            asrFinalPublisher.publish(pipelineEvents.finalEvent()).block();
+            if (pipelineEvents.partialEvent() != null) {
+                asrPartialPublisher.publish(pipelineEvents.partialEvent()).block();
+            }
+            if (pipelineEvents.finalEvent() != null) {
+                asrFinalPublisher.publish(pipelineEvents.finalEvent()).block();
+            }
             idempotencyGuard.markProcessed(ingressEvent.idempotencyKey());
             failureAttempts.remove(failureKey);
             meterRegistry.counter(
@@ -85,9 +89,11 @@ public class AudioIngressConsumer {
                             "OK")
                     .increment();
             log.debug(
-                    "Published asr.partial and asr.final events sessionId={} seq={}",
-                    pipelineEvents.finalEvent().sessionId(),
-                    pipelineEvents.finalEvent().seq());
+                    "Published ASR events sessionId={} seq={} partial={} final={}",
+                    ingressEvent.sessionId(),
+                    ingressEvent.seq(),
+                    pipelineEvents.partialEvent() != null,
+                    pipelineEvents.finalEvent() != null);
         } catch (RuntimeException exception) {
             meterRegistry.counter(
                             "asr.pipeline.messages.total",

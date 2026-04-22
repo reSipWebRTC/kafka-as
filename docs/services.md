@@ -89,7 +89,7 @@
 
 - `audio.ingress.raw` 消费
 - 默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配入口
-- `asr.partial` / `asr.final` 发布
+- 按稳定度分流发布 `asr.partial` / `asr.final`（非稳定结果发 partial，稳定/终态结果发 final）
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
