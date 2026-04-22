@@ -1,22 +1,64 @@
 package com.kafkaasr.control.api;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 
+import com.kafkaasr.control.service.ControlPlaneException;
+import com.kafkaasr.control.service.TenantPolicyService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Mono;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureWebTestClient
+@WebFluxTest(controllers = TenantPolicyController.class)
+@Import(ControlPlaneExceptionHandler.class)
 class TenantPolicyControllerTests {
 
     @Autowired
     private WebTestClient webTestClient;
 
+    @MockBean
+    private TenantPolicyService tenantPolicyService;
+
     @Test
     void upsertThenGetPolicy() {
+        TenantPolicyResponse upsertResponse = new TenantPolicyResponse(
+                "tenant-api-a",
+                "zh-CN",
+                "en-US",
+                "funasr-v1",
+                "mt-v1",
+                "en-US-neural-a",
+                200,
+                2000,
+                true,
+                1L,
+                1713744000000L,
+                true);
+        TenantPolicyResponse getResponse = new TenantPolicyResponse(
+                "tenant-api-a",
+                "zh-CN",
+                "en-US",
+                "funasr-v1",
+                "mt-v1",
+                "en-US-neural-a",
+                200,
+                2000,
+                true,
+                1L,
+                1713744000000L,
+                false);
+
+        when(tenantPolicyService.upsertTenantPolicy(eq("tenant-api-a"), any()))
+                .thenReturn(Mono.just(upsertResponse));
+        when(tenantPolicyService.getTenantPolicy("tenant-api-a"))
+                .thenReturn(Mono.just(getResponse));
+
         webTestClient.put()
                 .uri("/api/v1/tenants/tenant-api-a/policy")
                 .contentType(APPLICATION_JSON)
@@ -51,6 +93,9 @@ class TenantPolicyControllerTests {
 
     @Test
     void getMissingPolicyReturnsNotFound() {
+        when(tenantPolicyService.getTenantPolicy("missing"))
+                .thenReturn(Mono.error(ControlPlaneException.tenantPolicyNotFound("missing")));
+
         webTestClient.get()
                 .uri("/api/v1/tenants/missing/policy")
                 .exchange()

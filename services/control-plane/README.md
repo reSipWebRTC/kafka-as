@@ -6,7 +6,7 @@ Current scope:
 
 - Spring Boot module scaffold
 - HTTP API to upsert and query tenant policy
-- In-memory repository behind an interface for future persistence swap
+- Redis-backed repository behind an interface for future storage evolution
 
 Out of scope in this phase:
 
