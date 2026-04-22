@@ -68,6 +68,24 @@ Checks:
 - user-visible downlink payload mapping (`subtitle.partial` / `subtitle.final` / `session.closed`)
 - duplicate / malformed payload stability regressions in downlink consumers
 
+### Run loadtest + alert closure baseline
+
+Run from repository root or from a feature worktree:
+
+```bash
+tools/loadtest-alert-closure.sh
+```
+
+Outputs:
+
+- `build/reports/loadtest/gateway-pipeline-loadtest.json`
+- `build/reports/loadtest/gateway-pipeline-loadtest-summary.md`
+
+Related docs:
+
+- `docs/reports/loadtest/2026-04-22-baseline.md`
+- `docs/runbooks/loadtest-alert-closure.md`
+
 ### Start local monitoring baseline
 
 Run from repository root:
