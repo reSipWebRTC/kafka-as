@@ -15,7 +15,7 @@
 这条链路已经具备：
 
 - 统一 v1 事件 Envelope
-- 5 个已落地 Topic：`audio.ingress.raw`、`session.control`、`asr.final`、`translation.result`、`tts.request`
+- 6 个已落地 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
 - 低频控制 API：会话 start/stop、租户策略 get/put
 - 全仓测试与 `tools/verify.sh` 校验基线
 
@@ -25,7 +25,7 @@
 | --- | --- | --- | --- |
 | `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `session.ping` / `audio.frame` / `session.stop` 路由、`audio.ingress.raw` Kafka 发布、错误下行 `session.error`、Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行 | 鉴权、限流、背压、更完整的下行聚合策略 |
 | `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、Redis 会话状态、`session.control` Kafka 发布 | 超时编排、结果聚合、补偿工作流 |
-| `asr-worker` | `8082` | 消费 `audio.ingress.raw`、placeholder 推理、发布 `asr.final` | 真实 FunASR、`asr.partial`、VAD 分段 |
+| `asr-worker` | `8082` | 消费 `audio.ingress.raw`、placeholder 推理、发布 `asr.partial` / `asr.final` | 真实 FunASR、VAD 分段 |
 | `translation-worker` | `8083` | 消费 `asr.final`、placeholder 翻译、发布 `translation.result` | 真实 LLM/MT、术语治理、上下文增强 |
 | `tts-orchestrator` | `8084` | 消费 `translation.result`、生成 voice/cacheKey、发布 `tts.request` | 真实 TTS 引擎、`tts.chunk` / `tts.ready`、对象存储、CDN |
 | `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、Redis 策略存储、版本化 upsert | 认证鉴权、持久化数据库、动态策略下发 |
@@ -70,19 +70,20 @@
 | --- | --- | --- | --- |
 | `audio.ingress.raw` | `speech-gateway` | `asr-worker` | 高频音频主链路 |
 | `session.control` | `session-orchestrator` | 暂无仓库内下游 | 生命周期审计与编排事件 |
+| `asr.partial` | `asr-worker` | `speech-gateway` | 中间识别结果，当前用于 `subtitle.partial` |
 | `asr.final` | `asr-worker` | `translation-worker` | 当前翻译入口 |
 | `translation.result` | `translation-worker` | `tts-orchestrator` | 当前 TTS 入口 |
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | TTS 编排输出，等待真实引擎接入 |
 
 同时，`speech-gateway` 当前也消费以下下行 Topic 并回推 WebSocket：
 
-- `asr.final` -> `subtitle.partial`
+- `asr.partial` -> `subtitle.partial`
 - `translation.result` -> `subtitle.final`
 - `session.control(status=CLOSED)` -> `session.closed`
 
 ## 5. 当前缺口
 
-- `asr.partial`、`translation.request`、`tts.chunk`、`tts.ready` 仍是计划扩展 Topic
+- `translation.request`、`tts.chunk`、`tts.ready` 仍是计划扩展 Topic
 - ASR / Translation / TTS 仍是 placeholder 引擎，不是生产推理链路
 - 尚未接入对象存储、CDN、DLQ、重试策略、限流、背压和压测体系
 

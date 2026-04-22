@@ -3,7 +3,7 @@ package com.kafkaasr.gateway.ws.downlink;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.gateway.ws.GatewayDownlinkPublisher;
-import com.kafkaasr.gateway.ws.downlink.events.AsrFinalEvent;
+import com.kafkaasr.gateway.ws.downlink.events.AsrPartialEvent;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -12,13 +12,13 @@ import org.springframework.stereotype.Component;
 
 @Component
 @ConditionalOnProperty(name = "gateway.downlink.enabled", havingValue = "true", matchIfMissing = true)
-public class AsrFinalDownlinkConsumer {
+public class AsrPartialDownlinkConsumer {
 
     private final ObjectMapper objectMapper;
     private final GatewayDownlinkPublisher downlinkPublisher;
     private final MeterRegistry meterRegistry;
 
-    public AsrFinalDownlinkConsumer(
+    public AsrPartialDownlinkConsumer(
             ObjectMapper objectMapper,
             GatewayDownlinkPublisher downlinkPublisher,
             MeterRegistry meterRegistry) {
@@ -28,12 +28,12 @@ public class AsrFinalDownlinkConsumer {
     }
 
     @KafkaListener(
-            topics = "${gateway.downlink.asr-final-topic:asr.final}",
+            topics = "${gateway.downlink.asr-partial-topic:asr.partial}",
             groupId = "${gateway.downlink.consumer-group-id:speech-gateway-downlink}")
     public void onMessage(String payload) {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
-            AsrFinalEvent event = parse(payload);
+            AsrPartialEvent event = parse(payload);
             String text = event.payload() == null ? "" : event.payload().text();
             downlinkPublisher.publishSubtitlePartial(event.sessionId(), event.seq(), text).block();
             meterRegistry.counter(
@@ -61,11 +61,11 @@ public class AsrFinalDownlinkConsumer {
         }
     }
 
-    private AsrFinalEvent parse(String payload) {
+    private AsrPartialEvent parse(String payload) {
         try {
-            return objectMapper.readValue(payload, AsrFinalEvent.class);
+            return objectMapper.readValue(payload, AsrPartialEvent.class);
         } catch (JsonProcessingException exception) {
-            throw new IllegalArgumentException("Invalid asr.final payload", exception);
+            throw new IllegalArgumentException("Invalid asr.partial payload", exception);
         }
     }
 

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.kafkaasr.asr.events.AsrFinalEvent;
 import com.kafkaasr.asr.events.AsrKafkaProperties;
+import com.kafkaasr.asr.events.AsrPartialEvent;
 import com.kafkaasr.asr.events.AudioIngressRawEvent;
 import com.kafkaasr.asr.events.AudioIngressRawPayload;
 import java.time.Clock;
@@ -17,7 +18,7 @@ import org.junit.jupiter.api.Test;
 class AsrPipelineServiceTests {
 
     @Test
-    void mapsIngressEventToAsrFinalEvent() {
+    void mapsIngressEventToAsrPartialAndAsrFinalEvents() {
         AsrKafkaProperties properties = new AsrKafkaProperties();
         properties.setProducerId("asr-worker");
 
@@ -43,7 +44,24 @@ class AsrPipelineServiceTests {
                 "sess-1:audio.ingress.raw:42",
                 new AudioIngressRawPayload("pcm16le", 16000, 1, "AQID", true));
 
-        AsrFinalEvent finalEvent = service.toAsrFinalEvent(ingressEvent);
+        AsrPipelineService.AsrPipelineEvents events = service.toAsrEvents(ingressEvent);
+        AsrPartialEvent partialEvent = events.partialEvent();
+        AsrFinalEvent finalEvent = events.finalEvent();
+
+        assertTrue(partialEvent.eventId().startsWith("evt_"));
+        assertEquals("asr.partial", partialEvent.eventType());
+        assertEquals("v1", partialEvent.eventVersion());
+        assertEquals("trc-1", partialEvent.traceId());
+        assertEquals("sess-1", partialEvent.sessionId());
+        assertEquals("tenant-a", partialEvent.tenantId());
+        assertEquals("asr-worker", partialEvent.producer());
+        assertEquals(42L, partialEvent.seq());
+        assertEquals(Instant.parse("2026-04-22T00:00:00Z").toEpochMilli(), partialEvent.ts());
+        assertEquals("sess-1:asr.partial:42", partialEvent.idempotencyKey());
+        assertEquals("hello world", partialEvent.payload().text());
+        assertEquals("en-US", partialEvent.payload().language());
+        assertEquals(0.91d, partialEvent.payload().confidence());
+        assertFalse(partialEvent.payload().stable());
 
         assertTrue(finalEvent.eventId().startsWith("evt_"));
         assertEquals("asr.final", finalEvent.eventType());
@@ -83,7 +101,7 @@ class AsrPipelineServiceTests {
                 new AudioIngressRawPayload("pcm16le", 16000, 1, "AQID", false));
 
         IllegalArgumentException exception =
-                assertThrows(IllegalArgumentException.class, () -> service.toAsrFinalEvent(invalid));
+                assertThrows(IllegalArgumentException.class, () -> service.toAsrEvents(invalid));
         assertTrue(exception.getMessage().contains("Unsupported ingress eventType"));
     }
 
@@ -108,7 +126,15 @@ class AsrPipelineServiceTests {
                 "sess-3:audio.ingress.raw:5",
                 new AudioIngressRawPayload("pcm16le", 16000, 1, "AQID", false));
 
-        AsrFinalEvent finalEvent = service.toAsrFinalEvent(ingressEvent);
+        AsrPipelineService.AsrPipelineEvents events = service.toAsrEvents(ingressEvent);
+        AsrPartialEvent partialEvent = events.partialEvent();
+        AsrFinalEvent finalEvent = events.finalEvent();
+
+        assertEquals("", partialEvent.payload().text());
+        assertEquals("und", partialEvent.payload().language());
+        assertEquals(1.0d, partialEvent.payload().confidence());
+        assertFalse(partialEvent.payload().stable());
+
         assertEquals("", finalEvent.payload().text());
         assertEquals("und", finalEvent.payload().language());
         assertEquals(1.0d, finalEvent.payload().confidence());

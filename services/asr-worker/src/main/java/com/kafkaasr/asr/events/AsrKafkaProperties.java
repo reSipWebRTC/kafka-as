@@ -14,6 +14,9 @@ public class AsrKafkaProperties {
     private String audioIngressTopic = "audio.ingress.raw";
 
     @NotBlank
+    private String asrPartialTopic = "asr.partial";
+
+    @NotBlank
     private String asrFinalTopic = "asr.final";
 
     @NotBlank
@@ -33,6 +36,14 @@ public class AsrKafkaProperties {
 
     public void setAudioIngressTopic(String audioIngressTopic) {
         this.audioIngressTopic = audioIngressTopic;
+    }
+
+    public String getAsrPartialTopic() {
+        return asrPartialTopic;
+    }
+
+    public void setAsrPartialTopic(String asrPartialTopic) {
+        this.asrPartialTopic = asrPartialTopic;
     }
 
     public String getAsrFinalTopic() {

@@ -15,7 +15,7 @@
 | --- | --- | --- | --- |
 | `speech-gateway` | 已落地骨架 | WebSocket 接入、Kafka 音频发布、会话 start/stop 转发 | Kafka、`session-orchestrator` |
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
-| `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、placeholder ASR、发布 `asr.final` | Kafka |
+| `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、placeholder ASR、发布 `asr.partial` / `asr.final` | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、placeholder 翻译、发布 `translation.result` | Kafka |
 | `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、发布 `tts.request` | Kafka |
 | `control-plane` | 已落地骨架 | 租户策略 HTTP API、Redis 存储、版本化 upsert | Redis |
@@ -44,7 +44,7 @@
 - `session.start` / `session.ping` / `audio.frame` / `session.stop`
 - `audio.ingress.raw` 发布
 - `session.error` 下行
-- `asr.final` -> `subtitle.partial`
+- `asr.partial` -> `subtitle.partial`
 - `translation.result` -> `subtitle.final`
 - `session.control(status=CLOSED)` -> `session.closed`
 
@@ -86,12 +86,11 @@
 
 - `audio.ingress.raw` 消费
 - placeholder 推理
-- `asr.final` 发布
+- `asr.partial` / `asr.final` 发布
 
 当前未实现：
 
 - FunASR 真正接入
-- `asr.partial`
 - VAD/切段/上下文管理
 
 ### translation-worker
@@ -166,7 +165,7 @@
 ### 内部通信
 
 - `Kafka`
-  当前主异步总线，已落地 5 个 Topic。
+  当前主异步总线，已落地 6 个 Topic。
 - `HTTP`
   当前用于 `speech-gateway -> session-orchestrator` 和 `session-orchestrator -> control-plane` 的低频调用。
 

@@ -57,7 +57,6 @@ flowchart LR
 
 当前尚未实现：
 
-- `asr.partial`
 - TTS 引擎、对象存储、CDN
 - 生产级限流、背压、DLQ、补偿
 
@@ -165,7 +164,7 @@ flowchart TB
 
 当前基线：
 
-- 已承接 `audio.ingress.raw`、`session.control`、`asr.final`、`translation.result`、`tts.request`
+- 已承接 `audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
 - 暂未落地 DLQ、重放流程和 Lag 治理文档化闭环
 
 ### ASR Worker
@@ -178,8 +177,8 @@ flowchart TB
 
 当前基线：
 
-- 已实现 placeholder `audio.ingress.raw -> asr.final`
-- 未实现 FunASR、`asr.partial`、VAD 分段
+- 已实现 placeholder `audio.ingress.raw -> asr.partial / asr.final`
+- 未实现 FunASR、VAD 分段
 
 ### Translation Worker
 

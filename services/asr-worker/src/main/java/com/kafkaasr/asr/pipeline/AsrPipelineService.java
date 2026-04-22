@@ -3,6 +3,8 @@ package com.kafkaasr.asr.pipeline;
 import com.kafkaasr.asr.events.AsrFinalEvent;
 import com.kafkaasr.asr.events.AsrFinalPayload;
 import com.kafkaasr.asr.events.AsrKafkaProperties;
+import com.kafkaasr.asr.events.AsrPartialEvent;
+import com.kafkaasr.asr.events.AsrPartialPayload;
 import com.kafkaasr.asr.events.AudioIngressRawEvent;
 import java.time.Clock;
 import java.time.Instant;
@@ -14,7 +16,8 @@ import org.springframework.stereotype.Service;
 public class AsrPipelineService {
 
     private static final String INPUT_EVENT_TYPE = "audio.ingress.raw";
-    private static final String OUTPUT_EVENT_TYPE = "asr.final";
+    private static final String OUTPUT_EVENT_TYPE_PARTIAL = "asr.partial";
+    private static final String OUTPUT_EVENT_TYPE_FINAL = "asr.final";
     private static final String OUTPUT_EVENT_VERSION = "v1";
     private static final String FALLBACK_LANGUAGE = "und";
 
@@ -38,15 +41,37 @@ public class AsrPipelineService {
         this.clock = clock;
     }
 
-    public AsrFinalEvent toAsrFinalEvent(AudioIngressRawEvent ingressEvent) {
+    public record AsrPipelineEvents(
+            AsrPartialEvent partialEvent,
+            AsrFinalEvent finalEvent) {
+    }
+
+    public AsrPipelineEvents toAsrEvents(AudioIngressRawEvent ingressEvent) {
         validateIngressEvent(ingressEvent);
 
         AsrInferenceEngine.AsrInferenceResult inferenceResult = inferenceEngine.infer(ingressEvent);
         long timestamp = Instant.now(clock).toEpochMilli();
 
-        return new AsrFinalEvent(
+        return new AsrPipelineEvents(
+                toAsrPartialEvent(ingressEvent, inferenceResult, timestamp),
+                toAsrFinalEvent(ingressEvent, inferenceResult, timestamp));
+    }
+
+    public AsrPartialEvent toAsrPartialEvent(AudioIngressRawEvent ingressEvent) {
+        return toAsrEvents(ingressEvent).partialEvent();
+    }
+
+    public AsrFinalEvent toAsrFinalEvent(AudioIngressRawEvent ingressEvent) {
+        return toAsrEvents(ingressEvent).finalEvent();
+    }
+
+    private AsrPartialEvent toAsrPartialEvent(
+            AudioIngressRawEvent ingressEvent,
+            AsrInferenceEngine.AsrInferenceResult inferenceResult,
+            long timestamp) {
+        return new AsrPartialEvent(
                 prefixedId("evt"),
-                OUTPUT_EVENT_TYPE,
+                OUTPUT_EVENT_TYPE_PARTIAL,
                 OUTPUT_EVENT_VERSION,
                 ingressEvent.traceId(),
                 ingressEvent.sessionId(),
@@ -55,12 +80,39 @@ public class AsrPipelineService {
                 kafkaProperties.getProducerId(),
                 ingressEvent.seq(),
                 timestamp,
-                ingressEvent.sessionId() + ":" + OUTPUT_EVENT_TYPE + ":" + ingressEvent.seq(),
+                idempotencyKey(ingressEvent, OUTPUT_EVENT_TYPE_PARTIAL),
+                new AsrPartialPayload(
+                        coalesceText(inferenceResult.text()),
+                        normalizeLanguage(inferenceResult.language()),
+                        normalizeConfidence(inferenceResult.confidence()),
+                        false));
+    }
+
+    private AsrFinalEvent toAsrFinalEvent(
+            AudioIngressRawEvent ingressEvent,
+            AsrInferenceEngine.AsrInferenceResult inferenceResult,
+            long timestamp) {
+        return new AsrFinalEvent(
+                prefixedId("evt"),
+                OUTPUT_EVENT_TYPE_FINAL,
+                OUTPUT_EVENT_VERSION,
+                ingressEvent.traceId(),
+                ingressEvent.sessionId(),
+                ingressEvent.tenantId(),
+                ingressEvent.roomId(),
+                kafkaProperties.getProducerId(),
+                ingressEvent.seq(),
+                timestamp,
+                idempotencyKey(ingressEvent, OUTPUT_EVENT_TYPE_FINAL),
                 new AsrFinalPayload(
                         coalesceText(inferenceResult.text()),
                         normalizeLanguage(inferenceResult.language()),
                         normalizeConfidence(inferenceResult.confidence()),
                         inferenceResult.stable()));
+    }
+
+    private String idempotencyKey(AudioIngressRawEvent ingressEvent, String eventType) {
+        return ingressEvent.sessionId() + ":" + eventType + ":" + ingressEvent.seq();
     }
 
     private void validateIngressEvent(AudioIngressRawEvent ingressEvent) {

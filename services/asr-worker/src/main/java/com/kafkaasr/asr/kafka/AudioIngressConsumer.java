@@ -2,7 +2,6 @@ package com.kafkaasr.asr.kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kafkaasr.asr.events.AsrFinalEvent;
 import com.kafkaasr.asr.events.AudioIngressRawEvent;
 import com.kafkaasr.asr.pipeline.AsrPipelineService;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -21,16 +20,19 @@ public class AudioIngressConsumer {
 
     private final ObjectMapper objectMapper;
     private final AsrPipelineService pipelineService;
+    private final AsrPartialPublisher asrPartialPublisher;
     private final AsrFinalPublisher asrFinalPublisher;
     private final MeterRegistry meterRegistry;
 
     public AudioIngressConsumer(
             ObjectMapper objectMapper,
             AsrPipelineService pipelineService,
+            AsrPartialPublisher asrPartialPublisher,
             AsrFinalPublisher asrFinalPublisher,
             MeterRegistry meterRegistry) {
         this.objectMapper = objectMapper;
         this.pipelineService = pipelineService;
+        this.asrPartialPublisher = asrPartialPublisher;
         this.asrFinalPublisher = asrFinalPublisher;
         this.meterRegistry = meterRegistry;
     }
@@ -42,9 +44,10 @@ public class AudioIngressConsumer {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
             AudioIngressRawEvent ingressEvent = parse(payload);
-            AsrFinalEvent finalEvent = pipelineService.toAsrFinalEvent(ingressEvent);
+            AsrPipelineService.AsrPipelineEvents pipelineEvents = pipelineService.toAsrEvents(ingressEvent);
 
-            asrFinalPublisher.publish(finalEvent).block();
+            asrPartialPublisher.publish(pipelineEvents.partialEvent()).block();
+            asrFinalPublisher.publish(pipelineEvents.finalEvent()).block();
             meterRegistry.counter(
                             "asr.pipeline.messages.total",
                             "result",
@@ -53,9 +56,9 @@ public class AudioIngressConsumer {
                             "OK")
                     .increment();
             log.debug(
-                    "Published asr.final event sessionId={} seq={}",
-                    finalEvent.sessionId(),
-                    finalEvent.seq());
+                    "Published asr.partial and asr.final events sessionId={} seq={}",
+                    pipelineEvents.finalEvent().sessionId(),
+                    pipelineEvents.finalEvent().seq());
         } catch (RuntimeException exception) {
             meterRegistry.counter(
                             "asr.pipeline.messages.total",
