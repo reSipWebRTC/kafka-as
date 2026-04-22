@@ -7,7 +7,7 @@ groups:
             sum(rate(gateway_ws_messages_total{result="error"}[5m]))
             /
             clamp_min(sum(rate(gateway_ws_messages_total[5m])), 1e-6)
-          ) > 0.05
+          ) > 0.01
           and
           sum(rate(gateway_ws_messages_total[5m])) > 1
         for: 10m
@@ -16,7 +16,7 @@ groups:
           area: gateway
         annotations:
           summary: "Gateway WebSocket error ratio is high"
-          description: "gateway.ws.messages.total error ratio > 5% for 10m"
+          description: "gateway.ws.messages.total error ratio > 1% for 10m (baseline-calibrated, re-calibrate in production)"
 
       - alert: DownlinkErrorRateHigh
         expr: |
@@ -24,7 +24,7 @@ groups:
             sum(rate(gateway_downlink_messages_total{result="error"}[5m]))
             /
             clamp_min(sum(rate(gateway_downlink_messages_total[5m])), 1e-6)
-          ) > 0.03
+          ) > 0.005
           and
           sum(rate(gateway_downlink_messages_total[5m])) > 0.5
         for: 10m
@@ -33,7 +33,7 @@ groups:
           area: gateway
         annotations:
           summary: "Gateway downlink error ratio is high"
-          description: "gateway.downlink.messages.total error ratio > 3% for 10m"
+          description: "gateway.downlink.messages.total error ratio > 0.5% for 10m (baseline-calibrated, re-calibrate in production)"
 
       - alert: PipelineErrorRateHigh
         expr: |
@@ -48,7 +48,7 @@ groups:
               ),
               1e-6
             )
-          ) > 0.03
+          ) > 0.01
           and
           sum by (service) (
             rate({__name__=~"asr_pipeline_messages_total|translation_pipeline_messages_total|tts_pipeline_messages_total"}[5m])
@@ -59,49 +59,49 @@ groups:
           area: pipeline
         annotations:
           summary: "Pipeline error ratio is high for {{ $labels.service }}"
-          description: "ASR/Translation/TTS error ratio > 3% for 10m"
+          description: "ASR/Translation/TTS error ratio > 1% for 10m (baseline-calibrated, re-calibrate in production)"
 
       - alert: AsrPipelineP95LatencyHigh
         expr: |
           histogram_quantile(
             0.95,
             sum by (le) (rate(asr_pipeline_duration_seconds_bucket[5m]))
-          ) > 2
+          ) > 1.5
         for: 15m
         labels:
           severity: warning
           area: asr
         annotations:
           summary: "ASR pipeline p95 latency is high"
-          description: "asr.pipeline.duration p95 > 2s for 15m"
+          description: "asr.pipeline.duration p95 > 1.5s for 15m (aligned with subtitle SLO, re-calibrate in production)"
 
       - alert: TranslationPipelineP95LatencyHigh
         expr: |
           histogram_quantile(
             0.95,
             sum by (le) (rate(translation_pipeline_duration_seconds_bucket[5m]))
-          ) > 2
+          ) > 1.5
         for: 15m
         labels:
           severity: warning
           area: translation
         annotations:
           summary: "Translation pipeline p95 latency is high"
-          description: "translation.pipeline.duration p95 > 2s for 15m"
+          description: "translation.pipeline.duration p95 > 1.5s for 15m (aligned with subtitle SLO, re-calibrate in production)"
 
       - alert: TtsPipelineP95LatencyHigh
         expr: |
           histogram_quantile(
             0.95,
             sum by (le) (rate(tts_pipeline_duration_seconds_bucket[5m]))
-          ) > 2
+          ) > 1.5
         for: 15m
         labels:
           severity: warning
           area: tts
         annotations:
           summary: "TTS pipeline p95 latency is high"
-          description: "tts.pipeline.duration p95 > 2s for 15m"
+          description: "tts.pipeline.duration p95 > 1.5s for 15m (aligned with subtitle SLO, re-calibrate in production)"
 
       - alert: KafkaConsumerLagHigh
         expr: |
@@ -109,14 +109,14 @@ groups:
             kafka_consumer_records_lag_max{
               service=~"speech-gateway|asr-worker|translation-worker|tts-orchestrator"
             }
-          ) > 2000
+          ) > 1200
         for: 10m
         labels:
           severity: warning
           area: kafka
         annotations:
           summary: "Kafka consumer lag is high"
-          description: "kafka.consumer.records.lag.max > 2000 for service={{ $labels.service }} topic={{ $labels.topic }}"
+          description: "kafka.consumer.records.lag.max > 1200 for service={{ $labels.service }} topic={{ $labels.topic }} (baseline-calibrated, re-calibrate in production)"
 
       - alert: OrchestratorControlPlaneFallbackSpike
         expr: |
