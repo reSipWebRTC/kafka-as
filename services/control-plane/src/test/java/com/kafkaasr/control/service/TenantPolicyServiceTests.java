@@ -37,7 +37,11 @@ class TenantPolicyServiceTests {
                 "en-US-neural-a",
                 100,
                 1200,
-                true);
+                true,
+                true,
+                10,
+                true,
+                45000L);
 
         StepVerifier.create(service.upsertTenantPolicy("tenant-a", request))
                 .assertNext(response -> {
@@ -45,6 +49,10 @@ class TenantPolicyServiceTests {
                     assertEquals(1L, response.version());
                     assertEquals(true, response.created());
                     assertEquals("funasr-v1", response.asrModel());
+                    assertEquals(true, response.grayEnabled());
+                    assertEquals(10, response.grayTrafficPercent());
+                    assertEquals(true, response.controlPlaneFallbackFailOpen());
+                    assertEquals(45000L, response.controlPlaneFallbackCacheTtlMs());
                 })
                 .verifyComplete();
     }
@@ -59,7 +67,11 @@ class TenantPolicyServiceTests {
                 "en-US-neural-a",
                 100,
                 1200,
-                true);
+                true,
+                null,
+                null,
+                null,
+                null);
         TenantPolicyUpsertRequest second = new TenantPolicyUpsertRequest(
                 "zh-CN",
                 "ja-JP",
@@ -68,7 +80,11 @@ class TenantPolicyServiceTests {
                 "ja-JP-neural-a",
                 50,
                 800,
-                true);
+                true,
+                true,
+                25,
+                false,
+                60000L);
 
         StepVerifier.create(service.upsertTenantPolicy("tenant-b", first))
                 .expectNextCount(1)
@@ -80,6 +96,36 @@ class TenantPolicyServiceTests {
                     assertEquals(false, response.created());
                     assertEquals("ja-JP", response.targetLang());
                     assertEquals("funasr-v2", response.asrModel());
+                    assertEquals(true, response.grayEnabled());
+                    assertEquals(25, response.grayTrafficPercent());
+                    assertEquals(false, response.controlPlaneFallbackFailOpen());
+                    assertEquals(60000L, response.controlPlaneFallbackCacheTtlMs());
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void upsertUsesCompatibilityDefaultsWhenNewFieldsMissing() {
+        TenantPolicyUpsertRequest request = new TenantPolicyUpsertRequest(
+                "zh-CN",
+                "en-US",
+                "funasr-v1",
+                "mt-v1",
+                "en-US-neural-a",
+                100,
+                1200,
+                true,
+                null,
+                null,
+                null,
+                null);
+
+        StepVerifier.create(service.upsertTenantPolicy("tenant-defaults", request))
+                .assertNext(response -> {
+                    assertEquals(false, response.grayEnabled());
+                    assertEquals(0, response.grayTrafficPercent());
+                    assertEquals(false, response.controlPlaneFallbackFailOpen());
+                    assertEquals(30000L, response.controlPlaneFallbackCacheTtlMs());
                 })
                 .verifyComplete();
     }

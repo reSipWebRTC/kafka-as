@@ -54,6 +54,8 @@
 - `translation-worker` 当前直接消费 `asr.final`，尚未引入独立 `translation.request`
 - `tts.request` 当前仍是中间编排事件，还未接入真实引擎链路
 - `asr-worker`、`translation-worker`、`tts-orchestrator`、`speech-gateway` 下行消费者已接入固定重试 + `<source-topic>.dlq` 死信回退
+- 上述核心消费者均已接入基于 `idempotencyKey` 的 TTL 判重，重复消息按成功路径 no-op
+- 上述核心消费者在重复失败达到阈值后会发出 `ops.compensation` 信号到 `platform.compensation`
 
 ## 4. 计划扩展 Topic
 
@@ -135,6 +137,7 @@
 
 - 核心 consumer 失败后会写入 `<source-topic>.dlq`
 - `IllegalArgumentException`（如 payload 非法）按不可重试处理，直接进入对应 DLQ
+- 核心 consumer 失败达到重试阈值后会额外发送 `ops.compensation` 信号
 
 目标形态（规划中）：
 

@@ -2,13 +2,17 @@ package com.kafkaasr.translation.kafka;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.translation.events.AsrFinalEvent;
 import com.kafkaasr.translation.events.AsrFinalPayload;
+import com.kafkaasr.translation.events.TranslationKafkaProperties;
 import com.kafkaasr.translation.events.TranslationResultEvent;
 import com.kafkaasr.translation.events.TranslationResultPayload;
 import com.kafkaasr.translation.pipeline.TranslationPipelineService;
@@ -29,15 +33,23 @@ class AsrFinalConsumerTests {
     @Mock
     private TranslationResultPublisher translationResultPublisher;
 
+    @Mock
+    private TranslationCompensationPublisher compensationPublisher;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private AsrFinalConsumer consumer;
+    private TranslationKafkaProperties properties;
 
     @BeforeEach
     void setUp() {
+        properties = new TranslationKafkaProperties();
+        properties.setRetryMaxAttempts(2);
         consumer = new AsrFinalConsumer(
                 objectMapper,
                 pipelineService,
                 translationResultPublisher,
+                compensationPublisher,
+                properties,
                 new SimpleMeterRegistry());
     }
 
@@ -87,5 +99,69 @@ class AsrFinalConsumerTests {
 
         verify(pipelineService, never()).toTranslationResultEvent(any());
         verify(translationResultPublisher, never()).publish(any());
+    }
+
+    @Test
+    void dropsDuplicateEventByIdempotencyKey() throws Exception {
+        AsrFinalEvent input = new AsrFinalEvent(
+                "evt-in-1",
+                "asr.final",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "asr-worker",
+                3L,
+                1713744000000L,
+                "sess-1:asr.final:3",
+                new AsrFinalPayload("你好", "zh-CN", 0.9d, true));
+        TranslationResultEvent output = new TranslationResultEvent(
+                "evt-out-1",
+                "translation.result",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "translation-worker",
+                3L,
+                1713744001000L,
+                "sess-1:translation.result:3",
+                new TranslationResultPayload("你好", "hello", "zh-CN", "en-US", "placeholder"));
+
+        String payload = objectMapper.writeValueAsString(input);
+        when(pipelineService.toTranslationResultEvent(any())).thenReturn(output);
+        when(translationResultPublisher.publish(output)).thenReturn(Mono.empty());
+
+        consumer.onMessage(payload);
+        consumer.onMessage(payload);
+
+        verify(pipelineService, times(1)).toTranslationResultEvent(any());
+        verify(translationResultPublisher, times(1)).publish(output);
+    }
+
+    @Test
+    void emitsCompensationSignalAfterRepeatedFailureThreshold() throws Exception {
+        AsrFinalEvent input = new AsrFinalEvent(
+                "evt-in-1",
+                "asr.final",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "asr-worker",
+                3L,
+                1713744000000L,
+                "sess-1:asr.final:3",
+                new AsrFinalPayload("你好", "zh-CN", 0.9d, true));
+        String payload = objectMapper.writeValueAsString(input);
+        when(pipelineService.toTranslationResultEvent(any())).thenThrow(new IllegalStateException("translation failed"));
+
+        assertThrows(IllegalStateException.class, () -> consumer.onMessage(payload));
+        assertThrows(IllegalStateException.class, () -> consumer.onMessage(payload));
+
+        verify(compensationPublisher).publish(anyString(), eq(payload), any(RuntimeException.class));
     }
 }

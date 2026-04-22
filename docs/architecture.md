@@ -53,14 +53,16 @@ flowchart LR
 - `speech-gateway` 基于 Kafka 的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行回推
 - `speech-gateway` 会话级 `audio.frame` 限流与背压保护
 - `session-orchestrator -> control-plane` 的租户策略查询
+- `session-orchestrator` 查询 `control-plane` 的第一版熔断与缓存回退
 - `session-orchestrator` 的 Redis 会话状态与 `session.control` 发布
 - `asr-worker -> translation-worker -> tts-orchestrator` 的占位事件链路
 - 核心 Kafka consumer 固定重试 + `.dlq` 死信回退
+- 核心 Kafka consumer `idempotencyKey` 判重 + 重复失败补偿信号基线
 
 当前尚未实现：
 
 - TTS 引擎、对象存储、CDN
-- 生产级补偿编排、熔断与灰度治理
+- 生产级补偿编排与自适应熔断/灰度治理
 
 ## 4. 目标总体分层
 
@@ -153,7 +155,7 @@ flowchart TB
 
 当前基线：
 
-- 已实现 start/stop、Redis 状态、租户策略校验、`session.control`
+- 已实现 start/stop、Redis 状态、租户策略校验、控制面熔断与缓存回退、`session.control`
 - 未实现结果聚合、timeout scheduler 和补偿流
 
 ### Kafka Event Bus
@@ -167,7 +169,7 @@ flowchart TB
 当前基线：
 
 - 已承接 `audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
-- 已落地消费侧固定重试和 `.dlq` 死信回退
+- 已落地消费侧固定重试、`.dlq` 死信回退、`idempotencyKey` 判重和补偿信号
 - 暂未落地统一重放流程和 Lag 治理文档化闭环
 
 ### ASR Worker
@@ -217,7 +219,7 @@ flowchart TB
 
 当前基线：
 
-- 已实现租户策略 GET / PUT 与 Redis 存储
+- 已实现租户策略 GET / PUT、灰度/回退字段与 Redis 存储
 - 未实现 auth、数据库与动态策略分发
 
 ## 6. 数据面与控制面分离

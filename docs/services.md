@@ -66,6 +66,7 @@
 
 - start/stop 生命周期 API
 - 租户策略查询与校验
+- 查询控制面的第一版熔断与缓存回退
 - Redis 会话状态存储
 - `session.control` Kafka 发布
 
@@ -88,6 +89,7 @@
 - `audio.ingress.raw` 消费
 - placeholder 推理
 - `asr.partial` / `asr.final` 发布
+- `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
@@ -106,6 +108,7 @@
 - `asr.final` 消费
 - placeholder 翻译
 - `translation.result` 发布
+- `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
@@ -128,6 +131,7 @@
 - voice 选择
 - cacheKey 生成
 - `tts.request` 发布
+- `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
@@ -147,6 +151,7 @@
 - 租户策略的 GET / PUT API
 - Redis 持久化抽象
 - 版本化更新语义
+- 灰度与控制面回退策略字段（canary percent / fail-open / cache ttl）
 
 当前未实现：
 
@@ -167,7 +172,7 @@
 
 - `Kafka`
   当前主异步总线，已落地 6 个 Topic。
-  核心 consumer 已落地固定重试与 `.dlq` 死信回退。
+  核心 consumer 已落地固定重试、`.dlq` 死信回退、`idempotencyKey` 判重和补偿信号基线。
 - `HTTP`
   当前用于 `speech-gateway -> session-orchestrator` 和 `session-orchestrator -> control-plane` 的低频调用。
 

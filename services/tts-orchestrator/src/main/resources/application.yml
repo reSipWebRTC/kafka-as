@@ -51,3 +51,6 @@ tts:
     retry-max-attempts: ${TTS_RETRY_MAX_ATTEMPTS:3}
     retry-backoff-ms: ${TTS_RETRY_BACKOFF_MS:200}
     dlq-topic-suffix: ${TTS_DLQ_TOPIC_SUFFIX:.dlq}
+    idempotency-enabled: ${TTS_IDEMPOTENCY_ENABLED:true}
+    idempotency-ttl-ms: ${TTS_IDEMPOTENCY_TTL_MS:300000}
+    compensation-topic: ${TTS_COMPENSATION_TOPIC:platform.compensation}

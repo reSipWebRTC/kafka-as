@@ -15,6 +15,10 @@ import reactor.core.publisher.Mono;
 @Service
 public class TenantPolicyService {
 
+    private static final int DEFAULT_GRAY_TRAFFIC_PERCENT = 0;
+    private static final boolean DEFAULT_FALLBACK_FAIL_OPEN = false;
+    private static final long DEFAULT_FALLBACK_CACHE_TTL_MS = 30000L;
+
     private final TenantPolicyRepository tenantPolicyRepository;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
@@ -43,6 +47,14 @@ public class TenantPolicyService {
             long now = nowMs();
             TenantPolicyState current = tenantPolicyRepository.findByTenantId(tenantId);
             boolean created = current == null;
+            boolean grayEnabled = Boolean.TRUE.equals(request.grayEnabled());
+            int grayTrafficPercent = normalizeGrayTrafficPercent(grayEnabled, request.grayTrafficPercent());
+            boolean fallbackFailOpen = request.controlPlaneFallbackFailOpen() == null
+                    ? DEFAULT_FALLBACK_FAIL_OPEN
+                    : request.controlPlaneFallbackFailOpen();
+            long fallbackCacheTtlMs = request.controlPlaneFallbackCacheTtlMs() == null
+                    ? DEFAULT_FALLBACK_CACHE_TTL_MS
+                    : request.controlPlaneFallbackCacheTtlMs();
 
             TenantPolicyState target;
             if (current == null) {
@@ -56,6 +68,10 @@ public class TenantPolicyService {
                         request.maxConcurrentSessions(),
                         request.rateLimitPerMinute(),
                         request.enabled(),
+                        grayEnabled,
+                        grayTrafficPercent,
+                        fallbackFailOpen,
+                        fallbackCacheTtlMs,
                         1L,
                         now);
                 if (!tenantPolicyRepository.createIfAbsent(target)) {
@@ -72,6 +88,10 @@ public class TenantPolicyService {
                             request.maxConcurrentSessions(),
                             request.rateLimitPerMinute(),
                             request.enabled(),
+                            grayEnabled,
+                            grayTrafficPercent,
+                            fallbackFailOpen,
+                            fallbackCacheTtlMs,
                             existing.version() + 1,
                             now);
                     tenantPolicyRepository.save(target);
@@ -87,6 +107,10 @@ public class TenantPolicyService {
                         request.maxConcurrentSessions(),
                         request.rateLimitPerMinute(),
                         request.enabled(),
+                        grayEnabled,
+                        grayTrafficPercent,
+                        fallbackFailOpen,
+                        fallbackCacheTtlMs,
                         current.version() + 1,
                         now);
                 tenantPolicyRepository.save(target);
@@ -157,6 +181,10 @@ public class TenantPolicyService {
                 state.maxConcurrentSessions(),
                 state.rateLimitPerMinute(),
                 state.enabled(),
+                state.grayEnabled(),
+                state.grayTrafficPercent(),
+                state.controlPlaneFallbackFailOpen(),
+                state.controlPlaneFallbackCacheTtlMs(),
                 state.version(),
                 state.updatedAtMs(),
                 created);
@@ -170,6 +198,17 @@ public class TenantPolicyService {
 
     private long nowMs() {
         return Instant.now(clock).toEpochMilli();
+    }
+
+    private int normalizeGrayTrafficPercent(boolean grayEnabled, Integer grayTrafficPercent) {
+        int normalized = grayTrafficPercent == null ? DEFAULT_GRAY_TRAFFIC_PERCENT : grayTrafficPercent;
+        if (!grayEnabled) {
+            return 0;
+        }
+        if (normalized <= 0) {
+            throw ControlPlaneException.invalidMessage("grayTrafficPercent must be > 0 when grayEnabled=true", "");
+        }
+        return normalized;
     }
 
     private String normalizeErrorCode(Throwable throwable) {

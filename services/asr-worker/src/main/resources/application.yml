@@ -50,3 +50,6 @@ asr:
     retry-max-attempts: ${ASR_RETRY_MAX_ATTEMPTS:3}
     retry-backoff-ms: ${ASR_RETRY_BACKOFF_MS:200}
     dlq-topic-suffix: ${ASR_DLQ_TOPIC_SUFFIX:.dlq}
+    idempotency-enabled: ${ASR_IDEMPOTENCY_ENABLED:true}
+    idempotency-ttl-ms: ${ASR_IDEMPOTENCY_TTL_MS:300000}
+    compensation-topic: ${ASR_COMPENSATION_TOPIC:platform.compensation}

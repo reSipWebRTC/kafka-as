@@ -34,6 +34,14 @@ public class TtsKafkaProperties {
     @NotBlank
     private String dlqTopicSuffix = ".dlq";
 
+    private boolean idempotencyEnabled = true;
+
+    @Min(1)
+    private long idempotencyTtlMs = 300000L;
+
+    @NotBlank
+    private String compensationTopic = "platform.compensation";
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -104,5 +112,29 @@ public class TtsKafkaProperties {
 
     public void setDlqTopicSuffix(String dlqTopicSuffix) {
         this.dlqTopicSuffix = dlqTopicSuffix;
+    }
+
+    public boolean isIdempotencyEnabled() {
+        return idempotencyEnabled;
+    }
+
+    public void setIdempotencyEnabled(boolean idempotencyEnabled) {
+        this.idempotencyEnabled = idempotencyEnabled;
+    }
+
+    public long getIdempotencyTtlMs() {
+        return idempotencyTtlMs;
+    }
+
+    public void setIdempotencyTtlMs(long idempotencyTtlMs) {
+        this.idempotencyTtlMs = idempotencyTtlMs;
+    }
+
+    public String getCompensationTopic() {
+        return compensationTopic;
+    }
+
+    public void setCompensationTopic(String compensationTopic) {
+        this.compensationTopic = compensationTopic;
     }
 }

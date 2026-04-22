@@ -37,6 +37,10 @@ class TenantPolicyControllerTests {
                 200,
                 2000,
                 true,
+                true,
+                20,
+                true,
+                60000L,
                 1L,
                 1713744000000L,
                 true);
@@ -50,6 +54,10 @@ class TenantPolicyControllerTests {
                 200,
                 2000,
                 true,
+                true,
+                20,
+                true,
+                60000L,
                 1L,
                 1713744000000L,
                 false);
@@ -79,6 +87,8 @@ class TenantPolicyControllerTests {
                 .expectBody()
                 .jsonPath("$.tenantId").isEqualTo("tenant-api-a")
                 .jsonPath("$.version").isEqualTo(1)
+                .jsonPath("$.grayEnabled").isEqualTo(true)
+                .jsonPath("$.grayTrafficPercent").isEqualTo(20)
                 .jsonPath("$.created").isEqualTo(true);
 
         webTestClient.get()
@@ -88,6 +98,7 @@ class TenantPolicyControllerTests {
                 .expectBody()
                 .jsonPath("$.tenantId").isEqualTo("tenant-api-a")
                 .jsonPath("$.created").isEqualTo(false)
+                .jsonPath("$.controlPlaneFallbackFailOpen").isEqualTo(true)
                 .jsonPath("$.asrModel").isEqualTo("funasr-v1");
     }
 
