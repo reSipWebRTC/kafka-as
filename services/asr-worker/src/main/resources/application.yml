@@ -60,3 +60,14 @@ asr:
       path: ${ASR_INFERENCE_HTTP_PATH:/v1/asr/infer}
       timeout-ms: ${ASR_INFERENCE_HTTP_TIMEOUT_MS:1500}
       auth-token: ${ASR_INFERENCE_HTTP_AUTH_TOKEN:}
+    funasr:
+      endpoint: ${ASR_FUNASR_ENDPOINT:}
+      path: ${ASR_FUNASR_PATH:/v1/asr}
+      timeout-ms: ${ASR_FUNASR_TIMEOUT_MS:3000}
+      auth-token: ${ASR_FUNASR_AUTH_TOKEN:}
+      model: ${ASR_FUNASR_MODEL:paraformer-zh}
+      language: ${ASR_FUNASR_LANGUAGE:auto}
+      hotwords: ${ASR_FUNASR_HOTWORDS:}
+      audio-format: ${ASR_FUNASR_AUDIO_FORMAT:pcm}
+      default-sample-rate: ${ASR_FUNASR_DEFAULT_SAMPLE_RATE:16000}
+      enable-inverse-text-normalization: ${ASR_FUNASR_ENABLE_ITN:true}
