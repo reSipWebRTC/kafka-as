@@ -65,6 +65,9 @@ class RedisTenantPolicyRepositoryTests {
                 20,
                 true,
                 45000L,
+                3,
+                200L,
+                ".dlq",
                 3L,
                 1713744000000L);
         String payload = objectMapper.writeValueAsString(state);
@@ -93,6 +96,9 @@ class RedisTenantPolicyRepositoryTests {
                 0,
                 false,
                 30000L,
+                3,
+                200L,
+                ".dlq",
                 1L,
                 1713744000000L);
         when(valueOperations.setIfAbsent(eq("control:tenant-policy:tenant-a"), any(), eq(Duration.ofHours(12))))
@@ -119,6 +125,9 @@ class RedisTenantPolicyRepositoryTests {
                 0,
                 false,
                 30000L,
+                3,
+                200L,
+                ".dlq",
                 2L,
                 1713744001000L);
 

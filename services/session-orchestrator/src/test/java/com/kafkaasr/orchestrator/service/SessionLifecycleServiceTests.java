@@ -149,6 +149,9 @@ class SessionLifecycleServiceTests {
                 0,
                 false,
                 30000L,
+                3,
+                200L,
+                ".dlq",
                 1L,
                 1000L)));
         sessionLifecycleService = new SessionLifecycleService(
@@ -213,6 +216,9 @@ class SessionLifecycleServiceTests {
                 0,
                 false,
                 30000L,
+                3,
+                200L,
+                ".dlq",
                 1L,
                 1000L)));
         sessionLifecycleService = new SessionLifecycleService(
@@ -283,6 +289,9 @@ class SessionLifecycleServiceTests {
                 0,
                 false,
                 30000L,
+                3,
+                200L,
+                ".dlq",
                 1L,
                 1000L);
     }

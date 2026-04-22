@@ -41,6 +41,12 @@ logging:
     level: "%5p [service=${spring.application.name:-unknown},traceId=%X{traceId:-},spanId=%X{spanId:-}]"
 
 translation:
+  control-plane:
+    enabled: ${TRANSLATION_CONTROL_PLANE_ENABLED:true}
+    base-url: ${TRANSLATION_CONTROL_PLANE_BASE_URL:http://localhost:8085}
+    request-timeout: ${TRANSLATION_CONTROL_PLANE_REQUEST_TIMEOUT:800ms}
+    policy-cache-ttl: ${TRANSLATION_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
+    fallback-fail-open: ${TRANSLATION_CONTROL_PLANE_FALLBACK_FAIL_OPEN:true}
   kafka:
     enabled: ${TRANSLATION_KAFKA_ENABLED:true}
     asr-final-topic: ${TRANSLATION_ASR_FINAL_TOPIC:asr.final}

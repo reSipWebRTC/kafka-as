@@ -18,6 +18,9 @@ public class TenantPolicyService {
     private static final int DEFAULT_GRAY_TRAFFIC_PERCENT = 0;
     private static final boolean DEFAULT_FALLBACK_FAIL_OPEN = false;
     private static final long DEFAULT_FALLBACK_CACHE_TTL_MS = 30000L;
+    private static final int DEFAULT_RETRY_MAX_ATTEMPTS = 3;
+    private static final long DEFAULT_RETRY_BACKOFF_MS = 200L;
+    private static final String DEFAULT_DLQ_TOPIC_SUFFIX = ".dlq";
 
     private final TenantPolicyRepository tenantPolicyRepository;
     private final Clock clock;
@@ -55,6 +58,13 @@ public class TenantPolicyService {
             long fallbackCacheTtlMs = request.controlPlaneFallbackCacheTtlMs() == null
                     ? DEFAULT_FALLBACK_CACHE_TTL_MS
                     : request.controlPlaneFallbackCacheTtlMs();
+            int retryMaxAttempts = request.retryMaxAttempts() == null
+                    ? DEFAULT_RETRY_MAX_ATTEMPTS
+                    : request.retryMaxAttempts();
+            long retryBackoffMs = request.retryBackoffMs() == null
+                    ? DEFAULT_RETRY_BACKOFF_MS
+                    : request.retryBackoffMs();
+            String dlqTopicSuffix = normalizeDlqTopicSuffix(request.dlqTopicSuffix());
 
             TenantPolicyState target;
             if (current == null) {
@@ -72,6 +82,9 @@ public class TenantPolicyService {
                         grayTrafficPercent,
                         fallbackFailOpen,
                         fallbackCacheTtlMs,
+                        retryMaxAttempts,
+                        retryBackoffMs,
+                        dlqTopicSuffix,
                         1L,
                         now);
                 if (!tenantPolicyRepository.createIfAbsent(target)) {
@@ -92,6 +105,9 @@ public class TenantPolicyService {
                             grayTrafficPercent,
                             fallbackFailOpen,
                             fallbackCacheTtlMs,
+                            retryMaxAttempts,
+                            retryBackoffMs,
+                            dlqTopicSuffix,
                             existing.version() + 1,
                             now);
                     tenantPolicyRepository.save(target);
@@ -111,6 +127,9 @@ public class TenantPolicyService {
                         grayTrafficPercent,
                         fallbackFailOpen,
                         fallbackCacheTtlMs,
+                        retryMaxAttempts,
+                        retryBackoffMs,
+                        dlqTopicSuffix,
                         current.version() + 1,
                         now);
                 tenantPolicyRepository.save(target);
@@ -185,6 +204,9 @@ public class TenantPolicyService {
                 state.grayTrafficPercent(),
                 state.controlPlaneFallbackFailOpen(),
                 state.controlPlaneFallbackCacheTtlMs(),
+                state.retryMaxAttempts(),
+                state.retryBackoffMs(),
+                state.dlqTopicSuffix(),
                 state.version(),
                 state.updatedAtMs(),
                 created);
@@ -209,6 +231,13 @@ public class TenantPolicyService {
             throw ControlPlaneException.invalidMessage("grayTrafficPercent must be > 0 when grayEnabled=true", "");
         }
         return normalized;
+    }
+
+    private String normalizeDlqTopicSuffix(String dlqTopicSuffix) {
+        if (dlqTopicSuffix == null || dlqTopicSuffix.isBlank()) {
+            return DEFAULT_DLQ_TOPIC_SUFFIX;
+        }
+        return dlqTopicSuffix;
     }
 
     private String normalizeErrorCode(Throwable throwable) {

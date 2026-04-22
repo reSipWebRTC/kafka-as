@@ -40,6 +40,9 @@ class ControlPlaneTenantPolicyClientTests {
                     assertTrue(policy.grayEnabled());
                     assertEquals(25, policy.grayTrafficPercent());
                     assertTrue(policy.controlPlaneFallbackFailOpen());
+                    assertEquals(3, policy.retryMaxAttempts());
+                    assertEquals(200L, policy.retryBackoffMs());
+                    assertEquals(".dlq", policy.dlqTopicSuffix());
                 })
                 .verifyComplete();
     }
@@ -118,6 +121,9 @@ class ControlPlaneTenantPolicyClientTests {
                   "grayTrafficPercent": %d,
                   "controlPlaneFallbackFailOpen": %s,
                   "controlPlaneFallbackCacheTtlMs": %d,
+                  "retryMaxAttempts": 3,
+                  "retryBackoffMs": 200,
+                  "dlqTopicSuffix": ".dlq",
                   "version": 1,
                   "updatedAtMs": 1000,
                   "created": false

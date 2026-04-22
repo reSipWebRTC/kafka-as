@@ -41,7 +41,10 @@ class TenantPolicyServiceTests {
                 true,
                 10,
                 true,
-                45000L);
+                45000L,
+                4,
+                350L,
+                ".tenant-a.dlq");
 
         StepVerifier.create(service.upsertTenantPolicy("tenant-a", request))
                 .assertNext(response -> {
@@ -53,6 +56,9 @@ class TenantPolicyServiceTests {
                     assertEquals(10, response.grayTrafficPercent());
                     assertEquals(true, response.controlPlaneFallbackFailOpen());
                     assertEquals(45000L, response.controlPlaneFallbackCacheTtlMs());
+                    assertEquals(4, response.retryMaxAttempts());
+                    assertEquals(350L, response.retryBackoffMs());
+                    assertEquals(".tenant-a.dlq", response.dlqTopicSuffix());
                 })
                 .verifyComplete();
     }
@@ -71,6 +77,9 @@ class TenantPolicyServiceTests {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 null);
         TenantPolicyUpsertRequest second = new TenantPolicyUpsertRequest(
                 "zh-CN",
@@ -84,7 +93,10 @@ class TenantPolicyServiceTests {
                 true,
                 25,
                 false,
-                60000L);
+                60000L,
+                5,
+                500L,
+                ".tenant-b.dlq");
 
         StepVerifier.create(service.upsertTenantPolicy("tenant-b", first))
                 .expectNextCount(1)
@@ -100,6 +112,9 @@ class TenantPolicyServiceTests {
                     assertEquals(25, response.grayTrafficPercent());
                     assertEquals(false, response.controlPlaneFallbackFailOpen());
                     assertEquals(60000L, response.controlPlaneFallbackCacheTtlMs());
+                    assertEquals(5, response.retryMaxAttempts());
+                    assertEquals(500L, response.retryBackoffMs());
+                    assertEquals(".tenant-b.dlq", response.dlqTopicSuffix());
                 })
                 .verifyComplete();
     }
@@ -118,6 +133,9 @@ class TenantPolicyServiceTests {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 null);
 
         StepVerifier.create(service.upsertTenantPolicy("tenant-defaults", request))
@@ -126,6 +144,9 @@ class TenantPolicyServiceTests {
                     assertEquals(0, response.grayTrafficPercent());
                     assertEquals(false, response.controlPlaneFallbackFailOpen());
                     assertEquals(30000L, response.controlPlaneFallbackCacheTtlMs());
+                    assertEquals(3, response.retryMaxAttempts());
+                    assertEquals(200L, response.retryBackoffMs());
+                    assertEquals(".dlq", response.dlqTopicSuffix());
                 })
                 .verifyComplete();
     }

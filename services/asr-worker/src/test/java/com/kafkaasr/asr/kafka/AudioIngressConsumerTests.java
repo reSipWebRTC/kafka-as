@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -19,6 +20,8 @@ import com.kafkaasr.asr.events.AsrPartialPayload;
 import com.kafkaasr.asr.events.AudioIngressRawEvent;
 import com.kafkaasr.asr.events.AudioIngressRawPayload;
 import com.kafkaasr.asr.pipeline.AsrPipelineService;
+import com.kafkaasr.asr.policy.TenantReliabilityPolicy;
+import com.kafkaasr.asr.policy.TenantReliabilityPolicyResolver;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +46,9 @@ class AudioIngressConsumerTests {
     @Mock
     private AsrCompensationPublisher compensationPublisher;
 
+    @Mock
+    private TenantReliabilityPolicyResolver reliabilityPolicyResolver;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private AudioIngressConsumer consumer;
     private AsrKafkaProperties properties;
@@ -58,7 +64,10 @@ class AudioIngressConsumerTests {
                 asrFinalPublisher,
                 compensationPublisher,
                 properties,
+                reliabilityPolicyResolver,
                 new SimpleMeterRegistry());
+        lenient().when(reliabilityPolicyResolver.resolve(anyString()))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".dlq"));
     }
 
     @Test
@@ -281,11 +290,17 @@ class AudioIngressConsumerTests {
                 "sess-1:audio.ingress.raw:1",
                 new AudioIngressRawPayload("pcm16le", 16000, 1, "AQID", false));
         String payload = objectMapper.writeValueAsString(ingressEvent);
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
         when(pipelineService.toAsrEvents(any())).thenThrow(new IllegalStateException("asr failed"));
 
-        assertThrows(IllegalStateException.class, () -> consumer.onMessage(payload));
-        assertThrows(IllegalStateException.class, () -> consumer.onMessage(payload));
+        assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
 
-        verify(compensationPublisher).publish(anyString(), eq(payload), any(RuntimeException.class));
+        verify(pipelineService, times(2)).toAsrEvents(any());
+        verify(compensationPublisher).publish(
+                eq("audio.ingress.raw"),
+                eq("audio.ingress.raw.tenant-a.dlq"),
+                eq(payload),
+                any(RuntimeException.class));
     }
 }

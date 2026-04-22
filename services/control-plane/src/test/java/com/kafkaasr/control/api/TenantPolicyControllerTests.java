@@ -41,6 +41,9 @@ class TenantPolicyControllerTests {
                 20,
                 true,
                 60000L,
+                4,
+                300L,
+                ".tenant-api-a.dlq",
                 1L,
                 1713744000000L,
                 true);
@@ -58,6 +61,9 @@ class TenantPolicyControllerTests {
                 20,
                 true,
                 60000L,
+                4,
+                300L,
+                ".tenant-api-a.dlq",
                 1L,
                 1713744000000L,
                 false);
@@ -79,7 +85,10 @@ class TenantPolicyControllerTests {
                           "ttsVoice": "en-US-neural-a",
                           "maxConcurrentSessions": 200,
                           "rateLimitPerMinute": 2000,
-                          "enabled": true
+                          "enabled": true,
+                          "retryMaxAttempts": 4,
+                          "retryBackoffMs": 300,
+                          "dlqTopicSuffix": ".tenant-api-a.dlq"
                         }
                         """)
                 .exchange()
@@ -89,6 +98,9 @@ class TenantPolicyControllerTests {
                 .jsonPath("$.version").isEqualTo(1)
                 .jsonPath("$.grayEnabled").isEqualTo(true)
                 .jsonPath("$.grayTrafficPercent").isEqualTo(20)
+                .jsonPath("$.retryMaxAttempts").isEqualTo(4)
+                .jsonPath("$.retryBackoffMs").isEqualTo(300)
+                .jsonPath("$.dlqTopicSuffix").isEqualTo(".tenant-api-a.dlq")
                 .jsonPath("$.created").isEqualTo(true);
 
         webTestClient.get()
@@ -99,6 +111,7 @@ class TenantPolicyControllerTests {
                 .jsonPath("$.tenantId").isEqualTo("tenant-api-a")
                 .jsonPath("$.created").isEqualTo(false)
                 .jsonPath("$.controlPlaneFallbackFailOpen").isEqualTo(true)
+                .jsonPath("$.retryMaxAttempts").isEqualTo(4)
                 .jsonPath("$.asrModel").isEqualTo("funasr-v1");
     }
 

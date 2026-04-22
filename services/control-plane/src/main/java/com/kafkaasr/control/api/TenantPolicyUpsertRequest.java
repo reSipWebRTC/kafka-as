@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 public record TenantPolicyUpsertRequest(
         @NotBlank(message = "sourceLang must not be blank")
@@ -39,5 +40,14 @@ public record TenantPolicyUpsertRequest(
         Boolean controlPlaneFallbackFailOpen,
 
         @Min(value = 1, message = "controlPlaneFallbackCacheTtlMs must be > 0")
-        Long controlPlaneFallbackCacheTtlMs) {
+        Long controlPlaneFallbackCacheTtlMs,
+
+        @Min(value = 1, message = "retryMaxAttempts must be > 0")
+        Integer retryMaxAttempts,
+
+        @Min(value = 1, message = "retryBackoffMs must be > 0")
+        Long retryBackoffMs,
+
+        @Pattern(regexp = "^\\..+$", message = "dlqTopicSuffix must start with '.'")
+        String dlqTopicSuffix) {
 }
