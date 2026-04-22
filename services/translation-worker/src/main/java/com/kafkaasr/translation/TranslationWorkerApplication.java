@@ -1,12 +1,13 @@
 package com.kafkaasr.translation;
 
 import com.kafkaasr.translation.events.TranslationKafkaProperties;
+import com.kafkaasr.translation.pipeline.TranslationEngineProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @SpringBootApplication
-@EnableConfigurationProperties(TranslationKafkaProperties.class)
+@EnableConfigurationProperties({TranslationKafkaProperties.class, TranslationEngineProperties.class})
 public class TranslationWorkerApplication {
 
     public static void main(String[] args) {
