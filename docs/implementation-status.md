@@ -23,6 +23,7 @@
 - 核心 Kafka 消费链路重复失败阈值补偿信号（`ops.compensation -> platform.compensation`）
 - `session-orchestrator` 查询 `control-plane` 已落地第一版熔断 + 缓存回退（fail-open/fail-closed）
 - `speech-gateway` 下行链路已补充仓库内 E2E 稳定性验证（顺序、终态、重复/异常计数）
+- `deploy/monitoring` 已补齐 Prometheus/Grafana 资产（含 Kafka lag、延迟、错误率看板与告警规则）
 - 全仓测试与 `tools/verify.sh` 校验基线
 
 ## 2. 服务模块现状

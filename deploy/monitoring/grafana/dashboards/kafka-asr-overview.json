@@ -1,0 +1,344 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(gateway_ws_messages_total{result=\"error\"}[$__rate_interval])) / clamp_min(sum(rate(gateway_ws_messages_total[$__rate_interval])), 1e-6)",
+          "legendFormat": "gateway-ws-error-rate",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(gateway_downlink_messages_total{result=\"error\"}[$__rate_interval])) / clamp_min(sum(rate(gateway_downlink_messages_total[$__rate_interval])), 1e-6)",
+          "legendFormat": "gateway-downlink-error-rate",
+          "refId": "B"
+        }
+      ],
+      "title": "Gateway Error Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (result) (rate(gateway_ws_messages_total[$__rate_interval]))",
+          "legendFormat": "ws {{result}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (type, result) (rate(gateway_downlink_messages_total[$__rate_interval]))",
+          "legendFormat": "downlink {{type}} {{result}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Gateway Throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(asr_pipeline_messages_total{result=\"success\"}[$__rate_interval]))",
+          "legendFormat": "asr success",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(translation_pipeline_messages_total{result=\"success\"}[$__rate_interval]))",
+          "legendFormat": "translation success",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(tts_pipeline_messages_total{result=\"success\"}[$__rate_interval]))",
+          "legendFormat": "tts success",
+          "refId": "C"
+        }
+      ],
+      "title": "Pipeline Success Throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(asr_pipeline_messages_total{result=\"error\"}[$__rate_interval])) / clamp_min(sum(rate(asr_pipeline_messages_total[$__rate_interval])), 1e-6)",
+          "legendFormat": "asr error rate",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(translation_pipeline_messages_total{result=\"error\"}[$__rate_interval])) / clamp_min(sum(rate(translation_pipeline_messages_total[$__rate_interval])), 1e-6)",
+          "legendFormat": "translation error rate",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(tts_pipeline_messages_total{result=\"error\"}[$__rate_interval])) / clamp_min(sum(rate(tts_pipeline_messages_total[$__rate_interval])), 1e-6)",
+          "legendFormat": "tts error rate",
+          "refId": "C"
+        }
+      ],
+      "title": "Pipeline Error Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(asr_pipeline_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "asr p95",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(translation_pipeline_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "translation p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(tts_pipeline_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "tts p95",
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(gateway_downlink_messages_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "downlink p95",
+          "refId": "D"
+        }
+      ],
+      "title": "P95 Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "max by (service, topic) (kafka_consumer_records_lag_max{service=~\"speech-gateway|asr-worker|translation-worker|tts-orchestrator\"})",
+          "legendFormat": "{{service}} {{topic}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Consumer Lag Max",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(orchestrator_controlplane_policy_fetch_total{result=\"error\"}[$__rate_interval]))",
+          "legendFormat": "controlplane fetch error",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(orchestrator_controlplane_policy_fallback_total[$__rate_interval]))",
+          "legendFormat": "controlplane fallback",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(orchestrator_controlplane_breaker_open_total[$__rate_interval]))",
+          "legendFormat": "controlplane breaker open",
+          "refId": "C"
+        }
+      ],
+      "title": "Control Plane Fallback Signals",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "kafka-asr",
+    "observability"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Kafka-ASR Pipeline Overview",
+  "uid": "kafka-asr-overview",
+  "version": 1,
+  "weekStart": ""
+}
