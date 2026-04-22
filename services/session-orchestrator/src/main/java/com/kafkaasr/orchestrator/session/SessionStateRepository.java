@@ -1,0 +1,10 @@
+package com.kafkaasr.orchestrator.session;
+
+public interface SessionStateRepository {
+
+    SessionState findBySessionId(String sessionId);
+
+    boolean createIfAbsent(SessionState state);
+
+    void save(SessionState state);
+}

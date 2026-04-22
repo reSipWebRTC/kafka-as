@@ -1,12 +1,13 @@
 package com.kafkaasr.orchestrator;
 
 import com.kafkaasr.orchestrator.events.OrchestratorKafkaProperties;
+import com.kafkaasr.orchestrator.session.SessionStoreProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @SpringBootApplication
-@EnableConfigurationProperties(OrchestratorKafkaProperties.class)
+@EnableConfigurationProperties({OrchestratorKafkaProperties.class, SessionStoreProperties.class})
 public class SessionOrchestratorApplication {
 
     public static void main(String[] args) {
