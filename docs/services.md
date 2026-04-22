@@ -17,7 +17,7 @@
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、发布 `asr.partial` / `asr.final` | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result` | Kafka |
-| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready` | Kafka |
+| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl` | Kafka |
 | `control-plane` | 已落地骨架 | 租户策略 HTTP API、Redis 存储、版本化 upsert | Redis |
 
 基础设施：
@@ -138,13 +138,14 @@
 - TTS synthesis 响应兼容与错误语义加固（`code/status` 校验、`error` 快速失败、boolean-like stream 兼容）
 - cacheKey 生成
 - `tts.request` / `tts.chunk` / `tts.ready` 发布
+- `tts.ready` 对应音频对象上传（`tts.storage`：`none` / `s3`，支持 MinIO path-style）
 - 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
 - TTS synthesis 生产联调与模型侧运行保障（真实配额、限流与故障演练）
-- 对象存储和 CDN 分发
+- CDN 缓存/签名 URL 策略与对象存储高可用治理
 
 ### control-plane
 

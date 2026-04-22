@@ -3,6 +3,7 @@ package com.kafkaasr.tts.kafka;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
@@ -23,6 +24,7 @@ import com.kafkaasr.tts.events.TranslationResultPayload;
 import com.kafkaasr.tts.pipeline.TtsRequestPipelineService;
 import com.kafkaasr.tts.policy.TenantReliabilityPolicy;
 import com.kafkaasr.tts.policy.TenantReliabilityPolicyResolver;
+import com.kafkaasr.tts.storage.TtsObjectStorageUploader;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +49,9 @@ class TranslationResultConsumerTests {
     private TtsReadyPublisher ttsReadyPublisher;
 
     @Mock
+    private TtsObjectStorageUploader storageUploader;
+
+    @Mock
     private TtsCompensationPublisher compensationPublisher;
 
     @Mock
@@ -66,12 +71,17 @@ class TranslationResultConsumerTests {
                 ttsRequestPublisher,
                 ttsChunkPublisher,
                 ttsReadyPublisher,
+                storageUploader,
                 compensationPublisher,
                 properties,
                 reliabilityPolicyResolver,
                 new SimpleMeterRegistry());
         lenient().when(reliabilityPolicyResolver.resolve(anyString()))
                 .thenReturn(new TenantReliabilityPolicy(2, 1L, ".dlq"));
+        lenient().when(storageUploader.upload(any()))
+                .thenReturn(new TtsObjectStorageUploader.UploadResult(
+                        "tts/tenant-a/tts_v1_abc.wav",
+                        "https://cdn.example.com/tts/tenant-a/tts_v1_abc.wav"));
     }
 
     @Test
@@ -137,14 +147,16 @@ class TranslationResultConsumerTests {
                 new TtsRequestPipelineService.PipelineOutput(output, chunkEvent, readyEvent));
         when(ttsRequestPublisher.publish(output)).thenReturn(Mono.empty());
         when(ttsChunkPublisher.publish(chunkEvent)).thenReturn(Mono.empty());
-        when(ttsReadyPublisher.publish(readyEvent)).thenReturn(Mono.empty());
+        when(ttsReadyPublisher.publish(any())).thenReturn(Mono.empty());
 
         consumer.onMessage(payload);
 
         verify(pipelineService).toPipelineEvents(any());
         verify(ttsRequestPublisher).publish(output);
         verify(ttsChunkPublisher).publish(chunkEvent);
-        verify(ttsReadyPublisher).publish(readyEvent);
+        verify(storageUploader).upload(any());
+        verify(ttsReadyPublisher).publish(argThat(event ->
+                "https://cdn.example.com/tts/tenant-a/tts_v1_abc.wav".equals(event.payload().playbackUrl())));
     }
 
     @Test
@@ -155,6 +167,7 @@ class TranslationResultConsumerTests {
         verify(ttsRequestPublisher, never()).publish(any());
         verify(ttsChunkPublisher, never()).publish(any());
         verify(ttsReadyPublisher, never()).publish(any());
+        verify(storageUploader, never()).upload(any());
     }
 
     @Test
@@ -220,7 +233,7 @@ class TranslationResultConsumerTests {
                 new TtsRequestPipelineService.PipelineOutput(output, chunkEvent, readyEvent));
         when(ttsRequestPublisher.publish(output)).thenReturn(Mono.empty());
         when(ttsChunkPublisher.publish(chunkEvent)).thenReturn(Mono.empty());
-        when(ttsReadyPublisher.publish(readyEvent)).thenReturn(Mono.empty());
+        when(ttsReadyPublisher.publish(any())).thenReturn(Mono.empty());
 
         consumer.onMessage(payload);
         consumer.onMessage(payload);
@@ -228,7 +241,8 @@ class TranslationResultConsumerTests {
         verify(pipelineService, times(1)).toPipelineEvents(any());
         verify(ttsRequestPublisher, times(1)).publish(output);
         verify(ttsChunkPublisher, times(1)).publish(chunkEvent);
-        verify(ttsReadyPublisher, times(1)).publish(readyEvent);
+        verify(storageUploader, times(1)).upload(any());
+        verify(ttsReadyPublisher, times(1)).publish(any());
     }
 
     @Test
@@ -254,6 +268,7 @@ class TranslationResultConsumerTests {
         assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
 
         verify(pipelineService, times(2)).toPipelineEvents(any());
+        verify(storageUploader, never()).upload(any());
         verify(compensationPublisher).publish(
                 eq("translation.result"),
                 eq("translation.result.tenant-a.dlq"),

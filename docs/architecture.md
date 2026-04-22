@@ -208,7 +208,8 @@ flowchart TB
 当前基线：
 
 - 已实现 `translation.result -> tts.request / tts.chunk / tts.ready`（规则 voice + 可切换 HTTP voice-policy 适配）
-- 未实现真实引擎、对象存储、CDN 和回放分发
+- 已实现 `tts.ready` 可配置对象存储上传与 `playbackUrl` 回填（S3/MinIO 兼容）
+- 未实现真实引擎生产联调、CDN 策略与回放分发治理
 
 ### Control Plane
 
