@@ -37,7 +37,7 @@
 
 ## 3. 当前已实现 Topic
 
-截至 `2026-04-22`，仓库里已经落地并有代码/测试支撑的 Topic 如下：
+截至 `2026-04-23`，仓库里已经落地并有代码/测试支撑的 Topic 如下：
 
 | Topic | Producer | Consumer | Key | 说明 |
 | --- | --- | --- | --- | --- |
@@ -47,12 +47,14 @@
 | `asr.final` | `asr-worker` | `translation-worker` | `sessionId` | 当前翻译入口 |
 | `translation.result` | `translation-worker` | `tts-orchestrator` | `sessionId` | 当前 TTS 入口 |
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 编排输出 |
+| `tts.chunk` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 流式音频分片输出 |
+| `tts.ready` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 回放就绪输出 |
 
 说明：
 
 - 当前所有已落地 publisher 都按 `sessionId` 发送 Kafka Key
 - `translation-worker` 当前直接消费 `asr.final`，尚未引入独立 `translation.request`
-- `tts.request` 当前仍是中间编排事件，还未接入真实引擎链路
+- `tts-orchestrator` 当前会从同一输入事件同步产出 `tts.request`、`tts.chunk`、`tts.ready`
 - `asr-worker`、`translation-worker`、`tts-orchestrator`、`speech-gateway` 下行消费者已接入固定重试 + `<source-topic>.dlq` 死信回退
 - 上述核心消费者均已接入基于 `idempotencyKey` 的 TTL 判重，重复消息按成功路径 no-op
 - 上述核心消费者在重复失败达到阈值后会发出 `ops.compensation` 信号到 `platform.compensation`
@@ -65,8 +67,6 @@
 | --- | --- | --- |
 | `audio.vad.segmented` | VAD 切分后的语音段 | 支撑更细粒度 ASR 管线 |
 | `translation.request` | 待翻译文本 | 将翻译入队与 ASR 最终结果解耦 |
-| `tts.chunk` | 流式音频分片 | 实时播放 |
-| `tts.ready` | 音频文件可回放 | 对象存储/CDN 分发 |
 | `platform.audit` | 审计事件 | 配置与治理追踪 |
 | `platform.dlq` | 死信队列 | 补偿与排障 |
 
@@ -188,10 +188,9 @@ FAILED
 2. `session-orchestrator` 发布 `session.control`
 3. `asr-worker` 消费 `audio.ingress.raw` 并产出 `asr.partial` 与 `asr.final`
 4. `translation-worker` 消费 `asr.final` 并发布 `translation.result`
-5. `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`
+5. `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`、`tts.chunk`、`tts.ready`
 
 仍未打通的部分：
 
 - `translation.request`
-- `tts.request -> tts.chunk / tts.ready`
 - DLQ、补偿和故障恢复链路

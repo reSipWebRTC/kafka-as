@@ -18,12 +18,27 @@ public class TtsKafkaProperties {
     private String ttsRequestTopic = "tts.request";
 
     @NotBlank
+    private String ttsChunkTopic = "tts.chunk";
+
+    @NotBlank
+    private String ttsReadyTopic = "tts.ready";
+
+    @NotBlank
     private String producerId = "tts-orchestrator";
 
     @NotBlank
     private String defaultVoice = "voice-default";
 
     private boolean streamEnabled = true;
+
+    @NotBlank
+    private String ttsChunkCodec = "audio/pcm";
+
+    @Min(8000)
+    private int ttsChunkSampleRate = 16000;
+
+    @NotBlank
+    private String ttsReadyPlaybackUrlPrefix = "https://cdn.local/tts";
 
     @Min(1)
     private int retryMaxAttempts = 3;
@@ -66,6 +81,22 @@ public class TtsKafkaProperties {
         this.ttsRequestTopic = ttsRequestTopic;
     }
 
+    public String getTtsChunkTopic() {
+        return ttsChunkTopic;
+    }
+
+    public void setTtsChunkTopic(String ttsChunkTopic) {
+        this.ttsChunkTopic = ttsChunkTopic;
+    }
+
+    public String getTtsReadyTopic() {
+        return ttsReadyTopic;
+    }
+
+    public void setTtsReadyTopic(String ttsReadyTopic) {
+        this.ttsReadyTopic = ttsReadyTopic;
+    }
+
     public String getProducerId() {
         return producerId;
     }
@@ -88,6 +119,30 @@ public class TtsKafkaProperties {
 
     public void setStreamEnabled(boolean streamEnabled) {
         this.streamEnabled = streamEnabled;
+    }
+
+    public String getTtsChunkCodec() {
+        return ttsChunkCodec;
+    }
+
+    public void setTtsChunkCodec(String ttsChunkCodec) {
+        this.ttsChunkCodec = ttsChunkCodec;
+    }
+
+    public int getTtsChunkSampleRate() {
+        return ttsChunkSampleRate;
+    }
+
+    public void setTtsChunkSampleRate(int ttsChunkSampleRate) {
+        this.ttsChunkSampleRate = ttsChunkSampleRate;
+    }
+
+    public String getTtsReadyPlaybackUrlPrefix() {
+        return ttsReadyPlaybackUrlPrefix;
+    }
+
+    public void setTtsReadyPlaybackUrlPrefix(String ttsReadyPlaybackUrlPrefix) {
+        this.ttsReadyPlaybackUrlPrefix = ttsReadyPlaybackUrlPrefix;
     }
 
     public int getRetryMaxAttempts() {
