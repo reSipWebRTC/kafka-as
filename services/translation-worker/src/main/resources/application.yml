@@ -54,3 +54,11 @@ translation:
     idempotency-enabled: ${TRANSLATION_IDEMPOTENCY_ENABLED:true}
     idempotency-ttl-ms: ${TRANSLATION_IDEMPOTENCY_TTL_MS:300000}
     compensation-topic: ${TRANSLATION_COMPENSATION_TOPIC:platform.compensation}
+  engine:
+    mode: ${TRANSLATION_ENGINE_MODE:placeholder}
+    http:
+      endpoint: ${TRANSLATION_ENGINE_HTTP_ENDPOINT:}
+      path: ${TRANSLATION_ENGINE_HTTP_PATH:/v1/translate}
+      timeout-ms: ${TRANSLATION_ENGINE_HTTP_TIMEOUT_MS:1500}
+      auth-token: ${TRANSLATION_ENGINE_HTTP_AUTH_TOKEN:}
+      engine-name: ${TRANSLATION_ENGINE_HTTP_ENGINE_NAME:http-translation}

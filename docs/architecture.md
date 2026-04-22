@@ -182,7 +182,7 @@ flowchart TB
 
 当前基线：
 
-- 已实现 placeholder `audio.ingress.raw -> asr.partial / asr.final`
+- 已实现默认 placeholder + 可切换 HTTP 适配的 `audio.ingress.raw -> asr.partial / asr.final`
 - 未实现 FunASR、VAD 分段
 
 ### Translation Worker
@@ -194,7 +194,7 @@ flowchart TB
 
 当前基线：
 
-- 已实现 placeholder `asr.final -> translation.result`
+- 已实现默认 placeholder + 可切换 HTTP 适配的 `asr.final -> translation.result`
 - 未实现真实模型、术语增强和字幕回推
 
 ### TTS Orchestrator
@@ -207,7 +207,7 @@ flowchart TB
 
 当前基线：
 
-- 已实现 `translation.result -> tts.request`
+- 已实现 `translation.result -> tts.request`（规则 voice + 可切换 HTTP voice-policy 适配）
 - 未实现真实引擎、对象存储、CDN 和回放分发
 
 ### Control Plane

@@ -54,3 +54,10 @@ tts:
     idempotency-enabled: ${TTS_IDEMPOTENCY_ENABLED:true}
     idempotency-ttl-ms: ${TTS_IDEMPOTENCY_TTL_MS:300000}
     compensation-topic: ${TTS_COMPENSATION_TOPIC:platform.compensation}
+  voice-policy:
+    mode: ${TTS_VOICE_POLICY_MODE:rule}
+    http:
+      endpoint: ${TTS_VOICE_POLICY_HTTP_ENDPOINT:}
+      path: ${TTS_VOICE_POLICY_HTTP_PATH:/v1/voice/select}
+      timeout-ms: ${TTS_VOICE_POLICY_HTTP_TIMEOUT_MS:1200}
+      auth-token: ${TTS_VOICE_POLICY_HTTP_AUTH_TOKEN:}
