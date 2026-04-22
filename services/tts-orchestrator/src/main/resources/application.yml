@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: tts-orchestrator
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      group-id: ${TTS_CONSUMER_GROUP_ID:tts-orchestrator}
+      auto-offset-reset: latest
+      enable-auto-commit: false
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+server:
+  port: 8084
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      service: ${spring.application.name}
+      env: ${OBS_ENV:local}
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.10}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  pattern:
+    level: "%5p [service=${spring.application.name:-unknown},traceId=%X{traceId:-},spanId=%X{spanId:-}]"
+
+tts:
+  kafka:
+    enabled: ${TTS_KAFKA_ENABLED:true}
+    translation-result-topic: ${TTS_TRANSLATION_RESULT_TOPIC:translation.result}
+    tts-request-topic: ${TTS_REQUEST_TOPIC:tts.request}
+    producer-id: ${TTS_PRODUCER_ID:tts-orchestrator}
+    default-voice: ${TTS_DEFAULT_VOICE:voice-default}
+    stream-enabled: ${TTS_STREAM_ENABLED:true}
