@@ -108,6 +108,7 @@ flowchart LR
 ## 当前优先事项
 
 - 验证并固化 `subtitle.partial` / `subtitle.final` / `session.closed` 的端到端体验与可靠性
+- 用 `tools/downlink-e2e-smoke.sh` 固定回归检查下行链路顺序、终态和重复消息语义
 - 在现有重试、DLQ、背压与限流 + 第一版幂等/补偿/熔断/灰度基础上升级为自适应治理
 - 将 placeholder 的 ASR / Translation / TTS 管线替换为真实引擎
 - 补齐 TTS 的对象存储、CDN 与回放分发能力

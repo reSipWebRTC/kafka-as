@@ -63,13 +63,14 @@
 - WebSocket 音频上行
 - WebSocket `session.ping`
 - Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行
+- 下行链路仓库内 E2E smoke 基线（顺序、终态、重复与异常计数）
 - 会话 start/stop 控制
 - `audio.ingress.raw -> asr.partial / asr.final -> translation.result -> tts.request`
 - 基础管理端点和服务指标
 
 当前仍缺：
 
-- 明确的端到端 demo 与用户可见闭环
+- 面向浏览器/SDK 的明确端到端 demo 与用户可见闭环
 - 压测窗口下的延迟和稳定性证据
 
 退出标准保持不变，但当前还未达成：
