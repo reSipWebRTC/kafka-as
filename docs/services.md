@@ -15,7 +15,7 @@
 | --- | --- | --- | --- |
 | `speech-gateway` | 已落地骨架 | WebSocket 接入、Kafka 音频发布、会话 start/stop 转发、会话级限流/背压 | Kafka、`session-orchestrator` |
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
-| `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP ASR 适配、发布 `asr.partial` / `asr.final` | Kafka |
+| `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、发布 `asr.partial` / `asr.final` | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP 翻译适配、发布 `translation.result` | Kafka |
 | `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、发布 `tts.request` | Kafka |
 | `control-plane` | 已落地骨架 | 租户策略 HTTP API、Redis 存储、版本化 upsert | Redis |
@@ -88,13 +88,13 @@
 当前已经实现：
 
 - `audio.ingress.raw` 消费
-- 默认 placeholder 推理 + 可切换 HTTP ASR 适配入口
+- 默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配入口
 - `asr.partial` / `asr.final` 发布
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
-- FunASR 真正接入
+- FunASR 生产联调与模型侧运行保障
 - VAD/切段/上下文管理
 
 ### translation-worker

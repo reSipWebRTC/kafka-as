@@ -16,6 +16,9 @@ public class AsrInferenceProperties {
     @Valid
     private Http http = new Http();
 
+    @Valid
+    private Funasr funasr = new Funasr();
+
     public String getMode() {
         return mode;
     }
@@ -30,6 +33,14 @@ public class AsrInferenceProperties {
 
     public void setHttp(Http http) {
         this.http = http;
+    }
+
+    public Funasr getFunasr() {
+        return funasr;
+    }
+
+    public void setFunasr(Funasr funasr) {
+        this.funasr = funasr;
     }
 
     public static class Http {
@@ -74,6 +85,115 @@ public class AsrInferenceProperties {
 
         public void setAuthToken(String authToken) {
             this.authToken = authToken;
+        }
+    }
+
+    public static class Funasr {
+
+        private String endpoint = "";
+
+        @NotBlank
+        private String path = "/v1/asr";
+
+        @Min(100)
+        private long timeoutMs = 3000L;
+
+        private String authToken = "";
+
+        @NotBlank
+        private String model = "paraformer-zh";
+
+        @NotBlank
+        private String language = "auto";
+
+        private String hotwords = "";
+
+        @NotBlank
+        private String audioFormat = "pcm";
+
+        @Min(8000)
+        private int defaultSampleRate = 16000;
+
+        private boolean enableInverseTextNormalization = true;
+
+        public String getEndpoint() {
+            return endpoint;
+        }
+
+        public void setEndpoint(String endpoint) {
+            this.endpoint = endpoint;
+        }
+
+        public String getPath() {
+            return path;
+        }
+
+        public void setPath(String path) {
+            this.path = path;
+        }
+
+        public long getTimeoutMs() {
+            return timeoutMs;
+        }
+
+        public void setTimeoutMs(long timeoutMs) {
+            this.timeoutMs = timeoutMs;
+        }
+
+        public String getAuthToken() {
+            return authToken;
+        }
+
+        public void setAuthToken(String authToken) {
+            this.authToken = authToken;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
+
+        public String getLanguage() {
+            return language;
+        }
+
+        public void setLanguage(String language) {
+            this.language = language;
+        }
+
+        public String getHotwords() {
+            return hotwords;
+        }
+
+        public void setHotwords(String hotwords) {
+            this.hotwords = hotwords;
+        }
+
+        public String getAudioFormat() {
+            return audioFormat;
+        }
+
+        public void setAudioFormat(String audioFormat) {
+            this.audioFormat = audioFormat;
+        }
+
+        public int getDefaultSampleRate() {
+            return defaultSampleRate;
+        }
+
+        public void setDefaultSampleRate(int defaultSampleRate) {
+            this.defaultSampleRate = defaultSampleRate;
+        }
+
+        public boolean isEnableInverseTextNormalization() {
+            return enableInverseTextNormalization;
+        }
+
+        public void setEnableInverseTextNormalization(boolean enableInverseTextNormalization) {
+            this.enableInverseTextNormalization = enableInverseTextNormalization;
         }
     }
 }
