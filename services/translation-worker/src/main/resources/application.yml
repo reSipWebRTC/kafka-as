@@ -62,3 +62,13 @@ translation:
       timeout-ms: ${TRANSLATION_ENGINE_HTTP_TIMEOUT_MS:1500}
       auth-token: ${TRANSLATION_ENGINE_HTTP_AUTH_TOKEN:}
       engine-name: ${TRANSLATION_ENGINE_HTTP_ENGINE_NAME:http-translation}
+    openai:
+      endpoint: ${TRANSLATION_ENGINE_OPENAI_ENDPOINT:}
+      path: ${TRANSLATION_ENGINE_OPENAI_PATH:/v1/chat/completions}
+      timeout-ms: ${TRANSLATION_ENGINE_OPENAI_TIMEOUT_MS:3000}
+      api-key: ${TRANSLATION_ENGINE_OPENAI_API_KEY:}
+      model: ${TRANSLATION_ENGINE_OPENAI_MODEL:gpt-4o-mini}
+      temperature: ${TRANSLATION_ENGINE_OPENAI_TEMPERATURE:0.0}
+      max-tokens: ${TRANSLATION_ENGINE_OPENAI_MAX_TOKENS:512}
+      engine-name: ${TRANSLATION_ENGINE_OPENAI_ENGINE_NAME:openai-translation}
+      system-prompt: ${TRANSLATION_ENGINE_OPENAI_SYSTEM_PROMPT:You are a translation engine. Return only translated text without explanation.}
