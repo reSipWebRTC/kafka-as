@@ -10,6 +10,10 @@ public record ControlPlaneTenantPolicyResponse(
         int maxConcurrentSessions,
         int rateLimitPerMinute,
         boolean enabled,
+        boolean grayEnabled,
+        int grayTrafficPercent,
+        boolean controlPlaneFallbackFailOpen,
+        long controlPlaneFallbackCacheTtlMs,
         long version,
         long updatedAtMs,
         boolean created) {
@@ -25,6 +29,10 @@ public record ControlPlaneTenantPolicyResponse(
                 maxConcurrentSessions,
                 rateLimitPerMinute,
                 enabled,
+                grayEnabled,
+                grayTrafficPercent,
+                controlPlaneFallbackFailOpen,
+                controlPlaneFallbackCacheTtlMs,
                 version,
                 updatedAtMs);
     }

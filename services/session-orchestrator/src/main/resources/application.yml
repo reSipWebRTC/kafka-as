@@ -49,3 +49,7 @@ orchestrator:
   control-plane:
     base-url: ${ORCHESTRATOR_CONTROL_PLANE_BASE_URL:http://localhost:8085}
     request-timeout: ${ORCHESTRATOR_CONTROL_PLANE_REQUEST_TIMEOUT:2s}
+    circuit-breaker-failure-threshold: ${ORCHESTRATOR_CONTROL_PLANE_CB_FAILURE_THRESHOLD:3}
+    circuit-breaker-open-duration: ${ORCHESTRATOR_CONTROL_PLANE_CB_OPEN_DURATION:5s}
+    policy-cache-ttl: ${ORCHESTRATOR_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
+    fallback-fail-open: ${ORCHESTRATOR_CONTROL_PLANE_FALLBACK_FAIL_OPEN:false}

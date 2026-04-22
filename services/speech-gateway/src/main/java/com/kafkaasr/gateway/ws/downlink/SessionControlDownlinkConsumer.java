@@ -7,6 +7,8 @@ import com.kafkaasr.gateway.ws.downlink.events.SessionControlEvent;
 import com.kafkaasr.gateway.ws.downlink.events.SessionControlPayload;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -19,14 +21,24 @@ public class SessionControlDownlinkConsumer {
 
     private final ObjectMapper objectMapper;
     private final GatewayDownlinkPublisher downlinkPublisher;
+    private final TimedIdempotencyGuard idempotencyGuard;
+    private final GatewayCompensationPublisher compensationPublisher;
+    private final GatewayDownlinkProperties downlinkProperties;
     private final MeterRegistry meterRegistry;
+    private final Map<String, Integer> failureAttempts = new ConcurrentHashMap<>();
 
     public SessionControlDownlinkConsumer(
             ObjectMapper objectMapper,
             GatewayDownlinkPublisher downlinkPublisher,
+            TimedIdempotencyGuard idempotencyGuard,
+            GatewayCompensationPublisher compensationPublisher,
+            GatewayDownlinkProperties downlinkProperties,
             MeterRegistry meterRegistry) {
         this.objectMapper = objectMapper;
         this.downlinkPublisher = downlinkPublisher;
+        this.idempotencyGuard = idempotencyGuard;
+        this.compensationPublisher = compensationPublisher;
+        this.downlinkProperties = downlinkProperties;
         this.meterRegistry = meterRegistry;
     }
 
@@ -35,13 +47,29 @@ public class SessionControlDownlinkConsumer {
             groupId = "#{@gatewayDownlinkProperties.consumerGroupId}")
     public void onMessage(String payload) {
         Timer.Sample sample = Timer.start(meterRegistry);
+        String failureKey = "raw:" + Integer.toHexString(payload.hashCode());
         try {
             SessionControlEvent event = parse(payload);
+            failureKey = resolveFailureKey(event.idempotencyKey(), payload);
+            if (idempotencyGuard.isDuplicate(event.idempotencyKey())) {
+                meterRegistry.counter(
+                                "gateway.downlink.messages.total",
+                                "type",
+                                "session.closed",
+                                "result",
+                                "duplicate",
+                                "code",
+                                "DUPLICATE")
+                        .increment();
+                return;
+            }
             SessionControlPayload controlPayload = event.payload();
             if (controlPayload != null && CLOSED_STATUS.equals(controlPayload.status())) {
                 String reason = controlPayload.reason() == null ? "session.closed" : controlPayload.reason();
                 downlinkPublisher.publishSessionClosed(event.sessionId(), reason).block();
             }
+            idempotencyGuard.markProcessed(event.idempotencyKey());
+            failureAttempts.remove(failureKey);
 
             meterRegistry.counter(
                             "gateway.downlink.messages.total",
@@ -62,6 +90,7 @@ public class SessionControlDownlinkConsumer {
                             "code",
                             normalizeErrorCode(exception))
                     .increment();
+            recordFailureAndCompensate(failureKey, payload, exception);
             throw exception;
         } finally {
             sample.stop(meterRegistry.timer("gateway.downlink.messages.duration", "type", "session.closed"));
@@ -81,5 +110,24 @@ public class SessionControlDownlinkConsumer {
             return "INVALID_PAYLOAD";
         }
         return "PIPELINE_FAILURE";
+    }
+
+    private String resolveFailureKey(String idempotencyKey, String payload) {
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            return idempotencyKey;
+        }
+        return "raw:" + Integer.toHexString(payload.hashCode());
+    }
+
+    private void recordFailureAndCompensate(String failureKey, String payload, RuntimeException failure) {
+        int attempts = failureAttempts.merge(failureKey, 1, Integer::sum);
+        if (attempts < downlinkProperties.getRetryMaxAttempts()) {
+            return;
+        }
+        failureAttempts.remove(failureKey);
+        compensationPublisher.publish(
+                downlinkProperties.getSessionControlTopic(),
+                payload,
+                failure);
     }
 }

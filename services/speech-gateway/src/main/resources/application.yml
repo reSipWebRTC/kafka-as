@@ -60,6 +60,9 @@ gateway:
     retry-max-attempts: ${GATEWAY_DOWNLINK_RETRY_MAX_ATTEMPTS:3}
     retry-backoff-ms: ${GATEWAY_DOWNLINK_RETRY_BACKOFF_MS:200}
     dlq-topic-suffix: ${GATEWAY_DOWNLINK_DLQ_TOPIC_SUFFIX:.dlq}
+    idempotency-enabled: ${GATEWAY_DOWNLINK_IDEMPOTENCY_ENABLED:true}
+    idempotency-ttl-ms: ${GATEWAY_DOWNLINK_IDEMPOTENCY_TTL_MS:300000}
+    compensation-topic: ${GATEWAY_DOWNLINK_COMPENSATION_TOPIC:platform.compensation}
   flow-control:
     enabled: ${GATEWAY_FLOW_CONTROL_ENABLED:true}
     audio-frame-rate-limit-per-second: ${GATEWAY_AUDIO_FRAME_RATE_LIMIT_PER_SECOND:50}

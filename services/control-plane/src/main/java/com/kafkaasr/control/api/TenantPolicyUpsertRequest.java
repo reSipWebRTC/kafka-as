@@ -1,6 +1,7 @@
 package com.kafkaasr.control.api;
 
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -27,5 +28,16 @@ public record TenantPolicyUpsertRequest(
         int rateLimitPerMinute,
 
         @NotNull(message = "enabled must not be null")
-        Boolean enabled) {
+        Boolean enabled,
+
+        Boolean grayEnabled,
+
+        @Min(value = 0, message = "grayTrafficPercent must be >= 0")
+        @Max(value = 100, message = "grayTrafficPercent must be <= 100")
+        Integer grayTrafficPercent,
+
+        Boolean controlPlaneFallbackFailOpen,
+
+        @Min(value = 1, message = "controlPlaneFallbackCacheTtlMs must be > 0")
+        Long controlPlaneFallbackCacheTtlMs) {
 }

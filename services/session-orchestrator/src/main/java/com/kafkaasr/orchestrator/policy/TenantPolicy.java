@@ -10,6 +10,10 @@ public record TenantPolicy(
         int maxConcurrentSessions,
         int rateLimitPerMinute,
         boolean enabled,
+        boolean grayEnabled,
+        int grayTrafficPercent,
+        boolean controlPlaneFallbackFailOpen,
+        long controlPlaneFallbackCacheTtlMs,
         long version,
         long updatedAtMs) {
 }

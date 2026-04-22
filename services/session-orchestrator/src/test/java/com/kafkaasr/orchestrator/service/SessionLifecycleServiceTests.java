@@ -145,6 +145,10 @@ class SessionLifecycleServiceTests {
                 3,
                 300,
                 false,
+                false,
+                0,
+                false,
+                30000L,
                 1L,
                 1000L)));
         sessionLifecycleService = new SessionLifecycleService(
@@ -205,6 +209,10 @@ class SessionLifecycleServiceTests {
                 1,
                 300,
                 true,
+                false,
+                0,
+                false,
+                30000L,
                 1L,
                 1000L)));
         sessionLifecycleService = new SessionLifecycleService(
@@ -271,6 +279,10 @@ class SessionLifecycleServiceTests {
                 3,
                 300,
                 true,
+                false,
+                0,
+                false,
+                30000L,
                 1L,
                 1000L);
     }
