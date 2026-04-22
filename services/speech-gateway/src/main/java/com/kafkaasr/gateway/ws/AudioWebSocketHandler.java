@@ -2,11 +2,10 @@ package com.kafkaasr.gateway.ws;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kafkaasr.gateway.ingress.AudioIngressPublisher;
-import com.kafkaasr.gateway.ws.protocol.AudioFrameMessageDecoder;
+import com.kafkaasr.gateway.session.SessionControlClientException;
+import com.kafkaasr.gateway.ws.protocol.GatewayMessageRouter;
 import com.kafkaasr.gateway.ws.protocol.MessageValidationException;
 import com.kafkaasr.gateway.ws.protocol.SessionErrorResponse;
-import java.util.Map;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.CloseStatus;
 import org.springframework.web.reactive.socket.WebSocketHandler;
@@ -18,16 +17,13 @@ public class AudioWebSocketHandler implements WebSocketHandler {
 
     private static final String SESSION_ERROR_TYPE = "session.error";
     private static final String INTERNAL_ERROR_CODE = "INTERNAL_ERROR";
-    private final AudioIngressPublisher audioIngressPublisher;
-    private final AudioFrameMessageDecoder audioFrameMessageDecoder;
+    private final GatewayMessageRouter gatewayMessageRouter;
     private final ObjectMapper objectMapper;
 
     public AudioWebSocketHandler(
-            AudioIngressPublisher audioIngressPublisher,
-            AudioFrameMessageDecoder audioFrameMessageDecoder,
+            GatewayMessageRouter gatewayMessageRouter,
             ObjectMapper objectMapper) {
-        this.audioIngressPublisher = audioIngressPublisher;
-        this.audioFrameMessageDecoder = audioFrameMessageDecoder;
+        this.gatewayMessageRouter = gatewayMessageRouter;
         this.objectMapper = objectMapper;
     }
 
@@ -35,8 +31,7 @@ public class AudioWebSocketHandler implements WebSocketHandler {
     public Mono<Void> handle(WebSocketSession session) {
         Mono<Void> inbound = session.receive()
                 .map(message -> message.getPayloadAsText())
-                .flatMap(rawMessage -> audioIngressPublisher.publishRawFrame(
-                        audioFrameMessageDecoder.decode(rawMessage)))
+                .flatMap(gatewayMessageRouter::route)
                 .then();
 
         return inbound
@@ -48,6 +43,14 @@ public class AudioWebSocketHandler implements WebSocketHandler {
                                 exception.getMessage(),
                                 exception.sessionId(),
                                 CloseStatus.BAD_DATA))
+                .onErrorResume(
+                        SessionControlClientException.class,
+                        exception -> sendErrorAndClose(
+                                session,
+                                exception.code(),
+                                exception.getMessage(),
+                                exception.sessionId(),
+                                exception.closeStatus()))
                 .onErrorResume(
                         exception -> sendErrorAndClose(
                                 session,

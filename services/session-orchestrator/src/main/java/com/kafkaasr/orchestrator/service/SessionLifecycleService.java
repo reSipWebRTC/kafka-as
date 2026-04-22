@@ -1,0 +1,227 @@
+package com.kafkaasr.orchestrator.service;
+
+import com.kafkaasr.orchestrator.api.SessionStartRequest;
+import com.kafkaasr.orchestrator.api.SessionStartResponse;
+import com.kafkaasr.orchestrator.api.SessionStopRequest;
+import com.kafkaasr.orchestrator.api.SessionStopResponse;
+import com.kafkaasr.orchestrator.events.OrchestratorKafkaProperties;
+import com.kafkaasr.orchestrator.events.SessionControlEvent;
+import com.kafkaasr.orchestrator.events.SessionControlPayload;
+import com.kafkaasr.orchestrator.events.SessionControlPublisher;
+import com.kafkaasr.orchestrator.session.SessionState;
+import com.kafkaasr.orchestrator.session.SessionStatus;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+
+@Service
+public class SessionLifecycleService {
+
+    private static final String EVENT_TYPE = "session.control";
+    private static final String EVENT_VERSION = "v1";
+    private static final String START_ACTION = "START";
+    private static final String STOP_ACTION = "STOP";
+
+    private final SessionControlPublisher sessionControlPublisher;
+    private final OrchestratorKafkaProperties kafkaProperties;
+    private final Clock clock;
+
+    private final Object mutex = new Object();
+    private final Map<String, SessionState> sessions = new HashMap<>();
+
+    @Autowired
+    public SessionLifecycleService(
+            SessionControlPublisher sessionControlPublisher,
+            OrchestratorKafkaProperties kafkaProperties) {
+        this(sessionControlPublisher, kafkaProperties, Clock.systemUTC());
+    }
+
+    SessionLifecycleService(
+            SessionControlPublisher sessionControlPublisher,
+            OrchestratorKafkaProperties kafkaProperties,
+            Clock clock) {
+        this.sessionControlPublisher = sessionControlPublisher;
+        this.kafkaProperties = kafkaProperties;
+        this.clock = clock;
+    }
+
+    public Mono<SessionStartResponse> startSession(SessionStartRequest request) {
+        StartResult result;
+        synchronized (mutex) {
+            SessionState current = sessions.get(request.sessionId());
+            if (current == null) {
+                result = createSession(request);
+                sessions.put(request.sessionId(), result.state());
+            } else {
+                result = handleRepeatedStart(request, current);
+            }
+        }
+
+        Mono<Void> publish = result.event() == null
+                ? Mono.empty()
+                : sessionControlPublisher.publish(result.event());
+        return publish.thenReturn(result.response());
+    }
+
+    public Mono<SessionStopResponse> stopSession(String sessionId, SessionStopRequest request) {
+        SessionStopRequest normalizedRequest = request == null ? SessionStopRequest.empty() : request;
+
+        StopResult result;
+        synchronized (mutex) {
+            SessionState current = sessions.get(sessionId);
+            if (current == null) {
+                throw SessionControlException.sessionNotFound(sessionId);
+            }
+
+            if (current.status() == SessionStatus.CLOSED) {
+                result = alreadyStopped(current, normalizedRequest);
+            } else {
+                result = closeSession(current, normalizedRequest);
+                sessions.put(sessionId, result.state());
+            }
+        }
+
+        Mono<Void> publish = result.event() == null
+                ? Mono.empty()
+                : sessionControlPublisher.publish(result.event());
+        return publish.thenReturn(result.response());
+    }
+
+    private StartResult createSession(SessionStartRequest request) {
+        long now = nowMs();
+        String traceId = coalesce(request.traceId(), prefixedId("trc"));
+        SessionState state = new SessionState(
+                request.sessionId(),
+                request.tenantId(),
+                request.sourceLang(),
+                request.targetLang(),
+                traceId,
+                SessionStatus.STREAMING,
+                1L,
+                now,
+                now);
+
+        SessionControlEvent event = toEvent(state, START_ACTION, null);
+        SessionStartResponse response = new SessionStartResponse(
+                state.sessionId(),
+                state.traceId(),
+                state.status().name(),
+                true,
+                state.lastSeq(),
+                state.startedAtMs());
+        return new StartResult(state, response, event);
+    }
+
+    private StartResult handleRepeatedStart(SessionStartRequest request, SessionState current) {
+        if (current.status() == SessionStatus.CLOSED) {
+            throw SessionControlException.conflict(
+                    "INVALID_MESSAGE",
+                    "Session is already closed and cannot be restarted",
+                    current.sessionId());
+        }
+
+        if (!current.tenantId().equals(request.tenantId())
+                || !current.sourceLang().equals(request.sourceLang())
+                || !current.targetLang().equals(request.targetLang())) {
+            throw SessionControlException.invalidMessage(
+                    "Session metadata mismatch for repeated start",
+                    current.sessionId());
+        }
+
+        SessionStartResponse response = new SessionStartResponse(
+                current.sessionId(),
+                current.traceId(),
+                current.status().name(),
+                false,
+                current.lastSeq(),
+                current.startedAtMs());
+        return new StartResult(current, response, null);
+    }
+
+    private StopResult closeSession(SessionState current, SessionStopRequest request) {
+        long now = nowMs();
+        long nextSeq = current.lastSeq() + 1;
+        String traceId = coalesce(request.traceId(), current.traceId(), prefixedId("trc"));
+        SessionState closed = current.withState(SessionStatus.CLOSED, traceId, nextSeq, now);
+
+        String reason = coalesce(request.reason(), "client.stop");
+        SessionControlEvent event = toEvent(closed, STOP_ACTION, reason);
+        SessionStopResponse response = new SessionStopResponse(
+                closed.sessionId(),
+                closed.traceId(),
+                closed.status().name(),
+                true,
+                closed.lastSeq(),
+                reason,
+                closed.updatedAtMs());
+        return new StopResult(closed, response, event);
+    }
+
+    private StopResult alreadyStopped(SessionState current, SessionStopRequest request) {
+        String traceId = coalesce(request.traceId(), current.traceId(), prefixedId("trc"));
+        SessionState materialized = current.withState(
+                SessionStatus.CLOSED,
+                traceId,
+                current.lastSeq(),
+                current.updatedAtMs());
+
+        SessionStopResponse response = new SessionStopResponse(
+                materialized.sessionId(),
+                materialized.traceId(),
+                materialized.status().name(),
+                false,
+                materialized.lastSeq(),
+                coalesce(request.reason(), "already.closed"),
+                materialized.updatedAtMs());
+        return new StopResult(materialized, response, null);
+    }
+
+    private SessionControlEvent toEvent(SessionState state, String action, String reason) {
+        return new SessionControlEvent(
+                prefixedId("evt"),
+                EVENT_TYPE,
+                EVENT_VERSION,
+                state.traceId(),
+                state.sessionId(),
+                state.tenantId(),
+                null,
+                kafkaProperties.getProducerId(),
+                state.lastSeq(),
+                nowMs(),
+                state.sessionId() + ":" + EVENT_TYPE + ":" + state.lastSeq(),
+                new SessionControlPayload(
+                        action,
+                        state.status().name(),
+                        state.sourceLang(),
+                        state.targetLang(),
+                        reason));
+    }
+
+    private long nowMs() {
+        return Instant.now(clock).toEpochMilli();
+    }
+
+    private String prefixedId(String prefix) {
+        return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private String coalesce(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private record StartResult(SessionState state, SessionStartResponse response, SessionControlEvent event) {
+    }
+
+    private record StopResult(SessionState state, SessionStopResponse response, SessionControlEvent event) {
+    }
+}
