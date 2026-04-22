@@ -2,19 +2,19 @@
 
 ## 1. 事件模型原则
 
-- 所有跨服务异步通信都必须显式建模为事件。
-- 只追求会话内顺序，不追求全局顺序。
-- 默认采用至少一次投递，靠下游幂等消化重复。
-- 所有重要事件都要可追踪、可重放、可审计。
+- 所有跨服务异步通信都必须显式建模为事件
+- 只追求会话内顺序，不追求全局顺序
+- 默认采用至少一次投递，靠下游幂等消化重复
+- 所有重要事件都要可追踪、可重放、可审计
 
 ## 2. 统一事件头
 
-建议所有事件统一使用如下 Envelope：
+当前 v1 事件统一使用如下 Envelope：
 
 ```json
 {
-  "eventId": "01HXYZ...",
-  "eventType": "asr.partial",
+  "eventId": "evt_123",
+  "eventType": "audio.ingress.raw",
   "eventVersion": "v1",
   "traceId": "trc_123",
   "sessionId": "sess_456",
@@ -23,48 +23,55 @@
   "producer": "speech-gateway",
   "seq": 1024,
   "ts": 1710000000000,
-  "idempotencyKey": "sess_456:asr.partial:1024",
+  "idempotencyKey": "sess_456:audio.ingress.raw:1024",
   "payload": {}
 }
 ```
 
-字段建议：
+字段要求：
 
-- `eventId`
-  全局唯一事件 ID，用于追踪与审计。
-- `eventType`
-  明确区分事件语义，而不是复用一个通用消息体。
-- `eventVersion`
-  支持未来演进与兼容处理。
-- `traceId`
-  串联网关、编排、推理和分发的全链路观测。
-- `sessionId`
-  顺序、路由、状态机、缓存和幂等的核心键。
-- `seq`
-  会话内严格递增序号，用于去重、乱序检测和补偿。
-- `idempotencyKey`
-  下游消费幂等落地键。
+- `eventType` 使用点分命名法
+- `eventVersion` 当前冻结为 `v1`
+- `sessionId + seq` 是会话内顺序与幂等核心键
+- `idempotencyKey` 必须可被下游持久化判重
 
-## 3. 推荐 Topic 规划
+## 3. 当前已实现 Topic
 
-| Topic | 说明 | 建议 Key | 备注 |
-| --- | --- | --- | --- |
-| `audio.ingress.raw` | 网关接收的原始音频帧 | `sessionId` | 高频数据流 |
-| `audio.vad.segmented` | VAD 切分后的语音段 | `sessionId` | 可选 |
-| `session.control` | 会话开始、暂停、结束、重连 | `sessionId` | 状态切换关键主题 |
-| `asr.partial` | 流式中间识别结果 | `sessionId` | 不要求全部持久保存 |
-| `asr.final` | 最终识别结果 | `sessionId` | 下游翻译主入口 |
-| `translation.request` | 待翻译文本 | `sessionId` | 支持多语种扩展 |
-| `translation.result` | 翻译结果 | `sessionId` | 下游字幕/TTS 使用 |
-| `tts.request` | TTS 合成请求 | `sessionId` 或 `cacheKey` | 依场景取舍 |
-| `tts.chunk` | 流式音频分片 | `sessionId` | 实时回放使用 |
-| `tts.ready` | 音频文件已可回放 | `sessionId` | 分发或回放地址 |
-| `platform.audit` | 运营审计、配置变更 | `tenantId` | 低频 |
-| `platform.dlq` | 死信队列 | 原始 Key | 补偿和排障 |
+截至 `2026-04-22`，仓库里已经落地并有代码/测试支撑的 Topic 如下：
 
-## 4. 分区与顺序策略
+| Topic | Producer | Consumer | Key | 说明 |
+| --- | --- | --- | --- | --- |
+| `audio.ingress.raw` | `speech-gateway` | `asr-worker` | `sessionId` | 高频音频主链路 |
+| `session.control` | `session-orchestrator` | 暂无仓库内下游 | `sessionId` | 生命周期控制事件 |
+| `asr.final` | `asr-worker` | `translation-worker` | `sessionId` | 当前翻译入口 |
+| `translation.result` | `translation-worker` | `tts-orchestrator` | `sessionId` | 当前 TTS 入口 |
+| `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 编排输出 |
 
-### 4.1 分区键
+说明：
+
+- 当前所有已落地 publisher 都按 `sessionId` 发送 Kafka Key
+- `translation-worker` 当前直接消费 `asr.final`，尚未引入独立 `translation.request`
+- `tts.request` 当前仍是中间编排事件，还未接入真实引擎链路
+
+## 4. 计划扩展 Topic
+
+以下 Topic 仍然属于目标架构的一部分，但当前未在仓库实现中落地：
+
+| Topic | 说明 | 计划用途 |
+| --- | --- | --- |
+| `audio.vad.segmented` | VAD 切分后的语音段 | 支撑更细粒度 ASR 管线 |
+| `asr.partial` | 流式中间识别结果 | 实时字幕体验优化 |
+| `translation.request` | 待翻译文本 | 将翻译入队与 ASR 最终结果解耦 |
+| `tts.chunk` | 流式音频分片 | 实时播放 |
+| `tts.ready` | 音频文件可回放 | 对象存储/CDN 分发 |
+| `platform.audit` | 审计事件 | 配置与治理追踪 |
+| `platform.dlq` | 死信队列 | 补偿与排障 |
+
+这些 Topic 在文档中应该明确标记为“计划扩展”，不要写成当前已上线能力。
+
+## 5. 分区与顺序策略
+
+### 5.1 分区键
 
 默认优先使用：
 
@@ -76,15 +83,13 @@
 - 能稳定支撑会话亲和消费
 - 便于状态机和幂等落地
 
-避免直接使用：
+除非业务明确接受更粗粒度顺序控制，否则避免直接使用：
 
 - `tenantId`
 - `languagePair`
 - `roomId`
 
-除非业务明确接受更粗粒度的顺序控制，否则容易形成热点。
-
-### 4.2 顺序边界
+### 5.2 顺序边界
 
 系统只保证：
 
@@ -96,13 +101,13 @@
 - 跨会话全局顺序
 - 多下游分支消费结果的完全同步到达
 
-因此编排层必须按业务语义而不是按“消息到达时间”来推进状态。
+因此编排层必须按业务语义而不是按消息到达时间推进状态。
 
-## 5. 事件消费语义
+## 6. 事件消费语义
 
 ### 幂等
 
-所有消费者都应在持久层或缓存层记录：
+消费者应记录：
 
 - 最近处理的 `seq`
 - `idempotencyKey`
@@ -119,9 +124,9 @@
 区分两类错误：
 
 - 短暂错误
-  比如网络抖动、瞬时超时、资源繁忙，可有限重试。
+  如网络抖动、瞬时超时、资源繁忙，可有限重试
 - 业务错误
-  比如参数非法、会话已关闭、模型不支持，应尽快失败并记录审计。
+  如参数非法、会话已关闭、模型不支持，应尽快失败并记录审计
 
 ### 死信
 
@@ -132,7 +137,7 @@
 - 事件版本不兼容
 - 下游依赖持续不可用
 
-## 6. 状态机建议
+## 7. 状态机建议
 
 建议会话状态最少包含：
 
@@ -154,22 +159,26 @@ FAILED
 - 网关和 Worker 不直接跨层修改全局会话状态
 - 每次切换都应记录事件、时间戳和责任服务
 
-## 7. 版本演进策略
+## 8. 版本演进策略
 
 - 事件体必须带 `eventVersion`
 - Producer 只能做向后兼容演进
 - Consumer 对未知字段保持忽略，对未知版本执行保护性失败
 - 跨服务大改优先使用双写或多版本并行过渡
 
-## 8. 一个最小闭环
+## 9. 当前最小事件闭环
 
-最小实时字幕链路建议如下：
+当前仓库已具备的事件闭环如下：
 
 1. `speech-gateway` 发布 `audio.ingress.raw`
-2. `asr-worker` 消费并产出 `asr.partial`
-3. `asr-worker` 产出 `asr.final`
+2. `session-orchestrator` 发布 `session.control`
+3. `asr-worker` 消费 `audio.ingress.raw` 并产出 `asr.final`
 4. `translation-worker` 消费 `asr.final` 并发布 `translation.result`
-5. `session-orchestrator` 汇聚结果并推送客户端
+5. `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`
 
-这条链路稳定后，再补 `tts.request -> tts.chunk -> tts.ready`。
+仍未打通的部分：
 
+- `asr.partial`
+- 字幕下行回推
+- `tts.request -> tts.chunk / tts.ready`
+- DLQ、补偿和故障恢复链路

@@ -11,6 +11,27 @@
 - 第一批核心事件类型与字段
 - 错误码与版本演进规则
 
+## 1.1 当前实现注记（2026-04-22）
+
+本文件仍然是外部行为的权威定义，但当前仓库只实现了其中一部分。
+
+当前已经落地：
+
+- WebSocket 上行：`session.start`、`audio.frame`、`session.stop`
+- WebSocket 下行：`session.error`
+- 低频控制 API：会话 start/stop、租户策略 get/put
+- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.final`、`translation.result`、`tts.request`
+
+仍在 v1 契约中保留但尚未打通：
+
+- `session.ping`
+- `subtitle.partial`
+- `subtitle.final`
+- `session.closed`
+- `asr.partial`
+- `tts.chunk`
+- `tts.ready`
+
 ## 2. 主数据路径（冻结）
 
 统一规定如下：
@@ -72,6 +93,11 @@
 | `session.ping` | 心跳 | `sessionId` `ts` |
 | `session.stop` | 主动结束 | `sessionId` |
 
+当前实现说明：
+
+- `speech-gateway` 目前只接受 `session.start`、`audio.frame`、`session.stop`
+- `session.ping` 仍是 v1 预留消息，当前收到会被视为 `INVALID_MESSAGE`
+
 ### 5.2 服务端下行消息
 
 | `type` | 说明 | 关键字段 |
@@ -80,6 +106,11 @@
 | `subtitle.final` | 最终字幕 | `sessionId` `seq` `text` |
 | `session.error` | 错误信息 | `sessionId` `code` `message` |
 | `session.closed` | 会话关闭 | `sessionId` `reason` |
+
+当前实现说明：
+
+- `session.error` 已由 `speech-gateway` 落地，用于协议校验和控制面错误
+- `subtitle.partial`、`subtitle.final`、`session.closed` 仍是目标下行消息，当前尚未从下游结果链路回推到 WebSocket 客户端
 
 ## 6. 错误码（v1）
 
