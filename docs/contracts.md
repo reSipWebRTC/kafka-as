@@ -34,7 +34,7 @@
 - `session.closed` 触发后下行通道会终止并丢弃晚到消息
 - `asr-worker` 已支持基于静音帧阈值的 VAD 切段终态发布（`asr.final`）
 - `speech-gateway` 已支持可配置 WS token 鉴权（`Authorization: Bearer` 或 query `access_token`），失败返回 `AUTH_INVALID_TOKEN`
-- `control-plane` 已支持可配置 Bearer Token 鉴权（`/api/v1/tenants/**`）
+- `control-plane` 已支持可配置 Bearer Token 鉴权与授权（`/api/v1/tenants/**`，支持读/写权限与租户范围约束）
 
 新增说明：
 
@@ -137,6 +137,7 @@
 | 错误码 | 含义 |
 | --- | --- |
 | `AUTH_INVALID_TOKEN` | 鉴权失败或令牌过期 |
+| `AUTH_FORBIDDEN` | 已认证但无权限访问目标租户或操作 |
 | `INVALID_MESSAGE` | 消息格式不合法、类型不支持或字段校验失败 |
 | `SESSION_NOT_FOUND` | 会话不存在或已关闭 |
 | `SESSION_SEQ_INVALID` | 序号乱序或重复超限 |
