@@ -11,8 +11,9 @@ Current scope:
 - HTTP synthesis production-drill baseline: health probe, bounded concurrency, explicit error semantics, and engine-level metrics
 - Configurable object storage upload for `tts.ready` playback URL (`tts.storage`: `none` / `s3`, MinIO-compatible endpoint/path-style)
 - Configurable CDN delivery policy for uploaded playback URLs (`cache-control`, `expires/sig` signing)
+- CDN governance baseline for playback distribution (tenant-region routing, origin fallback, cache scope + shard path strategy)
 
 Out of scope in this phase:
 
 - TTS real-traffic capacity validation and fault drills
-- Large-scale playback distribution governance (advanced CDN routing, watermarking, regional fallback)
+- Large-scale playback distribution governance (dynamic multi-origin routing, watermarking, and region-level traffic policy orchestration)

@@ -27,6 +27,8 @@
 - `asr-worker` FunASR 适配已补齐生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
 - `translation-worker` OpenAI 适配已补齐生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
 - `tts-orchestrator` HTTP synthesis 适配已补齐生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
+- `tts-orchestrator` 对象存储/CDN 分发已补齐区域路由与回源回退策略基线（按租户区域映射可选路由，区域缺失可回退 origin URL）
+- `tts-orchestrator` 对象键策略已支持可配置 cache scope（tenant/global）与 shard 前缀，用于缓存命中优化
 - `speech-gateway` 下行链路已补充仓库内 E2E 稳定性验证（顺序、终态、重复/异常计数）
 - `deploy/monitoring` 已补齐 Prometheus/Grafana 资产（含 Kafka lag、延迟、错误率看板与告警规则）
 - `deploy/monitoring` 已补齐 Alertmanager 通知路由基线（default/warning/critical + critical escalation）
@@ -51,7 +53,7 @@
 | `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、控制面熔断与缓存回退、Redis 会话状态、`session.control` Kafka 发布 | 超时编排、结果聚合、补偿工作流 |
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配（含 FunASR v2 响应兼容、health 探测、并发保护、错误语义映射）、按稳定度 + VAD 静音切段分流发布 `asr.partial` / `asr.final`、按租户策略驱动重试/DLQ（含控制面失败回退） | FunASR 真机容量/故障演练、高级上下文与切段策略 |
 | `translation-worker` | `8083` | 消费 `asr.final`、默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容、health 探测、并发保护、错误语义映射）、发布 `translation.result`、按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 真机容量/故障演练、术语治理、上下文增强 |
-| `tts-orchestrator` | `8084` | 消费 `translation.result`、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容、health 探测、并发保护、错误语义映射）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、`tts.ready` 支持可配置 S3/MinIO 上传并回填真实 `playbackUrl`、支持 `cache-control` 与 `expires/sig` URL 签名策略、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS 真机容量/故障演练、对象存储高可用治理、CDN 区域路由与高级缓存治理 |
+| `tts-orchestrator` | `8084` | 消费 `translation.result`、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容、health 探测、并发保护、错误语义映射）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、`tts.ready` 支持可配置 S3/MinIO 上传并回填真实 `playbackUrl`、支持 `cache-control` 与 `expires/sig` URL 签名策略、支持区域 CDN 路由/回源回退与可配置 cache scope/shard 策略、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS 真机容量/故障演练、对象存储高可用治理、CDN 区域路由与高级缓存治理 |
 | `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、Redis 策略存储、版本化 upsert、灰度/回退/可靠性策略字段、可配置 Bearer Token 鉴权与授权（读/写权限 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 切换与 JWKS 外部 IAM 校验后端骨架、鉴权决策/耗时/回退指标（`controlplane.auth.*`）、真实 IAM 对接参数模板与预检工具、external-iam claim 映射与授权矩阵单测、鉴权失败策略 simulated 演练脚本、本地 JWKS + JWT 全链路 simulated 演练脚本、`tenant.policy.changed` 发布 | 外部 IAM/RBAC 提供方联调与生产级运行保障（真实参数、阈值与告警闭环）、持久化数据库、跨区域分发与版本编排/回滚治理 |
 
 ## 3. 当前协议与接口面

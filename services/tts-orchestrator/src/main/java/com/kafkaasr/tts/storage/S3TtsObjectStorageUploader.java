@@ -2,10 +2,15 @@ package com.kafkaasr.tts.storage;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.Locale;
+import java.util.Map;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -26,6 +31,8 @@ public class S3TtsObjectStorageUploader implements TtsObjectStorageUploader {
     private final TtsStorageProperties storageProperties;
     private final S3Client s3Client;
     private final Clock clock;
+    private final Map<String, String> tenantRegionMap;
+    private final Map<String, String> regionBaseUrlMap;
 
     public S3TtsObjectStorageUploader(TtsStorageProperties storageProperties) {
         this(storageProperties, createClient(storageProperties), Clock.systemUTC());
@@ -40,6 +47,8 @@ public class S3TtsObjectStorageUploader implements TtsObjectStorageUploader {
         this.s3Client = s3Client;
         this.clock = clock;
         validateProperties(storageProperties);
+        this.tenantRegionMap = parseDelimitedMap(storageProperties.getCdnRegionTenantMap(), true, true);
+        this.regionBaseUrlMap = parseDelimitedMap(storageProperties.getCdnRegionBaseUrls(), true, false);
     }
 
     @Override
@@ -62,7 +71,7 @@ public class S3TtsObjectStorageUploader implements TtsObjectStorageUploader {
         PutObjectRequest putObjectRequest = putObjectBuilder.build();
 
         s3Client.putObject(putObjectRequest, RequestBody.fromBytes(request.audioBytes()));
-        return new UploadResult(objectKey, buildPlaybackUrl(objectKey));
+        return new UploadResult(objectKey, buildPlaybackUrl(request, objectKey));
     }
 
     private void validateProperties(TtsStorageProperties properties) {
@@ -72,31 +81,84 @@ public class S3TtsObjectStorageUploader implements TtsObjectStorageUploader {
         if (properties.getBucket() == null || properties.getBucket().isBlank()) {
             throw new IllegalStateException("tts.storage.bucket is required when storage is enabled");
         }
+        String cacheScope = normalizeCacheScope(properties.getCacheScope());
+        if (!"tenant".equals(cacheScope) && !"global".equals(cacheScope)) {
+            throw new IllegalStateException("Unsupported tts.storage.cache-scope: " + properties.getCacheScope());
+        }
     }
 
     private String buildObjectKey(UploadRequest request) {
         String prefix = trimSlashes(storageProperties.getKeyPrefix());
         String tenant = sanitizeSegment(request.tenantId());
-        String cacheKey = sanitizeSegment(request.cacheKey());
+        String rawCacheKey = request.cacheKey() == null || request.cacheKey().isBlank()
+                ? "unknown"
+                : request.cacheKey().trim();
+        String cacheKey = sanitizeSegment(rawCacheKey);
         String suffix = sanitizeSegment(storageProperties.getObjectSuffix().toLowerCase(Locale.ROOT));
         String fileName = cacheKey + "." + suffix;
-        if (prefix.isBlank()) {
-            return tenant + "/" + fileName;
+        String shardPrefix = resolveShardPrefix(rawCacheKey);
+
+        StringBuilder objectKeyBuilder = new StringBuilder();
+        if (!prefix.isBlank()) {
+            objectKeyBuilder.append(prefix).append("/");
         }
-        return prefix + "/" + tenant + "/" + fileName;
+        if (isTenantScopedCache()) {
+            objectKeyBuilder.append(tenant).append("/");
+        }
+        if (!shardPrefix.isBlank()) {
+            objectKeyBuilder.append(shardPrefix).append("/");
+        }
+        objectKeyBuilder.append(fileName);
+        return objectKeyBuilder.toString();
     }
 
-    private String buildPlaybackUrl(String objectKey) {
-        String url;
-        if (storageProperties.getPublicBaseUrl() != null && !storageProperties.getPublicBaseUrl().isBlank()) {
-            url = joinUrl(storageProperties.getPublicBaseUrl(), objectKey);
-        } else if (storageProperties.getEndpoint() != null && !storageProperties.getEndpoint().isBlank()) {
-            url = joinUrl(storageProperties.getEndpoint(), storageProperties.getBucket() + "/" + objectKey);
-        } else {
-            String region = storageProperties.getRegion();
-            url = "https://" + storageProperties.getBucket() + ".s3." + region + ".amazonaws.com/" + objectKey;
+    private String buildPlaybackUrl(UploadRequest request, String objectKey) {
+        String url = null;
+        if (storageProperties.isCdnRegionRoutingEnabled()) {
+            url = buildRegionalPlaybackUrl(request, objectKey);
+            if (url == null && storageProperties.isCdnOriginFallbackEnabled()) {
+                url = buildOriginPlaybackUrl(objectKey);
+            }
+        }
+        if (url == null) {
+            if (storageProperties.getPublicBaseUrl() != null && !storageProperties.getPublicBaseUrl().isBlank()) {
+                url = joinUrl(storageProperties.getPublicBaseUrl(), objectKey);
+            } else {
+                url = buildOriginPlaybackUrl(objectKey);
+            }
         }
         return maybeSignUrl(url);
+    }
+
+    private String buildRegionalPlaybackUrl(UploadRequest request, String objectKey) {
+        String tenantRegion = resolveTenantRegion(request.tenantId());
+        if (tenantRegion.isBlank()) {
+            return null;
+        }
+        String regionalBaseUrl = regionBaseUrlMap.get(tenantRegion);
+        if (regionalBaseUrl == null || regionalBaseUrl.isBlank()) {
+            return null;
+        }
+        return joinUrl(regionalBaseUrl, objectKey);
+    }
+
+    private String resolveTenantRegion(String tenantId) {
+        String normalizedTenant = normalizeRoutingToken(tenantId);
+        if (!normalizedTenant.isBlank()) {
+            String mappedRegion = tenantRegionMap.get(normalizedTenant);
+            if (mappedRegion != null && !mappedRegion.isBlank()) {
+                return mappedRegion;
+            }
+        }
+        return normalizeRoutingToken(storageProperties.getCdnRegionDefault());
+    }
+
+    private String buildOriginPlaybackUrl(String objectKey) {
+        if (storageProperties.getEndpoint() != null && !storageProperties.getEndpoint().isBlank()) {
+            return joinUrl(storageProperties.getEndpoint(), storageProperties.getBucket() + "/" + objectKey);
+        }
+        String region = storageProperties.getRegion();
+        return "https://" + storageProperties.getBucket() + ".s3." + region + ".amazonaws.com/" + objectKey;
     }
 
     private static S3Client createClient(TtsStorageProperties properties) {
@@ -136,6 +198,37 @@ public class S3TtsObjectStorageUploader implements TtsObjectStorageUploader {
         return value.replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
+    private boolean isTenantScopedCache() {
+        return "tenant".equals(normalizeCacheScope(storageProperties.getCacheScope()));
+    }
+
+    private String normalizeCacheScope(String cacheScope) {
+        if (cacheScope == null || cacheScope.isBlank()) {
+            return "tenant";
+        }
+        return cacheScope.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String resolveShardPrefix(String rawCacheKey) {
+        if (!storageProperties.isCacheShardEnabled()) {
+            return "";
+        }
+        String cacheKeyForHash = rawCacheKey == null || rawCacheKey.isBlank() ? "unknown" : rawCacheKey;
+        String hash = sha256Hex(cacheKeyForHash);
+        int prefixLength = Math.min(storageProperties.getCacheShardPrefixLength(), hash.length());
+        return hash.substring(0, prefixLength);
+    }
+
+    private String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 unavailable for cache sharding", exception);
+        }
+    }
+
     private String trimSlashes(String value) {
         if (value == null || value.isBlank()) {
             return "";
@@ -155,6 +248,42 @@ public class S3TtsObjectStorageUploader implements TtsObjectStorageUploader {
             return base + suffix;
         }
         return base + "/" + suffix;
+    }
+
+    private Map<String, String> parseDelimitedMap(String raw, boolean normalizeKey, boolean normalizeValue) {
+        Map<String, String> parsed = new HashMap<>();
+        if (raw == null || raw.isBlank()) {
+            return parsed;
+        }
+        for (String entry : raw.split(",")) {
+            if (entry == null || entry.isBlank()) {
+                continue;
+            }
+            String[] pair = entry.split("=", 2);
+            if (pair.length != 2) {
+                continue;
+            }
+            String key = pair[0].trim();
+            String value = pair[1].trim();
+            if (key.isBlank() || value.isBlank()) {
+                continue;
+            }
+            if (normalizeKey) {
+                key = normalizeRoutingToken(key);
+            }
+            if (normalizeValue) {
+                value = normalizeRoutingToken(value);
+            }
+            parsed.put(key, value);
+        }
+        return parsed;
+    }
+
+    private String normalizeRoutingToken(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 
     private String maybeSignUrl(String url) {

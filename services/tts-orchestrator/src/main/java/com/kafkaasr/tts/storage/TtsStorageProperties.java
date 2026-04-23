@@ -38,6 +38,24 @@ public class TtsStorageProperties {
     @NotBlank
     private String cacheControl = "public, max-age=31536000, immutable";
 
+    private boolean cdnRegionRoutingEnabled = false;
+
+    private String cdnRegionDefault = "";
+
+    private String cdnRegionTenantMap = "";
+
+    private String cdnRegionBaseUrls = "";
+
+    private boolean cdnOriginFallbackEnabled = true;
+
+    @NotBlank
+    private String cacheScope = "tenant";
+
+    private boolean cacheShardEnabled = false;
+
+    @Min(1)
+    private int cacheShardPrefixLength = 2;
+
     private boolean cdnSigningEnabled = false;
 
     private String cdnSigningKey = "";
@@ -145,6 +163,70 @@ public class TtsStorageProperties {
 
     public void setCacheControl(String cacheControl) {
         this.cacheControl = cacheControl;
+    }
+
+    public boolean isCdnRegionRoutingEnabled() {
+        return cdnRegionRoutingEnabled;
+    }
+
+    public void setCdnRegionRoutingEnabled(boolean cdnRegionRoutingEnabled) {
+        this.cdnRegionRoutingEnabled = cdnRegionRoutingEnabled;
+    }
+
+    public String getCdnRegionDefault() {
+        return cdnRegionDefault;
+    }
+
+    public void setCdnRegionDefault(String cdnRegionDefault) {
+        this.cdnRegionDefault = cdnRegionDefault;
+    }
+
+    public String getCdnRegionTenantMap() {
+        return cdnRegionTenantMap;
+    }
+
+    public void setCdnRegionTenantMap(String cdnRegionTenantMap) {
+        this.cdnRegionTenantMap = cdnRegionTenantMap;
+    }
+
+    public String getCdnRegionBaseUrls() {
+        return cdnRegionBaseUrls;
+    }
+
+    public void setCdnRegionBaseUrls(String cdnRegionBaseUrls) {
+        this.cdnRegionBaseUrls = cdnRegionBaseUrls;
+    }
+
+    public boolean isCdnOriginFallbackEnabled() {
+        return cdnOriginFallbackEnabled;
+    }
+
+    public void setCdnOriginFallbackEnabled(boolean cdnOriginFallbackEnabled) {
+        this.cdnOriginFallbackEnabled = cdnOriginFallbackEnabled;
+    }
+
+    public String getCacheScope() {
+        return cacheScope;
+    }
+
+    public void setCacheScope(String cacheScope) {
+        this.cacheScope = cacheScope;
+    }
+
+    public boolean isCacheShardEnabled() {
+        return cacheShardEnabled;
+    }
+
+    public void setCacheShardEnabled(boolean cacheShardEnabled) {
+        this.cacheShardEnabled = cacheShardEnabled;
+    }
+
+    public int getCacheShardPrefixLength() {
+        return cacheShardPrefixLength;
+    }
+
+    public void setCacheShardPrefixLength(int cacheShardPrefixLength) {
+        this.cacheShardPrefixLength = cacheShardPrefixLength;
     }
 
     public boolean isCdnSigningEnabled() {

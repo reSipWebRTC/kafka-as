@@ -39,6 +39,7 @@
 新增说明：
 
 - `tts-orchestrator` 已实现 `translation.result` 同步产出 `tts.request`、`tts.chunk`、`tts.ready` 三类事件
+- `tts.ready.payload.playbackUrl` 已支持按租户映射的区域 CDN 路由，并可在区域路由缺失时回退到 origin URL
 - `control-plane` 已实现 `tenant.policy.changed` 事件发布，`session-orchestrator` / `asr-worker` / `translation-worker` / `tts-orchestrator` 已消费该事件用于策略缓存刷新
 
 ## 2. 主数据路径（冻结）

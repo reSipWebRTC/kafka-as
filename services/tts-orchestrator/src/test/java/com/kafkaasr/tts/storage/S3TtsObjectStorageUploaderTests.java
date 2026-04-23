@@ -8,9 +8,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.HexFormat;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -124,6 +128,94 @@ class S3TtsObjectStorageUploaderTests {
         assertTrue(signature.length() > 20);
     }
 
+    @Test
+    void routesPlaybackUrlToRegionalCdnWhenTenantMapped() {
+        TtsStorageProperties properties = storageProperties(Map.of(
+                "enabled", "true",
+                "provider", "s3",
+                "bucket", "tts-audio",
+                "keyPrefix", "tts-cache",
+                "cdnRegionRoutingEnabled", "true",
+                "cdnRegionTenantMap", "tenant-cn=cn",
+                "cdnRegionBaseUrls", "cn=https://cdn-cn.example.com/tts,us=https://cdn-us.example.com/tts"));
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().eTag("etag-4").build());
+
+        S3TtsObjectStorageUploader uploader = new S3TtsObjectStorageUploader(properties, s3Client);
+        TtsObjectStorageUploader.UploadResult result = uploader.upload(new TtsObjectStorageUploader.UploadRequest(
+                "tenant-cn",
+                "sess-4",
+                10L,
+                "tts:v1:route",
+                "audio/wav",
+                "route".getBytes(),
+                "https://fallback.example.com/tts.wav"));
+
+        assertEquals(
+                "https://cdn-cn.example.com/tts/tts-cache/tenant-cn/tts_v1_route.wav",
+                result.playbackUrl());
+    }
+
+    @Test
+    void fallsBackToOriginUrlWhenRegionalRouteMissing() {
+        TtsStorageProperties properties = storageProperties(Map.of(
+                "enabled", "true",
+                "provider", "s3",
+                "bucket", "tts-audio",
+                "keyPrefix", "tts-cache",
+                "publicBaseUrl", "https://cdn-default.example.com/tts",
+                "endpoint", "http://minio:9000",
+                "cdnRegionRoutingEnabled", "true",
+                "cdnRegionTenantMap", "tenant-cn=cn",
+                "cdnRegionBaseUrls", "us=https://cdn-us.example.com/tts",
+                "cdnOriginFallbackEnabled", "true"));
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().eTag("etag-5").build());
+
+        S3TtsObjectStorageUploader uploader = new S3TtsObjectStorageUploader(properties, s3Client);
+        TtsObjectStorageUploader.UploadResult result = uploader.upload(new TtsObjectStorageUploader.UploadRequest(
+                "tenant-cn",
+                "sess-5",
+                11L,
+                "tts:v1:fallback",
+                "audio/wav",
+                "fallback".getBytes(),
+                "https://fallback.example.com/tts.wav"));
+
+        assertEquals(
+                "http://minio:9000/tts-audio/tts-cache/tenant-cn/tts_v1_fallback.wav",
+                result.playbackUrl());
+    }
+
+    @Test
+    void buildsGlobalScopeShardedObjectKeyWhenEnabled() {
+        TtsStorageProperties properties = storageProperties(Map.of(
+                "enabled", "true",
+                "provider", "s3",
+                "bucket", "tts-audio",
+                "keyPrefix", "tts-cache",
+                "publicBaseUrl", "https://cdn.example.com/tts",
+                "cacheScope", "global",
+                "cacheShardEnabled", "true",
+                "cacheShardPrefixLength", "4"));
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().eTag("etag-6").build());
+
+        S3TtsObjectStorageUploader uploader = new S3TtsObjectStorageUploader(properties, s3Client);
+        TtsObjectStorageUploader.UploadResult result = uploader.upload(new TtsObjectStorageUploader.UploadRequest(
+                "tenant-a",
+                "sess-6",
+                12L,
+                "tts:v1:abc",
+                "audio/wav",
+                "shard".getBytes(),
+                "https://fallback.example.com/tts.wav"));
+
+        String shard = shardPrefix("tts:v1:abc", 4);
+        assertEquals("tts-cache/" + shard + "/tts_v1_abc.wav", result.objectKey());
+        assertEquals("https://cdn.example.com/tts/tts-cache/" + shard + "/tts_v1_abc.wav", result.playbackUrl());
+    }
+
     private static TtsStorageProperties storageProperties(Map<String, String> overrides) {
         TtsStorageProperties properties = new TtsStorageProperties();
         properties.setEnabled(Boolean.parseBoolean(overrides.getOrDefault("enabled", "true")));
@@ -135,12 +227,35 @@ class S3TtsObjectStorageUploaderTests {
         properties.setPublicBaseUrl(overrides.getOrDefault("publicBaseUrl", ""));
         properties.setObjectSuffix(overrides.getOrDefault("objectSuffix", "wav"));
         properties.setCacheControl(overrides.getOrDefault("cacheControl", "public, max-age=31536000, immutable"));
+        properties.setCdnRegionRoutingEnabled(Boolean.parseBoolean(overrides.getOrDefault("cdnRegionRoutingEnabled", "false")));
+        properties.setCdnRegionDefault(overrides.getOrDefault("cdnRegionDefault", ""));
+        properties.setCdnRegionTenantMap(overrides.getOrDefault("cdnRegionTenantMap", ""));
+        properties.setCdnRegionBaseUrls(overrides.getOrDefault("cdnRegionBaseUrls", ""));
+        properties.setCdnOriginFallbackEnabled(Boolean.parseBoolean(overrides.getOrDefault("cdnOriginFallbackEnabled", "true")));
+        properties.setCacheScope(overrides.getOrDefault("cacheScope", "tenant"));
+        properties.setCacheShardEnabled(Boolean.parseBoolean(overrides.getOrDefault("cacheShardEnabled", "false")));
+        properties.setCacheShardPrefixLength(Integer.parseInt(overrides.getOrDefault("cacheShardPrefixLength", "2")));
         properties.setCdnSigningEnabled(Boolean.parseBoolean(overrides.getOrDefault("cdnSigningEnabled", "false")));
         properties.setCdnSigningKey(overrides.getOrDefault("cdnSigningKey", ""));
         properties.setCdnSigningTtlSeconds(Long.parseLong(overrides.getOrDefault("cdnSigningTtlSeconds", "600")));
         properties.setCdnSigningExpiresParam(overrides.getOrDefault("cdnSigningExpiresParam", "expires"));
         properties.setCdnSigningSignatureParam(overrides.getOrDefault("cdnSigningSignatureParam", "sig"));
         return properties;
+    }
+
+    private static String shardPrefix(String value, int length) {
+        String hex = sha256Hex(value);
+        return hex.substring(0, length);
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
     }
 
     private static String extractQueryValue(String query, String key) {

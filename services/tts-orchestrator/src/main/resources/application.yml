@@ -100,6 +100,14 @@ tts:
     public-base-url: ${TTS_STORAGE_PUBLIC_BASE_URL:}
     object-suffix: ${TTS_STORAGE_OBJECT_SUFFIX:wav}
     cache-control: "${TTS_STORAGE_CACHE_CONTROL:public, max-age=31536000, immutable}"
+    cdn-region-routing-enabled: ${TTS_STORAGE_CDN_REGION_ROUTING_ENABLED:false}
+    cdn-region-default: ${TTS_STORAGE_CDN_REGION_DEFAULT:}
+    cdn-region-tenant-map: ${TTS_STORAGE_CDN_REGION_TENANT_MAP:}
+    cdn-region-base-urls: ${TTS_STORAGE_CDN_REGION_BASE_URLS:}
+    cdn-origin-fallback-enabled: ${TTS_STORAGE_CDN_ORIGIN_FALLBACK_ENABLED:true}
+    cache-scope: ${TTS_STORAGE_CACHE_SCOPE:tenant}
+    cache-shard-enabled: ${TTS_STORAGE_CACHE_SHARD_ENABLED:false}
+    cache-shard-prefix-length: ${TTS_STORAGE_CACHE_SHARD_PREFIX_LENGTH:2}
     cdn-signing-enabled: ${TTS_STORAGE_CDN_SIGNING_ENABLED:false}
     cdn-signing-key: ${TTS_STORAGE_CDN_SIGNING_KEY:}
     cdn-signing-ttl-seconds: ${TTS_STORAGE_CDN_SIGNING_TTL_SECONDS:600}
