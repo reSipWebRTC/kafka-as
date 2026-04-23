@@ -29,7 +29,9 @@
 - `tts-orchestrator` HTTP synthesis 适配已补齐生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
 - `speech-gateway` 下行链路已补充仓库内 E2E 稳定性验证（顺序、终态、重复/异常计数）
 - `deploy/monitoring` 已补齐 Prometheus/Grafana 资产（含 Kafka lag、延迟、错误率看板与告警规则）
-- `deploy/monitoring` 已补齐 Alertmanager 通知路由基线（default/warning/critical）
+- `deploy/monitoring` 已补齐 Alertmanager 通知路由基线（default/warning/critical + critical escalation）
+- `deploy/monitoring` 告警阈值与路由参数已支持模板化渲染（`alert-ops.env` + `tools/render-monitoring-config.sh`）
+- `tools/alert-ops-validate.sh` 已补齐告警运营化一键校验（阈值顺序、分级规则覆盖、通知链路完整性）并产出机器可读报告
 - `tools/loadtest-alert-closure.sh` 已升级为多场景（smoke/baseline/stress）压测聚合收口，并产出机器可读报告
 - `tools/fault-drill-closure.sh` 已补齐 ASR/Translation/TTS 故障演练收口，并产出机器可读报告
 - `tools/preprod-drill-closure.sh` 已补齐预发一键收口入口（loadtest/fault-drill/Alertmanager 恢复采样聚合）

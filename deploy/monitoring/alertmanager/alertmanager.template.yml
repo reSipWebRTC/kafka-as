@@ -8,23 +8,23 @@ route:
     - service
     - topic
     - area
-  group_wait: 30s
-  group_interval: 5m
-  repeat_interval: 2h
+  group_wait: {{ALERTMANAGER_ROUTE_GROUP_WAIT}}
+  group_interval: {{ALERTMANAGER_ROUTE_GROUP_INTERVAL}}
+  repeat_interval: {{ALERTMANAGER_ROUTE_REPEAT_INTERVAL}}
   routes:
     - receiver: oncall-critical
       matchers:
         - severity = "critical"
       continue: true
-      repeat_interval: 30m
+      repeat_interval: {{ALERTMANAGER_ROUTE_CRITICAL_REPEAT_INTERVAL}}
     - receiver: oncall-critical-escalation
       matchers:
         - severity = "critical"
-      repeat_interval: 30m
+      repeat_interval: {{ALERTMANAGER_ROUTE_CRITICAL_ESCALATION_REPEAT_INTERVAL}}
     - receiver: oncall-warning
       matchers:
         - severity = "warning"
-      repeat_interval: 2h
+      repeat_interval: {{ALERTMANAGER_ROUTE_WARNING_REPEAT_INTERVAL}}
 
 receivers:
   - name: oncall-default

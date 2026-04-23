@@ -227,6 +227,7 @@ Related docs:
 Run from repository root:
 
 ```bash
+tools/render-monitoring-config.sh
 tools/monitoring-up.sh
 ```
 
@@ -243,9 +244,31 @@ tools/monitoring-down.sh
 
 Assets:
 
+- `deploy/monitoring/alert-ops.env`
+- `deploy/monitoring/alertmanager/alertmanager.template.yml`
 - `deploy/monitoring/prometheus/prometheus.yml`
+- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.template.yml`
 - `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`
 - `deploy/monitoring/grafana/dashboards/kafka-asr-overview.json`
+
+### Validate alert operationalization
+
+Run from repository root:
+
+```bash
+tools/alert-ops-validate.sh
+```
+
+Outputs:
+
+- `build/reports/alert-ops/alert-ops-validation.json`
+- `build/reports/alert-ops/alert-ops-validation-summary.md`
+
+Useful flags:
+
+- `--env-file <path>`
+- `--skip-render`
+- `--report-dir <path>`
 
 ### Finish a feature branch
 
