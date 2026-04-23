@@ -174,6 +174,31 @@ Related docs:
 - `deploy/env/control-plane-iam.env.template`
 - `docs/runbooks/control-plane-iam-provider-integration.md`
 
+### Run control-plane auth failure drill (simulated)
+
+Run from repository root:
+
+```bash
+tools/control-plane-auth-failure-drill.sh
+```
+
+Outputs:
+
+- `build/reports/preprod-drill/control-plane-auth-failure-drill.json`
+- `build/reports/preprod-drill/control-plane-auth-failure-drill-summary.md`
+- `build/reports/preprod-drill/control-plane-auth-failure-*.log`
+
+Useful flags:
+
+- `--skip-tests` (only verify alert rules)
+- `--skip-alert-rules` (only run test-based failure drill)
+- `--report-dir <path>` (custom artifact output directory)
+
+Related docs:
+
+- `docs/runbooks/control-plane-iam-provider-integration.md`
+- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`
+
 ### Start local monitoring baseline
 
 Run from repository root:

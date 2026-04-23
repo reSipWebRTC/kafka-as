@@ -111,12 +111,34 @@ PREPROD_AUTH_DRILL_COMMAND="tools/control-plane-auth-drill.sh" \
 tools/preprod-drill-closure.sh
 ```
 
+### 5.1 失败策略演练（simulated/mock）
+
+在真实 IAM 环境尚未到位时，先跑 simulated 演练，验证失败策略与告警规则：
+
+```bash
+tools/control-plane-auth-failure-drill.sh
+```
+
+产物：
+
+- `build/reports/preprod-drill/control-plane-auth-failure-drill.json`
+- `build/reports/preprod-drill/control-plane-auth-failure-drill-summary.md`
+- `build/reports/preprod-drill/control-plane-auth-failure-*.log`
+
+覆盖项：
+
+1. JWKS 不可用分类（missing uri / remote jwk set fetch fail）
+2. JWKS 超时分类（connect/read timeout）
+3. `hybrid` 回退逻辑与 fallback 指标计数
+4. 关键告警规则存在性（deny ratio / external unavailable / hybrid fallback）
+
 ## 6. 通过标准
 
 1. 预检 `overallPass=true`
 2. `control-plane-auth-drill` `overallPass=true`
 3. `preprod-drill-closure` `overallPass=true`
-4. 关键告警无持续异常：
+4. `control-plane-auth-failure-drill`（simulated）`overallPass=true`
+5. 关键告警无持续异常：
    - `ControlPlaneAuthDenyRateHigh`
    - `ControlPlaneExternalIamUnavailableSpike`
    - `ControlPlaneHybridFallbackSpike`
