@@ -6,7 +6,7 @@ Current scope:
 
 - Spring Boot module scaffold
 - HTTP API to upsert and query tenant policy
-- configurable bearer token auth for `/api/v1/tenants/**`
+- configurable bearer token authz/authn for `/api/v1/tenants/**` (read/write + tenant scope)
 - Redis-backed repository behind an interface for future storage evolution
 - publish `tenant.policy.changed` after successful policy upsert
 

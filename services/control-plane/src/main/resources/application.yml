@@ -42,6 +42,7 @@ control:
   auth:
     enabled: ${CONTROL_AUTH_ENABLED:false}
     tokens: ${CONTROL_AUTH_TOKENS:}
+    credentials: []
   kafka:
     enabled: ${CONTROL_KAFKA_ENABLED:false}
     policy-changed-topic: ${CONTROL_POLICY_CHANGED_TOPIC:tenant.policy.changed}

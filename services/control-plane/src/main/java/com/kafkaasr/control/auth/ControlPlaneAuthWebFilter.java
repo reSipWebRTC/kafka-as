@@ -9,6 +9,7 @@ import java.util.Set;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -24,6 +25,9 @@ import reactor.core.publisher.Mono;
 public class ControlPlaneAuthWebFilter implements WebFilter {
 
     private static final String AUTH_INVALID_TOKEN_CODE = "AUTH_INVALID_TOKEN";
+    private static final String AUTH_FORBIDDEN_CODE = "AUTH_FORBIDDEN";
+    private static final String INVALID_TOKEN_MESSAGE = "Invalid or missing access token";
+    private static final String FORBIDDEN_MESSAGE = "Insufficient permissions for tenant policy operation";
     private static final String BEARER_PREFIX = "bearer ";
     private static final String TENANT_API_PREFIX = "/api/v1/tenants/";
 
@@ -41,29 +45,54 @@ public class ControlPlaneAuthWebFilter implements WebFilter {
             return chain.filter(exchange);
         }
 
-        if (isAuthorized(exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION))) {
+        AuthDecision decision = authorize(exchange);
+        if (decision.outcome == AuthOutcome.ALLOW) {
             return chain.filter(exchange);
         }
 
+        if (decision.outcome == AuthOutcome.FORBIDDEN) {
+            return rejectForbidden(exchange.getResponse(), decision.tenantId);
+        }
         return rejectUnauthorized(exchange.getResponse());
     }
 
     private boolean requiresAuth(ServerWebExchange exchange) {
+        if (HttpMethod.OPTIONS.equals(exchange.getRequest().getMethod())) {
+            return false;
+        }
         return exchange.getRequest().getPath().value().startsWith(TENANT_API_PREFIX);
     }
 
-    private boolean isAuthorized(String authorizationHeader) {
+    private AuthDecision authorize(ServerWebExchange exchange) {
         if (!authProperties.isEnabled()) {
-            return true;
+            return AuthDecision.allow(extractTenantId(exchange));
         }
 
-        Set<String> allowedTokens = authProperties.tokenSet();
-        if (allowedTokens.isEmpty()) {
-            return false;
+        String token = extractBearerToken(exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION));
+        if (token == null) {
+            return AuthDecision.unauthorized(extractTenantId(exchange));
         }
 
-        String token = extractBearerToken(authorizationHeader);
-        return token != null && allowedTokens.contains(token);
+        Set<String> legacyFullAccessTokens = authProperties.tokenSet();
+        if (legacyFullAccessTokens.contains(token)) {
+            return AuthDecision.allow(extractTenantId(exchange));
+        }
+
+        ControlPlaneAuthProperties.Credential credential = authProperties.findCredential(token).orElse(null);
+        if (credential == null) {
+            return AuthDecision.unauthorized(extractTenantId(exchange));
+        }
+
+        String tenantId = extractTenantId(exchange);
+        if (!credential.allowsTenant(tenantId)) {
+            return AuthDecision.forbidden(tenantId);
+        }
+
+        if (!hasPermissionForMethod(credential, exchange.getRequest().getMethod())) {
+            return AuthDecision.forbidden(tenantId);
+        }
+
+        return AuthDecision.allow(tenantId);
     }
 
     private String extractBearerToken(String authorizationHeader) {
@@ -83,23 +112,96 @@ public class ControlPlaneAuthWebFilter implements WebFilter {
         return token;
     }
 
+    private boolean hasPermissionForMethod(ControlPlaneAuthProperties.Credential credential, HttpMethod method) {
+        if (HttpMethod.GET.equals(method) || HttpMethod.HEAD.equals(method)) {
+            return credential.isRead();
+        }
+        return credential.isWrite();
+    }
+
+    private String extractTenantId(ServerWebExchange exchange) {
+        String path = exchange.getRequest().getPath().value();
+        if (!path.startsWith(TENANT_API_PREFIX)) {
+            return "";
+        }
+        String remainder = path.substring(TENANT_API_PREFIX.length());
+        int slash = remainder.indexOf('/');
+        String tenantId = slash >= 0 ? remainder.substring(0, slash) : remainder;
+        return tenantId == null ? "" : tenantId.trim();
+    }
+
     private Mono<Void> rejectUnauthorized(ServerHttpResponse response) {
-        response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        return writeError(
+                response,
+                HttpStatus.UNAUTHORIZED,
+                AUTH_INVALID_TOKEN_CODE,
+                INVALID_TOKEN_MESSAGE,
+                "");
+    }
+
+    private Mono<Void> rejectForbidden(ServerHttpResponse response, String tenantId) {
+        return writeError(
+                response,
+                HttpStatus.FORBIDDEN,
+                AUTH_FORBIDDEN_CODE,
+                FORBIDDEN_MESSAGE,
+                tenantId == null ? "" : tenantId);
+    }
+
+    private Mono<Void> writeError(
+            ServerHttpResponse response,
+            HttpStatus status,
+            String code,
+            String message,
+            String tenantId) {
+        response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
-        byte[] payload = serializeErrorPayload();
+        byte[] payload = serializeErrorPayload(code, message, tenantId);
         return response.writeWith(Mono.just(response.bufferFactory().wrap(payload)));
     }
 
-    private byte[] serializeErrorPayload() {
+    private byte[] serializeErrorPayload(String code, String message, String tenantId) {
         try {
             return objectMapper.writeValueAsBytes(new ControlPlaneErrorResponse(
-                    AUTH_INVALID_TOKEN_CODE,
-                    "Invalid or missing access token",
-                    ""));
+                    code,
+                    message,
+                    tenantId));
         } catch (JsonProcessingException exception) {
-            return "{\"code\":\"AUTH_INVALID_TOKEN\",\"message\":\"Invalid or missing access token\",\"tenantId\":\"\"}"
+            String safeCode = code.replace("\"", "");
+            String safeMessage = message.replace("\"", "");
+            String safeTenantId = (tenantId == null ? "" : tenantId).replace("\"", "");
+            return ("{\"code\":\"" + safeCode + "\",\"message\":\"" + safeMessage + "\",\"tenantId\":\""
+                            + safeTenantId + "\"}")
                     .getBytes(StandardCharsets.UTF_8);
+        }
+    }
+
+    private enum AuthOutcome {
+        ALLOW,
+        UNAUTHORIZED,
+        FORBIDDEN
+    }
+
+    private static final class AuthDecision {
+        private final AuthOutcome outcome;
+        private final String tenantId;
+
+        private AuthDecision(AuthOutcome outcome, String tenantId) {
+            this.outcome = outcome;
+            this.tenantId = tenantId == null ? "" : tenantId;
+        }
+
+        private static AuthDecision allow(String tenantId) {
+            return new AuthDecision(AuthOutcome.ALLOW, tenantId);
+        }
+
+        private static AuthDecision unauthorized(String tenantId) {
+            return new AuthDecision(AuthOutcome.UNAUTHORIZED, tenantId);
+        }
+
+        private static AuthDecision forbidden(String tenantId) {
+            return new AuthDecision(AuthOutcome.FORBIDDEN, tenantId);
         }
     }
 }
