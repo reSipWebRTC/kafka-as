@@ -9,7 +9,7 @@
 - 架构、服务边界、事件契约和协议文档基线
 - `api/protobuf` 与 `api/json-schema` 契约文件
 - 6 个核心服务加 `control-plane` 的工程骨架
-- 从 `audio.ingress.raw` 到 `tts.request` 的主链路（默认占位实现 + provider 适配入口，ASR 含 FunASR mode，Translation 含 OpenAI mode，TTS 含 synthesis mode）
+- 从 `audio.ingress.raw` 到 `tts.request` 的主链路（默认占位实现 + provider 适配入口，ASR 含 FunASR mode 与 VAD 静音切段基线，Translation 含 OpenAI mode，TTS 含 synthesis mode）
 - Redis 会话状态和租户策略的最小落地
 - 统一的管理端点、Tracing 和第一版服务指标
 - `deploy/monitoring` 下 Prometheus/Grafana/Alertmanager 看板、告警与通知路由基线

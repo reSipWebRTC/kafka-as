@@ -61,6 +61,12 @@ asr:
     compensation-topic: ${ASR_COMPENSATION_TOPIC:platform.compensation}
   inference:
     mode: ${ASR_INFERENCE_MODE:placeholder}
+    vad:
+      enabled: ${ASR_VAD_ENABLED:true}
+      silence-frames-to-finalize: ${ASR_VAD_SILENCE_FRAMES_TO_FINALIZE:8}
+      min-active-frames-per-segment: ${ASR_VAD_MIN_ACTIVE_FRAMES_PER_SEGMENT:2}
+      silence-amplitude-threshold: ${ASR_VAD_SILENCE_AMPLITUDE_THRESHOLD:512}
+      audio-codec: ${ASR_VAD_AUDIO_CODEC:pcm16le}
     http:
       endpoint: ${ASR_INFERENCE_HTTP_ENDPOINT:}
       path: ${ASR_INFERENCE_HTTP_PATH:/v1/asr/infer}

@@ -29,6 +29,7 @@
 - `session-orchestrator` 查询租户策略时已落地第一版熔断与缓存回退（支持 fail-open/fail-closed）
 - 下行 `asr.partial -> subtitle.partial`、`translation.result -> subtitle.final`、`session.control(CLOSED) -> session.closed` 已有仓库内 E2E 稳定性回归测试
 - `session.closed` 触发后下行通道会终止并丢弃晚到消息
+- `asr-worker` 已支持基于静音帧阈值的 VAD 切段终态发布（`asr.final`）
 
 新增说明：
 
@@ -88,7 +89,7 @@
 当前实现语义（`asr-worker`）：
 
 - 非稳定识别结果发布为 `asr.partial`
-- 稳定结果或 `endOfStream=true` 的终态识别结果发布为 `asr.final`
+- 稳定结果、`endOfStream=true`，或命中 VAD 静音切段阈值的结果发布为 `asr.final`
 
 完整 JSON Schema 与 Protobuf 见第 8 节。
 

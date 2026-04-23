@@ -182,8 +182,9 @@ flowchart TB
 
 当前基线：
 
-- 已实现默认 placeholder + 可切换 HTTP 适配的 `audio.ingress.raw -> asr.partial / asr.final`
-- 未实现 FunASR、VAD 分段
+- 已实现默认 placeholder + 可切换 HTTP/FunASR 适配的 `audio.ingress.raw -> asr.partial / asr.final`
+- 已实现会话级 VAD 静音切段触发 `asr.final`
+- 未实现 FunASR 生产联调与高级上下文管理
 
 ### Translation Worker
 
