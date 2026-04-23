@@ -24,21 +24,40 @@ public class AsrPipelineService {
     private final AsrInferenceEngine inferenceEngine;
     private final AsrKafkaProperties kafkaProperties;
     private final Clock clock;
+    private final AsrVadSegmenter vadSegmenter;
 
     @Autowired
     public AsrPipelineService(
             AsrInferenceEngine inferenceEngine,
-            AsrKafkaProperties kafkaProperties) {
-        this(inferenceEngine, kafkaProperties, Clock.systemUTC());
+            AsrKafkaProperties kafkaProperties,
+            AsrInferenceProperties inferenceProperties) {
+        this(
+                inferenceEngine,
+                kafkaProperties,
+                Clock.systemUTC(),
+                new AsrVadSegmenter(resolveVadProperties(inferenceProperties)));
     }
 
     AsrPipelineService(
             AsrInferenceEngine inferenceEngine,
             AsrKafkaProperties kafkaProperties,
             Clock clock) {
+        this(
+                inferenceEngine,
+                kafkaProperties,
+                clock,
+                new AsrVadSegmenter(new AsrInferenceProperties.Vad()));
+    }
+
+    AsrPipelineService(
+            AsrInferenceEngine inferenceEngine,
+            AsrKafkaProperties kafkaProperties,
+            Clock clock,
+            AsrVadSegmenter vadSegmenter) {
         this.inferenceEngine = inferenceEngine;
         this.kafkaProperties = kafkaProperties;
         this.clock = clock;
+        this.vadSegmenter = vadSegmenter;
     }
 
     public record AsrPipelineEvents(
@@ -54,7 +73,22 @@ public class AsrPipelineService {
         String text = coalesceText(inferenceResult.text());
         String language = normalizeLanguage(inferenceResult.language());
         double confidence = normalizeConfidence(inferenceResult.confidence());
-        boolean emitFinal = shouldEmitFinal(ingressEvent, inferenceResult);
+        boolean endOfStream = ingressEvent.payload() != null && ingressEvent.payload().endOfStream();
+        boolean stableResult = inferenceResult.stable();
+        boolean emitFinal = stableResult || endOfStream;
+        AsrVadSegmenter.VadDecision vadDecision = AsrVadSegmenter.VadDecision.noFinal();
+
+        if (!emitFinal) {
+            vadDecision = vadSegmenter.evaluate(ingressEvent, text);
+            emitFinal = vadDecision.emitFinal();
+            if (emitFinal && text.isBlank()) {
+                text = coalesceText(vadDecision.finalText());
+            }
+        }
+
+        if (stableResult || endOfStream) {
+            vadSegmenter.clearSession(ingressEvent.sessionId());
+        }
 
         AsrPartialEvent partialEvent = null;
         AsrFinalEvent finalEvent = null;
@@ -128,13 +162,6 @@ public class AsrPipelineService {
                         true));
     }
 
-    private boolean shouldEmitFinal(
-            AudioIngressRawEvent ingressEvent,
-            AsrInferenceEngine.AsrInferenceResult inferenceResult) {
-        boolean endOfStream = ingressEvent.payload() != null && ingressEvent.payload().endOfStream();
-        return inferenceResult.stable() || endOfStream;
-    }
-
     private String idempotencyKey(AudioIngressRawEvent ingressEvent, String eventType) {
         return ingressEvent.sessionId() + ":" + eventType + ":" + ingressEvent.seq();
     }
@@ -186,5 +213,12 @@ public class AsrPipelineService {
 
     private String prefixedId(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private static AsrInferenceProperties.Vad resolveVadProperties(AsrInferenceProperties inferenceProperties) {
+        if (inferenceProperties == null || inferenceProperties.getVad() == null) {
+            return new AsrInferenceProperties.Vad();
+        }
+        return inferenceProperties.getVad();
     }
 }

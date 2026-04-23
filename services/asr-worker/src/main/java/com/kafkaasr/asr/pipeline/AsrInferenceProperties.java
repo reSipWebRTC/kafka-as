@@ -19,6 +19,9 @@ public class AsrInferenceProperties {
     @Valid
     private Funasr funasr = new Funasr();
 
+    @Valid
+    private Vad vad = new Vad();
+
     public String getMode() {
         return mode;
     }
@@ -41,6 +44,14 @@ public class AsrInferenceProperties {
 
     public void setFunasr(Funasr funasr) {
         this.funasr = funasr;
+    }
+
+    public Vad getVad() {
+        return vad;
+    }
+
+    public void setVad(Vad vad) {
+        this.vad = vad;
     }
 
     public static class Http {
@@ -194,6 +205,63 @@ public class AsrInferenceProperties {
 
         public void setEnableInverseTextNormalization(boolean enableInverseTextNormalization) {
             this.enableInverseTextNormalization = enableInverseTextNormalization;
+        }
+    }
+
+    public static class Vad {
+
+        private boolean enabled = true;
+
+        @Min(1)
+        private int silenceFramesToFinalize = 8;
+
+        @Min(1)
+        private int minActiveFramesPerSegment = 2;
+
+        @Min(0)
+        private int silenceAmplitudeThreshold = 512;
+
+        @NotBlank
+        private String audioCodec = "pcm16le";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getSilenceFramesToFinalize() {
+            return silenceFramesToFinalize;
+        }
+
+        public void setSilenceFramesToFinalize(int silenceFramesToFinalize) {
+            this.silenceFramesToFinalize = silenceFramesToFinalize;
+        }
+
+        public int getMinActiveFramesPerSegment() {
+            return minActiveFramesPerSegment;
+        }
+
+        public void setMinActiveFramesPerSegment(int minActiveFramesPerSegment) {
+            this.minActiveFramesPerSegment = minActiveFramesPerSegment;
+        }
+
+        public int getSilenceAmplitudeThreshold() {
+            return silenceAmplitudeThreshold;
+        }
+
+        public void setSilenceAmplitudeThreshold(int silenceAmplitudeThreshold) {
+            this.silenceAmplitudeThreshold = silenceAmplitudeThreshold;
+        }
+
+        public String getAudioCodec() {
+            return audioCodec;
+        }
+
+        public void setAudioCodec(String audioCodec) {
+            this.audioCodec = audioCodec;
         }
     }
 }
