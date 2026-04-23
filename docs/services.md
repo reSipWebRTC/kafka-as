@@ -168,6 +168,7 @@
 - 租户策略的 GET / PUT API
 - `/api/v1/tenants/**` 的 Bearer Token 鉴权与授权（读/写权限 + 租户范围）
 - `control.auth.mode` 模式切换（`static` / `external-iam` / `hybrid`）与 JWKS 外部 IAM 校验后端骨架
+- 外部 IAM JWKS 解码连接/读取超时配置（`control.auth.external.connect-timeout-ms` / `read-timeout-ms`）
 - 鉴权决策/耗时/回退指标（`controlplane.auth.decision.total` / `controlplane.auth.decision.duration` / `controlplane.auth.hybrid.fallback.total`）
 - Redis 持久化抽象
 - 版本化更新语义

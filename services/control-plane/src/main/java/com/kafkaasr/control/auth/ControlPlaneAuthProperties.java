@@ -142,6 +142,9 @@ public class ControlPlaneAuthProperties {
 
     public static class External {
 
+        private static final int DEFAULT_CONNECT_TIMEOUT_MS = 1000;
+        private static final int DEFAULT_READ_TIMEOUT_MS = 1000;
+
         private String issuer = "";
         private String audience = "";
         private String jwksUri = "";
@@ -149,6 +152,8 @@ public class ControlPlaneAuthProperties {
         private String tenantClaim = "tenant_ids";
         private String readPermission = "control.policy.read";
         private String writePermission = "control.policy.write";
+        private int connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS;
+        private int readTimeoutMs = DEFAULT_READ_TIMEOUT_MS;
 
         public String getIssuer() {
             return issuer;
@@ -204,6 +209,30 @@ public class ControlPlaneAuthProperties {
 
         public void setWritePermission(String writePermission) {
             this.writePermission = writePermission == null ? "control.policy.write" : writePermission;
+        }
+
+        public int getConnectTimeoutMs() {
+            return connectTimeoutMs;
+        }
+
+        public void setConnectTimeoutMs(int connectTimeoutMs) {
+            if (connectTimeoutMs <= 0) {
+                this.connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS;
+                return;
+            }
+            this.connectTimeoutMs = connectTimeoutMs;
+        }
+
+        public int getReadTimeoutMs() {
+            return readTimeoutMs;
+        }
+
+        public void setReadTimeoutMs(int readTimeoutMs) {
+            if (readTimeoutMs <= 0) {
+                this.readTimeoutMs = DEFAULT_READ_TIMEOUT_MS;
+                return;
+            }
+            this.readTimeoutMs = readTimeoutMs;
         }
     }
 }

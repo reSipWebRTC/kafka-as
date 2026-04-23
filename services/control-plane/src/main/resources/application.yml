@@ -52,6 +52,8 @@ control:
       tenant-claim: ${CONTROL_AUTH_EXTERNAL_TENANT_CLAIM:tenant_ids}
       read-permission: ${CONTROL_AUTH_EXTERNAL_READ_PERMISSION:control.policy.read}
       write-permission: ${CONTROL_AUTH_EXTERNAL_WRITE_PERMISSION:control.policy.write}
+      connect-timeout-ms: ${CONTROL_AUTH_EXTERNAL_CONNECT_TIMEOUT_MS:1000}
+      read-timeout-ms: ${CONTROL_AUTH_EXTERNAL_READ_TIMEOUT_MS:1000}
   kafka:
     enabled: ${CONTROL_KAFKA_ENABLED:false}
     policy-changed-topic: ${CONTROL_POLICY_CHANGED_TOPIC:tenant.policy.changed}

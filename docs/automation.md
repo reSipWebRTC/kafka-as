@@ -150,6 +150,30 @@ Related docs:
 - `docs/reports/loadtest/2026-04-23-preprod-closure.md`
 - `docs/runbooks/loadtest-alert-closure.md`
 
+### Run control-plane IAM mock drill
+
+Run from repository root or from a feature worktree:
+
+```bash
+tools/mock-iam-rbac-drill.sh
+```
+
+Outputs:
+
+- `build/reports/mock-iam-drill/mock-iam-rbac-drill.json`
+- `build/reports/mock-iam-drill/mock-iam-rbac-drill-summary.md`
+- `build/reports/mock-iam-drill/mock-iam-*.log`
+
+Notes:
+
+- Evidence mode is `simulated/mock`.
+- This validates local JWKS/JWT chain, claim matrix, failure drills, and alert-rule presence checks.
+- It does not replace real preprod IAM integration evidence.
+
+Related docs:
+
+- `docs/runbooks/control-plane-iam-mock-drill.md`
+
 ### Start local monitoring baseline
 
 Run from repository root:

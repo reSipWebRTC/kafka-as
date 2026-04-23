@@ -1,5 +1,6 @@
 package com.kafkaasr.control.auth;
 
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
@@ -11,6 +12,8 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.util.StringUtils;
 
 class JwksExternalIamTokenDecoder implements ExternalIamTokenDecoder {
@@ -50,7 +53,9 @@ class JwksExternalIamTokenDecoder implements ExternalIamTokenDecoder {
                     null);
         }
 
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(externalProperties.getJwksUri().trim()).build();
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(externalProperties.getJwksUri().trim())
+                .restOperations(restTemplateWithTimeouts())
+                .build();
         decoder.setJwtValidator(buildValidator());
         return decoder;
     }
@@ -80,9 +85,18 @@ class JwksExternalIamTokenDecoder implements ExternalIamTokenDecoder {
         if (message == null) {
             return false;
         }
-        return message.contains("retrieve remote JWK set")
-                || message.contains("Connection refused")
-                || message.contains("Read timed out")
-                || message.contains("I/O error");
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("retrieve remote jwk set")
+                || normalized.contains("connection refused")
+                || normalized.contains("timed out")
+                || normalized.contains("i/o error")
+                || normalized.contains("connection reset");
+    }
+
+    private RestTemplate restTemplateWithTimeouts() {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(externalProperties.getConnectTimeoutMs());
+        requestFactory.setReadTimeout(externalProperties.getReadTimeoutMs());
+        return new RestTemplate(requestFactory);
     }
 }
