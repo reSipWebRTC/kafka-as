@@ -47,6 +47,7 @@ asr:
     request-timeout: ${ASR_CONTROL_PLANE_REQUEST_TIMEOUT:800ms}
     policy-cache-ttl: ${ASR_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
     fallback-fail-open: ${ASR_CONTROL_PLANE_FALLBACK_FAIL_OPEN:true}
+    policy-changed-topic: ${ASR_CONTROL_PLANE_POLICY_CHANGED_TOPIC:tenant.policy.changed}
   kafka:
     enabled: ${ASR_KAFKA_ENABLED:true}
     audio-ingress-topic: ${ASR_AUDIO_INGRESS_TOPIC:audio.ingress.raw}

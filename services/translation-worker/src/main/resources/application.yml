@@ -47,6 +47,7 @@ translation:
     request-timeout: ${TRANSLATION_CONTROL_PLANE_REQUEST_TIMEOUT:800ms}
     policy-cache-ttl: ${TRANSLATION_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
     fallback-fail-open: ${TRANSLATION_CONTROL_PLANE_FALLBACK_FAIL_OPEN:true}
+    policy-changed-topic: ${TRANSLATION_CONTROL_PLANE_POLICY_CHANGED_TOPIC:tenant.policy.changed}
   kafka:
     enabled: ${TRANSLATION_KAFKA_ENABLED:true}
     asr-final-topic: ${TRANSLATION_ASR_FINAL_TOPIC:asr.final}

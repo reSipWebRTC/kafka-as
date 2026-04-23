@@ -96,6 +96,18 @@ message TtsRequestEvent {
   TtsRequestPayload payload = 2;
 }
 
+message TenantPolicyChangedPayload {
+  string tenant_id = 1;
+  uint64 policy_version = 2;
+  int64 updated_at_ms = 3;
+  string operation = 4;
+}
+
+message TenantPolicyChangedEvent {
+  EventEnvelope envelope = 1;
+  TenantPolicyChangedPayload payload = 2;
+}
+
 message WsSessionStart {
   string session_id = 1;
   string tenant_id = 2;

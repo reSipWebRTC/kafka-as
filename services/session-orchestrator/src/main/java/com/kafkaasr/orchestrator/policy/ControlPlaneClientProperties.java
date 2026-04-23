@@ -25,6 +25,7 @@ public class ControlPlaneClientProperties {
     private Duration policyCacheTtl = Duration.ofSeconds(30);
 
     private boolean fallbackFailOpen = false;
+    private String policyChangedTopic = "tenant.policy.changed";
 
     public String getBaseUrl() {
         return baseUrl;
@@ -72,5 +73,13 @@ public class ControlPlaneClientProperties {
 
     public void setFallbackFailOpen(boolean fallbackFailOpen) {
         this.fallbackFailOpen = fallbackFailOpen;
+    }
+
+    public String getPolicyChangedTopic() {
+        return policyChangedTopic;
+    }
+
+    public void setPolicyChangedTopic(String policyChangedTopic) {
+        this.policyChangedTopic = policyChangedTopic;
     }
 }

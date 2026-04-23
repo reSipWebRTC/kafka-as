@@ -5,6 +5,11 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 server:
   port: 8085
@@ -37,6 +42,10 @@ control:
   auth:
     enabled: ${CONTROL_AUTH_ENABLED:false}
     tokens: ${CONTROL_AUTH_TOKENS:}
+  kafka:
+    enabled: ${CONTROL_KAFKA_ENABLED:false}
+    policy-changed-topic: ${CONTROL_POLICY_CHANGED_TOPIC:tenant.policy.changed}
+    producer-id: ${CONTROL_KAFKA_PRODUCER_ID:control-plane}
   policy-store:
     key-prefix: ${CONTROL_POLICY_STORE_KEY_PREFIX:control:tenant-policy:}
     ttl: ${CONTROL_POLICY_STORE_TTL:12h}

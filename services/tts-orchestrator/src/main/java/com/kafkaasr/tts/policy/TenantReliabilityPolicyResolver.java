@@ -86,6 +86,13 @@ public class TenantReliabilityPolicyResolver {
                 kafkaProperties.getDlqTopicSuffix());
     }
 
+    public void invalidateTenant(String tenantId) {
+        if (tenantId == null || tenantId.isBlank()) {
+            return;
+        }
+        cachedPolicies.remove(tenantId);
+    }
+
     private TenantReliabilityPolicy fallback(
             String tenantId,
             CachedPolicy cached,

@@ -19,6 +19,7 @@ public class TtsControlPlaneProperties {
     private Duration policyCacheTtl = Duration.ofSeconds(30);
 
     private boolean fallbackFailOpen = true;
+    private String policyChangedTopic = "tenant.policy.changed";
 
     public boolean isEnabled() {
         return enabled;
@@ -58,5 +59,13 @@ public class TtsControlPlaneProperties {
 
     public void setFallbackFailOpen(boolean fallbackFailOpen) {
         this.fallbackFailOpen = fallbackFailOpen;
+    }
+
+    public String getPolicyChangedTopic() {
+        return policyChangedTopic;
+    }
+
+    public void setPolicyChangedTopic(String policyChangedTopic) {
+        this.policyChangedTopic = policyChangedTopic;
     }
 }

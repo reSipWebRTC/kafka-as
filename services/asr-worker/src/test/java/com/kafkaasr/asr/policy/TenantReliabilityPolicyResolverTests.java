@@ -78,6 +78,28 @@ class TenantReliabilityPolicyResolverTests {
         assertEquals(1, exchangeFunction.calls());
     }
 
+    @Test
+    void invalidateTenantClearsCachedPolicyAndForcesRefresh() {
+        QueueExchangeFunction exchangeFunction = new QueueExchangeFunction();
+        exchangeFunction.enqueue(successResponse(4, 350L, ".tenant-a.dlq", true, 60000L));
+        exchangeFunction.enqueue(successResponse(6, 650L, ".tenant-a.v2.dlq", true, 60000L));
+
+        TenantReliabilityPolicyResolver resolver = new TenantReliabilityPolicyResolver(
+                WebClient.builder().exchangeFunction(exchangeFunction).build(),
+                controlPlaneProperties(),
+                kafkaDefaults(),
+                Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
+
+        TenantReliabilityPolicy first = resolver.resolve("tenant-a");
+        resolver.invalidateTenant("tenant-a");
+        TenantReliabilityPolicy second = resolver.resolve("tenant-a");
+
+        assertEquals(4, first.retryMaxAttempts());
+        assertEquals(6, second.retryMaxAttempts());
+        assertEquals(".tenant-a.v2.dlq", second.dlqTopicSuffix());
+        assertEquals(2, exchangeFunction.calls());
+    }
+
     private static AsrControlPlaneProperties controlPlaneProperties() {
         AsrControlPlaneProperties properties = new AsrControlPlaneProperties();
         properties.setEnabled(true);

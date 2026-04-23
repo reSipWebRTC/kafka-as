@@ -47,6 +47,7 @@ tts:
     request-timeout: ${TTS_CONTROL_PLANE_REQUEST_TIMEOUT:800ms}
     policy-cache-ttl: ${TTS_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
     fallback-fail-open: ${TTS_CONTROL_PLANE_FALLBACK_FAIL_OPEN:true}
+    policy-changed-topic: ${TTS_CONTROL_PLANE_POLICY_CHANGED_TOPIC:tenant.policy.changed}
   kafka:
     enabled: ${TTS_KAFKA_ENABLED:true}
     translation-result-topic: ${TTS_TRANSLATION_RESULT_TOPIC:translation.result}

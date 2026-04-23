@@ -49,10 +49,11 @@
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 编排输出 |
 | `tts.chunk` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 流式音频分片输出 |
 | `tts.ready` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 回放就绪输出 |
+| `tenant.policy.changed` | `control-plane` | `session-orchestrator`、`asr-worker`、`translation-worker`、`tts-orchestrator` | `tenantId` | 租户策略变更通知，用于动态策略分发 |
 
 说明：
 
-- 当前所有已落地 publisher 都按 `sessionId` 发送 Kafka Key
+- 主链路 Topic 继续按 `sessionId` 发送 Kafka Key，治理事件 `tenant.policy.changed` 使用 `tenantId` 作为 Key
 - `translation-worker` 当前直接消费 `asr.final`，尚未引入独立 `translation.request`
 - `tts-orchestrator` 当前会从同一输入事件同步产出 `tts.request`、`tts.chunk`、`tts.ready`
 - `asr-worker`、`translation-worker`、`tts-orchestrator`、`speech-gateway` 下行消费者已接入固定重试 + `<source-topic>.dlq` 死信回退
@@ -71,6 +72,10 @@
 | `platform.dlq` | 死信队列 | 补偿与排障 |
 
 这些 Topic 在文档中应该明确标记为“计划扩展”，不要写成当前已上线能力。
+
+补充说明：
+
+- `tenant.policy.changed` 的 JSON Schema / Protobuf 契约、`control-plane` 发布以及运行时服务消费刷新均已落地。
 
 ## 5. 分区与顺序策略
 
@@ -189,6 +194,7 @@ FAILED
 3. `asr-worker` 消费 `audio.ingress.raw` 并产出 `asr.partial` 与 `asr.final`
 4. `translation-worker` 消费 `asr.final` 并发布 `translation.result`
 5. `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`、`tts.chunk`、`tts.ready`
+6. `control-plane` 在策略 upsert 后发布 `tenant.policy.changed`，运行时服务消费后立即失效本地策略缓存
 
 仍未打通的部分：
 
