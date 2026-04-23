@@ -17,7 +17,7 @@
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、发布 `asr.partial` / `asr.final` | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result`，OpenAI 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
-| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control` 与 URL 签名，HTTP synthesis 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
+| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control`/URL 签名/区域路由/回源回退，HTTP synthesis 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
 | `control-plane` | 已落地骨架 | 租户策略 HTTP API、可配置 Bearer Token 鉴权/授权（读写 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 鉴权后端切换、JWKS 外部 IAM 校验后端骨架、Redis 存储、版本化 upsert、`tenant.policy.changed` 发布 | Redis、Kafka |
 
 基础设施：
@@ -149,6 +149,8 @@
 - `tts.request` / `tts.chunk` / `tts.ready` 发布
 - `tts.ready` 对应音频对象上传（`tts.storage`：`none` / `s3`，支持 MinIO path-style）
 - 上传对象 `cache-control` 策略和 `expires/sig` 回放 URL 签名（配置化）
+- 按租户区域映射的 CDN 路由与区域缺失时 origin 回退（配置化）
+- 可配置 cache scope（tenant/global）与 shard 路径前缀（缓存命中优化）
 - 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
 - 消费 `tenant.policy.changed` 并刷新本地策略缓存
 - `idempotencyKey` 判重与重复失败补偿信号基线
@@ -156,7 +158,7 @@
 当前未实现：
 
 - TTS synthesis 真机容量/故障演练与模型侧运行保障（真实配额、限流与故障演练）
-- 对象存储高可用治理、CDN 区域路由与高级缓存治理
+- 对象存储高可用治理与更高级 CDN 缓存治理
 
 ### control-plane
 
