@@ -150,6 +150,78 @@ Related docs:
 - `docs/reports/loadtest/2026-04-23-preprod-closure.md`
 - `docs/runbooks/loadtest-alert-closure.md`
 
+### Run control-plane IAM precheck
+
+Run from repository root:
+
+```bash
+tools/control-plane-iam-precheck.sh --env-file .secrets/control-plane-iam.env
+```
+
+Outputs:
+
+- `build/reports/control-plane-iam-precheck/control-plane-iam-precheck.json`
+- `build/reports/control-plane-iam-precheck/control-plane-iam-precheck-summary.md`
+
+Useful flags:
+
+- `--skip-network` (validate config only)
+- `--allow-placeholder-values` (template smoke check)
+- `--print-env` (write resolved env snapshot under report dir)
+
+Related docs:
+
+- `deploy/env/control-plane-iam.env.template`
+- `docs/runbooks/control-plane-iam-provider-integration.md`
+
+### Run control-plane local JWKS/JWT drill (simulated)
+
+Run from repository root:
+
+```bash
+tools/control-plane-jwks-jwt-drill.sh
+```
+
+Outputs:
+
+- `build/reports/preprod-drill/control-plane-jwks-jwt-drill.json`
+- `build/reports/preprod-drill/control-plane-jwks-jwt-drill-summary.md`
+- `build/reports/preprod-drill/control-plane-jwks-jwt-*.log`
+
+Useful flags:
+
+- `--skip-tests`
+- `--report-dir <path>`
+
+Related docs:
+
+- `docs/runbooks/control-plane-iam-provider-integration.md`
+
+### Run control-plane auth failure drill (simulated)
+
+Run from repository root:
+
+```bash
+tools/control-plane-auth-failure-drill.sh
+```
+
+Outputs:
+
+- `build/reports/preprod-drill/control-plane-auth-failure-drill.json`
+- `build/reports/preprod-drill/control-plane-auth-failure-drill-summary.md`
+- `build/reports/preprod-drill/control-plane-auth-failure-*.log`
+
+Useful flags:
+
+- `--skip-tests` (only verify alert rules)
+- `--skip-alert-rules` (only run test-based failure drill)
+- `--report-dir <path>` (custom artifact output directory)
+
+Related docs:
+
+- `docs/runbooks/control-plane-iam-provider-integration.md`
+- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`
+
 ### Start local monitoring baseline
 
 Run from repository root:

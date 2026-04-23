@@ -1,6 +1,7 @@
 package com.kafkaasr.control.auth;
 
 import java.util.Map;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -80,9 +81,11 @@ class JwksExternalIamTokenDecoder implements ExternalIamTokenDecoder {
         if (message == null) {
             return false;
         }
-        return message.contains("retrieve remote JWK set")
-                || message.contains("Connection refused")
-                || message.contains("Read timed out")
-                || message.contains("I/O error");
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("retrieve remote jwk set")
+                || normalized.contains("connection refused")
+                || normalized.contains("connect timed out")
+                || normalized.contains("read timed out")
+                || normalized.contains("i/o error");
     }
 }
