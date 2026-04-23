@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,7 +16,10 @@ import com.kafkaasr.translation.events.AsrFinalPayload;
 import com.kafkaasr.translation.events.TranslationKafkaProperties;
 import com.kafkaasr.translation.events.TranslationResultEvent;
 import com.kafkaasr.translation.events.TranslationResultPayload;
+import com.kafkaasr.translation.pipeline.TranslationEngineException;
 import com.kafkaasr.translation.pipeline.TranslationPipelineService;
+import com.kafkaasr.translation.policy.TenantReliabilityPolicy;
+import com.kafkaasr.translation.policy.TenantReliabilityPolicyResolver;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +40,9 @@ class AsrFinalConsumerTests {
     @Mock
     private TranslationCompensationPublisher compensationPublisher;
 
+    @Mock
+    private TenantReliabilityPolicyResolver reliabilityPolicyResolver;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private AsrFinalConsumer consumer;
     private TranslationKafkaProperties properties;
@@ -50,7 +57,10 @@ class AsrFinalConsumerTests {
                 translationResultPublisher,
                 compensationPublisher,
                 properties,
+                reliabilityPolicyResolver,
                 new SimpleMeterRegistry());
+        lenient().when(reliabilityPolicyResolver.resolve(anyString()))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".dlq"));
     }
 
     @Test
@@ -157,11 +167,79 @@ class AsrFinalConsumerTests {
                 "sess-1:asr.final:3",
                 new AsrFinalPayload("你好", "zh-CN", 0.9d, true));
         String payload = objectMapper.writeValueAsString(input);
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
         when(pipelineService.toTranslationResultEvent(any())).thenThrow(new IllegalStateException("translation failed"));
 
-        assertThrows(IllegalStateException.class, () -> consumer.onMessage(payload));
-        assertThrows(IllegalStateException.class, () -> consumer.onMessage(payload));
+        assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
 
-        verify(compensationPublisher).publish(anyString(), eq(payload), any(RuntimeException.class));
+        verify(pipelineService, times(2)).toTranslationResultEvent(any());
+        verify(compensationPublisher).publish(
+                eq("asr.final"),
+                eq("asr.final.tenant-a.dlq"),
+                eq(payload),
+                any(RuntimeException.class));
+    }
+
+    @Test
+    void retriesWhenTranslationEngineExceptionIsRetryable() throws Exception {
+        AsrFinalEvent input = new AsrFinalEvent(
+                "evt-in-1",
+                "asr.final",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "asr-worker",
+                3L,
+                1713744000000L,
+                "sess-1:asr.final:3",
+                new AsrFinalPayload("你好", "zh-CN", 0.9d, true));
+        String payload = objectMapper.writeValueAsString(input);
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
+        when(pipelineService.toTranslationResultEvent(any())).thenThrow(
+                new TranslationEngineException("TRANSLATION_TIMEOUT", "timed out", true));
+
+        assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
+
+        verify(pipelineService, times(2)).toTranslationResultEvent(any());
+        verify(compensationPublisher).publish(
+                eq("asr.final"),
+                eq("asr.final.tenant-a.dlq"),
+                eq(payload),
+                any(RuntimeException.class));
+    }
+
+    @Test
+    void doesNotRetryWhenTranslationEngineExceptionIsNotRetryable() throws Exception {
+        AsrFinalEvent input = new AsrFinalEvent(
+                "evt-in-1",
+                "asr.final",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "asr-worker",
+                3L,
+                1713744000000L,
+                "sess-1:asr.final:3",
+                new AsrFinalPayload("你好", "zh-CN", 0.9d, true));
+        String payload = objectMapper.writeValueAsString(input);
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
+        when(pipelineService.toTranslationResultEvent(any())).thenThrow(
+                new TranslationEngineException("TRANSLATION_INVALID_PAYLOAD", "bad payload", false));
+
+        assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
+
+        verify(pipelineService, times(1)).toTranslationResultEvent(any());
+        verify(compensationPublisher).publish(
+                eq("asr.final"),
+                eq("asr.final.tenant-a.dlq"),
+                eq(payload),
+                any(RuntimeException.class));
     }
 }

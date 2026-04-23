@@ -14,6 +14,9 @@ public record ControlPlaneTenantPolicyResponse(
         int grayTrafficPercent,
         boolean controlPlaneFallbackFailOpen,
         long controlPlaneFallbackCacheTtlMs,
+        int retryMaxAttempts,
+        long retryBackoffMs,
+        String dlqTopicSuffix,
         long version,
         long updatedAtMs,
         boolean created) {
@@ -33,6 +36,9 @@ public record ControlPlaneTenantPolicyResponse(
                 grayTrafficPercent,
                 controlPlaneFallbackFailOpen,
                 controlPlaneFallbackCacheTtlMs,
+                retryMaxAttempts,
+                retryBackoffMs,
+                dlqTopicSuffix,
                 version,
                 updatedAtMs);
     }

@@ -16,9 +16,9 @@
 | `speech-gateway` | 已落地骨架 | WebSocket 接入、Kafka 音频发布、会话 start/stop 转发、会话级限流/背压 | Kafka、`session-orchestrator` |
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、发布 `asr.partial` / `asr.final` | Kafka |
-| `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result` | Kafka |
-| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、发布 `tts.request` | Kafka |
-| `control-plane` | 已落地骨架 | 租户策略 HTTP API、Redis 存储、版本化 upsert | Redis |
+| `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result`，OpenAI 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
+| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control` 与 URL 签名，HTTP synthesis 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
+| `control-plane` | 已落地骨架 | 租户策略 HTTP API、可配置 Bearer Token 鉴权/授权（读写 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 鉴权后端切换、JWKS 外部 IAM 校验后端骨架、Redis 存储、版本化 upsert、`tenant.policy.changed` 发布 | Redis、Kafka |
 
 基础设施：
 
@@ -41,6 +41,7 @@
 当前已经实现：
 
 - `/ws/audio`
+- 可配置 WS token 鉴权（`Authorization: Bearer <token>` 或 query `access_token`）
 - `session.start` / `session.ping` / `audio.frame` / `session.stop`
 - `audio.ingress.raw` 发布
 - `audio.frame` 会话级限流与背压保护
@@ -52,7 +53,7 @@
 
 当前未实现：
 
-- 真正的鉴权
+- 外部 IAM/RBAC 集成与租户级凭据治理
 - 更完整的结果聚合和多路下行策略
 
 ### session-orchestrator
@@ -68,6 +69,7 @@
 - start/stop 生命周期 API
 - 租户策略查询与校验
 - 查询控制面的第一版熔断与缓存回退
+- 消费 `tenant.policy.changed` 并刷新本地策略缓存
 - Redis 会话状态存储
 - `session.control` Kafka 发布
 
@@ -89,13 +91,17 @@
 
 - `audio.ingress.raw` 消费
 - 默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配入口
-- `asr.partial` / `asr.final` 发布
+- FunASR 响应兼容与错误语义加固（`sentences` / 字符串数值 / 0-1 final 标记 / provider code 校验）
+- 按稳定度 + VAD 切段分流发布 `asr.partial` / `asr.final`（非稳定结果发 partial，稳定/终态/VAD 命中结果发 final）
+- FunASR 生产联调基线（可配置 health 探测、并发上限保护、错误码语义映射、引擎级指标）
+- 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
+- 消费 `tenant.policy.changed` 并刷新本地策略缓存
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
-- FunASR 生产联调与模型侧运行保障
-- VAD/切段/上下文管理
+- FunASR 真实集群联调与模型侧运行保障（容量压测、故障演练、弹性回收）
+- 高级上下文窗口管理与多语种细粒度切段策略
 
 ### translation-worker
 
@@ -108,12 +114,16 @@
 
 - `asr.final` 消费
 - 默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配入口
+- OpenAI 响应兼容与错误语义加固（content 数组/Responses output 兼容、`error` 与失败 `status` 快速失败）
+- OpenAI 生产联调基线（可配置 health 探测、并发上限保护、错误码语义映射、引擎级指标）
 - `translation.result` 发布
+- 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
+- 消费 `tenant.policy.changed` 并刷新本地策略缓存
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
-- OpenAI 生产联调与模型侧运行保障
+- OpenAI 真机容量/故障演练与模型侧运行保障（真实配额、限流与故障演练）
 - glossary / context / fallback 策略
 
 ### tts-orchestrator
@@ -130,15 +140,21 @@
 
 - `translation.result` 消费
 - 规则 voice 选择 + 可切换 HTTP voice-policy 适配入口
+- 可切换 HTTP TTS synthesis 适配入口
+- TTS synthesis 响应兼容与错误语义加固（`code/status` 校验、`error` 快速失败、boolean-like stream 兼容）
+- TTS synthesis 生产联调基线（可配置 health 探测、并发上限保护、错误码语义映射、引擎级指标）
 - cacheKey 生成
-- `tts.request` 发布
+- `tts.request` / `tts.chunk` / `tts.ready` 发布
+- `tts.ready` 对应音频对象上传（`tts.storage`：`none` / `s3`，支持 MinIO path-style）
+- 上传对象 `cache-control` 策略和 `expires/sig` 回放 URL 签名（配置化）
+- 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
+- 消费 `tenant.policy.changed` 并刷新本地策略缓存
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
-- 真实 TTS 引擎
-- `tts.chunk` / `tts.ready`
-- 对象存储和 CDN 分发
+- TTS synthesis 真机容量/故障演练与模型侧运行保障（真实配额、限流与故障演练）
+- 对象存储高可用治理、CDN 区域路由与高级缓存治理
 
 ### control-plane
 
@@ -150,15 +166,20 @@
 当前已经实现：
 
 - 租户策略的 GET / PUT API
+- `/api/v1/tenants/**` 的 Bearer Token 鉴权与授权（读/写权限 + 租户范围）
+- `control.auth.mode` 模式切换（`static` / `external-iam` / `hybrid`）与 JWKS 外部 IAM 校验后端骨架
+- 鉴权决策/耗时/回退指标（`controlplane.auth.decision.total` / `controlplane.auth.decision.duration` / `controlplane.auth.hybrid.fallback.total`）
 - Redis 持久化抽象
 - 版本化更新语义
 - 灰度与控制面回退策略字段（canary percent / fail-open / cache ttl）
+- 可靠性策略字段（`retryMaxAttempts` / `retryBackoffMs` / `dlqTopicSuffix`）
+- 策略 upsert 后发布 `tenant.policy.changed`
 
 当前未实现：
 
-- 认证鉴权
+- 外部 IAM/RBAC 提供方联调与生产级运行保障（真实 issuer/audience/JWKS、故障策略、运营监控）
 - 数据库持久化
-- 跨服务动态策略分发
+- 高级动态策略治理（跨区域分发、版本编排、回滚编排）
 
 ## 3. 当前通信方式
 
@@ -172,8 +193,8 @@
 ### 内部通信
 
 - `Kafka`
-  当前主异步总线，已落地 6 个 Topic。
-  核心 consumer 已落地固定重试、`.dlq` 死信回退、`idempotencyKey` 判重和补偿信号基线。
+  当前主异步总线，已落地 9 个 Topic（新增 `tenant.policy.changed`）。
+  核心 consumer 已落地 `.dlq` 死信回退、`idempotencyKey` 判重和补偿信号基线；`asr-worker`、`translation-worker`、`tts-orchestrator` 已升级到租户策略驱动重试/DLQ。
 - `HTTP`
   当前用于 `speech-gateway -> session-orchestrator` 和 `session-orchestrator -> control-plane` 的低频调用。
 
@@ -197,7 +218,7 @@ flowchart LR
 
 - 高频音频帧只允许 `speech-gateway -> Kafka`
 - `session-orchestrator` 不承接高频音频帧
-- 当前所有已落地 Topic 都按 `sessionId` 维持会话内顺序
+- 主链路 Topic 按 `sessionId` 维持会话内顺序；治理事件 `tenant.policy.changed` 按 `tenantId` 路由
 - 服务间同步调用只保留低频控制面路径
 
 ## 5. 当前工程目录结构

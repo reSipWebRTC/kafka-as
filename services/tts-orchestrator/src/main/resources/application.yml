@@ -41,13 +41,25 @@ logging:
     level: "%5p [service=${spring.application.name:-unknown},traceId=%X{traceId:-},spanId=%X{spanId:-}]"
 
 tts:
+  control-plane:
+    enabled: ${TTS_CONTROL_PLANE_ENABLED:true}
+    base-url: ${TTS_CONTROL_PLANE_BASE_URL:http://localhost:8085}
+    request-timeout: ${TTS_CONTROL_PLANE_REQUEST_TIMEOUT:800ms}
+    policy-cache-ttl: ${TTS_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
+    fallback-fail-open: ${TTS_CONTROL_PLANE_FALLBACK_FAIL_OPEN:true}
+    policy-changed-topic: ${TTS_CONTROL_PLANE_POLICY_CHANGED_TOPIC:tenant.policy.changed}
   kafka:
     enabled: ${TTS_KAFKA_ENABLED:true}
     translation-result-topic: ${TTS_TRANSLATION_RESULT_TOPIC:translation.result}
     tts-request-topic: ${TTS_REQUEST_TOPIC:tts.request}
+    tts-chunk-topic: ${TTS_CHUNK_TOPIC:tts.chunk}
+    tts-ready-topic: ${TTS_READY_TOPIC:tts.ready}
     producer-id: ${TTS_PRODUCER_ID:tts-orchestrator}
     default-voice: ${TTS_DEFAULT_VOICE:voice-default}
     stream-enabled: ${TTS_STREAM_ENABLED:true}
+    tts-chunk-codec: ${TTS_CHUNK_CODEC:audio/pcm}
+    tts-chunk-sample-rate: ${TTS_CHUNK_SAMPLE_RATE:16000}
+    tts-ready-playback-url-prefix: ${TTS_READY_PLAYBACK_URL_PREFIX:https://cdn.local/tts}
     retry-max-attempts: ${TTS_RETRY_MAX_ATTEMPTS:3}
     retry-backoff-ms: ${TTS_RETRY_BACKOFF_MS:200}
     dlq-topic-suffix: ${TTS_DLQ_TOPIC_SUFFIX:.dlq}
@@ -61,3 +73,35 @@ tts:
       path: ${TTS_VOICE_POLICY_HTTP_PATH:/v1/voice/select}
       timeout-ms: ${TTS_VOICE_POLICY_HTTP_TIMEOUT_MS:1200}
       auth-token: ${TTS_VOICE_POLICY_HTTP_AUTH_TOKEN:}
+  synthesis:
+    mode: ${TTS_SYNTHESIS_MODE:placeholder}
+    http:
+      endpoint: ${TTS_SYNTHESIS_HTTP_ENDPOINT:}
+      path: ${TTS_SYNTHESIS_HTTP_PATH:/v1/tts/synthesize}
+      timeout-ms: ${TTS_SYNTHESIS_HTTP_TIMEOUT_MS:2000}
+      max-concurrent-requests: ${TTS_SYNTHESIS_HTTP_MAX_CONCURRENT_REQUESTS:16}
+      health:
+        enabled: ${TTS_SYNTHESIS_HTTP_HEALTH_ENABLED:false}
+        path: ${TTS_SYNTHESIS_HTTP_HEALTH_PATH:/health}
+        timeout-ms: ${TTS_SYNTHESIS_HTTP_HEALTH_TIMEOUT_MS:800}
+        cache-ttl-ms: ${TTS_SYNTHESIS_HTTP_HEALTH_CACHE_TTL_MS:3000}
+        fail-open-on-error: ${TTS_SYNTHESIS_HTTP_HEALTH_FAIL_OPEN_ON_ERROR:true}
+      auth-token: ${TTS_SYNTHESIS_HTTP_AUTH_TOKEN:}
+  storage:
+    enabled: ${TTS_STORAGE_ENABLED:false}
+    provider: ${TTS_STORAGE_PROVIDER:none}
+    bucket: ${TTS_STORAGE_BUCKET:}
+    region: ${TTS_STORAGE_REGION:us-east-1}
+    endpoint: ${TTS_STORAGE_ENDPOINT:}
+    access-key: ${TTS_STORAGE_ACCESS_KEY:}
+    secret-key: ${TTS_STORAGE_SECRET_KEY:}
+    path-style-access: ${TTS_STORAGE_PATH_STYLE_ACCESS:true}
+    key-prefix: ${TTS_STORAGE_KEY_PREFIX:tts}
+    public-base-url: ${TTS_STORAGE_PUBLIC_BASE_URL:}
+    object-suffix: ${TTS_STORAGE_OBJECT_SUFFIX:wav}
+    cache-control: "${TTS_STORAGE_CACHE_CONTROL:public, max-age=31536000, immutable}"
+    cdn-signing-enabled: ${TTS_STORAGE_CDN_SIGNING_ENABLED:false}
+    cdn-signing-key: ${TTS_STORAGE_CDN_SIGNING_KEY:}
+    cdn-signing-ttl-seconds: ${TTS_STORAGE_CDN_SIGNING_TTL_SECONDS:600}
+    cdn-signing-expires-param: ${TTS_STORAGE_CDN_SIGNING_EXPIRES_PARAM:expires}
+    cdn-signing-signature-param: ${TTS_STORAGE_CDN_SIGNING_SIGNATURE_PARAM:sig}

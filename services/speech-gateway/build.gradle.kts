@@ -29,4 +29,11 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    System.getProperties()
+        .stringPropertyNames()
+        .asSequence()
+        .filter { it.startsWith("gateway.loadtest.") }
+        .forEach { key ->
+            systemProperty(key, System.getProperty(key))
+        }
 }

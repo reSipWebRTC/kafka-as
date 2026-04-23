@@ -24,21 +24,40 @@ public class AsrPipelineService {
     private final AsrInferenceEngine inferenceEngine;
     private final AsrKafkaProperties kafkaProperties;
     private final Clock clock;
+    private final AsrVadSegmenter vadSegmenter;
 
     @Autowired
     public AsrPipelineService(
             AsrInferenceEngine inferenceEngine,
-            AsrKafkaProperties kafkaProperties) {
-        this(inferenceEngine, kafkaProperties, Clock.systemUTC());
+            AsrKafkaProperties kafkaProperties,
+            AsrInferenceProperties inferenceProperties) {
+        this(
+                inferenceEngine,
+                kafkaProperties,
+                Clock.systemUTC(),
+                new AsrVadSegmenter(resolveVadProperties(inferenceProperties)));
     }
 
     AsrPipelineService(
             AsrInferenceEngine inferenceEngine,
             AsrKafkaProperties kafkaProperties,
             Clock clock) {
+        this(
+                inferenceEngine,
+                kafkaProperties,
+                clock,
+                new AsrVadSegmenter(new AsrInferenceProperties.Vad()));
+    }
+
+    AsrPipelineService(
+            AsrInferenceEngine inferenceEngine,
+            AsrKafkaProperties kafkaProperties,
+            Clock clock,
+            AsrVadSegmenter vadSegmenter) {
         this.inferenceEngine = inferenceEngine;
         this.kafkaProperties = kafkaProperties;
         this.clock = clock;
+        this.vadSegmenter = vadSegmenter;
     }
 
     public record AsrPipelineEvents(
@@ -51,10 +70,38 @@ public class AsrPipelineService {
 
         AsrInferenceEngine.AsrInferenceResult inferenceResult = inferenceEngine.infer(ingressEvent);
         long timestamp = Instant.now(clock).toEpochMilli();
+        String text = coalesceText(inferenceResult.text());
+        String language = normalizeLanguage(inferenceResult.language());
+        double confidence = normalizeConfidence(inferenceResult.confidence());
+        boolean endOfStream = ingressEvent.payload() != null && ingressEvent.payload().endOfStream();
+        boolean stableResult = inferenceResult.stable();
+        boolean emitFinal = stableResult || endOfStream;
+        AsrVadSegmenter.VadDecision vadDecision = AsrVadSegmenter.VadDecision.noFinal();
+
+        if (!emitFinal) {
+            vadDecision = vadSegmenter.evaluate(ingressEvent, text);
+            emitFinal = vadDecision.emitFinal();
+            if (emitFinal && text.isBlank()) {
+                text = coalesceText(vadDecision.finalText());
+            }
+        }
+
+        if (stableResult || endOfStream) {
+            vadSegmenter.clearSession(ingressEvent.sessionId());
+        }
+
+        AsrPartialEvent partialEvent = null;
+        AsrFinalEvent finalEvent = null;
+
+        if (!emitFinal) {
+            partialEvent = toAsrPartialEvent(ingressEvent, text, language, confidence, timestamp);
+        } else {
+            finalEvent = toAsrFinalEvent(ingressEvent, text, language, confidence, timestamp);
+        }
 
         return new AsrPipelineEvents(
-                toAsrPartialEvent(ingressEvent, inferenceResult, timestamp),
-                toAsrFinalEvent(ingressEvent, inferenceResult, timestamp));
+                partialEvent,
+                finalEvent);
     }
 
     public AsrPartialEvent toAsrPartialEvent(AudioIngressRawEvent ingressEvent) {
@@ -67,7 +114,9 @@ public class AsrPipelineService {
 
     private AsrPartialEvent toAsrPartialEvent(
             AudioIngressRawEvent ingressEvent,
-            AsrInferenceEngine.AsrInferenceResult inferenceResult,
+            String text,
+            String language,
+            double confidence,
             long timestamp) {
         return new AsrPartialEvent(
                 prefixedId("evt"),
@@ -82,15 +131,17 @@ public class AsrPipelineService {
                 timestamp,
                 idempotencyKey(ingressEvent, OUTPUT_EVENT_TYPE_PARTIAL),
                 new AsrPartialPayload(
-                        coalesceText(inferenceResult.text()),
-                        normalizeLanguage(inferenceResult.language()),
-                        normalizeConfidence(inferenceResult.confidence()),
+                        text,
+                        language,
+                        confidence,
                         false));
     }
 
     private AsrFinalEvent toAsrFinalEvent(
             AudioIngressRawEvent ingressEvent,
-            AsrInferenceEngine.AsrInferenceResult inferenceResult,
+            String text,
+            String language,
+            double confidence,
             long timestamp) {
         return new AsrFinalEvent(
                 prefixedId("evt"),
@@ -105,10 +156,10 @@ public class AsrPipelineService {
                 timestamp,
                 idempotencyKey(ingressEvent, OUTPUT_EVENT_TYPE_FINAL),
                 new AsrFinalPayload(
-                        coalesceText(inferenceResult.text()),
-                        normalizeLanguage(inferenceResult.language()),
-                        normalizeConfidence(inferenceResult.confidence()),
-                        inferenceResult.stable()));
+                        text,
+                        language,
+                        confidence,
+                        true));
     }
 
     private String idempotencyKey(AudioIngressRawEvent ingressEvent, String eventType) {
@@ -162,5 +213,12 @@ public class AsrPipelineService {
 
     private String prefixedId(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private static AsrInferenceProperties.Vad resolveVadProperties(AsrInferenceProperties inferenceProperties) {
+        if (inferenceProperties == null || inferenceProperties.getVad() == null) {
+            return new AsrInferenceProperties.Vad();
+        }
+        return inferenceProperties.getVad();
     }
 }

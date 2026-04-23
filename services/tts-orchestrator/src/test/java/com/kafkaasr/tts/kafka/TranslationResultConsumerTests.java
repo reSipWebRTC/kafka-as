@@ -3,19 +3,29 @@ package com.kafkaasr.tts.kafka;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kafkaasr.tts.events.TtsChunkEvent;
+import com.kafkaasr.tts.events.TtsChunkPayload;
 import com.kafkaasr.tts.events.TtsKafkaProperties;
+import com.kafkaasr.tts.events.TtsReadyEvent;
+import com.kafkaasr.tts.events.TtsReadyPayload;
 import com.kafkaasr.tts.events.TtsRequestEvent;
 import com.kafkaasr.tts.events.TtsRequestPayload;
 import com.kafkaasr.tts.events.TranslationResultEvent;
 import com.kafkaasr.tts.events.TranslationResultPayload;
 import com.kafkaasr.tts.pipeline.TtsRequestPipelineService;
+import com.kafkaasr.tts.pipeline.TtsSynthesisException;
+import com.kafkaasr.tts.policy.TenantReliabilityPolicy;
+import com.kafkaasr.tts.policy.TenantReliabilityPolicyResolver;
+import com.kafkaasr.tts.storage.TtsObjectStorageUploader;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,7 +44,19 @@ class TranslationResultConsumerTests {
     private TtsRequestPublisher ttsRequestPublisher;
 
     @Mock
+    private TtsChunkPublisher ttsChunkPublisher;
+
+    @Mock
+    private TtsReadyPublisher ttsReadyPublisher;
+
+    @Mock
+    private TtsObjectStorageUploader storageUploader;
+
+    @Mock
     private TtsCompensationPublisher compensationPublisher;
+
+    @Mock
+    private TenantReliabilityPolicyResolver reliabilityPolicyResolver;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private TranslationResultConsumer consumer;
@@ -48,9 +70,19 @@ class TranslationResultConsumerTests {
                 objectMapper,
                 pipelineService,
                 ttsRequestPublisher,
+                ttsChunkPublisher,
+                ttsReadyPublisher,
+                storageUploader,
                 compensationPublisher,
                 properties,
+                reliabilityPolicyResolver,
                 new SimpleMeterRegistry());
+        lenient().when(reliabilityPolicyResolver.resolve(anyString()))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".dlq"));
+        lenient().when(storageUploader.upload(any()))
+                .thenReturn(new TtsObjectStorageUploader.UploadResult(
+                        "tts/tenant-a/tts_v1_abc.wav",
+                        "https://cdn.example.com/tts/tenant-a/tts_v1_abc.wav"));
     }
 
     @Test
@@ -83,22 +115,60 @@ class TranslationResultConsumerTests {
                 "sess-1:tts.request:3",
                 new TtsRequestPayload("hello", "en-US", "voice-a", "tts:v1:abc", true));
 
+        TtsChunkEvent chunkEvent = new TtsChunkEvent(
+                "evt-out-2",
+                "tts.chunk",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "tts-orchestrator",
+                3L,
+                1713744001000L,
+                "sess-1:tts.chunk:3",
+                new TtsChunkPayload("aGVsbG8=", "audio/pcm", 16000, 0, true));
+
+        TtsReadyEvent readyEvent = new TtsReadyEvent(
+                "evt-out-3",
+                "tts.ready",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "tts-orchestrator",
+                3L,
+                1713744001000L,
+                "sess-1:tts.ready:3",
+                new TtsReadyPayload("https://cdn.local/tts/tts:v1:abc.wav", "audio/pcm", 16000, 400L, "tts:v1:abc"));
+
         String payload = objectMapper.writeValueAsString(input);
-        when(pipelineService.toTtsRequestEvent(any())).thenReturn(output);
+        when(pipelineService.toPipelineEvents(any())).thenReturn(
+                new TtsRequestPipelineService.PipelineOutput(output, chunkEvent, readyEvent));
         when(ttsRequestPublisher.publish(output)).thenReturn(Mono.empty());
+        when(ttsChunkPublisher.publish(chunkEvent)).thenReturn(Mono.empty());
+        when(ttsReadyPublisher.publish(any())).thenReturn(Mono.empty());
 
         consumer.onMessage(payload);
 
-        verify(pipelineService).toTtsRequestEvent(any());
+        verify(pipelineService).toPipelineEvents(any());
         verify(ttsRequestPublisher).publish(output);
+        verify(ttsChunkPublisher).publish(chunkEvent);
+        verify(storageUploader).upload(any());
+        verify(ttsReadyPublisher).publish(argThat(event ->
+                "https://cdn.example.com/tts/tenant-a/tts_v1_abc.wav".equals(event.payload().playbackUrl())));
     }
 
     @Test
     void rejectsMalformedTranslationResultPayload() {
         assertThrows(IllegalArgumentException.class, () -> consumer.onMessage("{invalid-json"));
 
-        verify(pipelineService, never()).toTtsRequestEvent(any());
+        verify(pipelineService, never()).toPipelineEvents(any());
         verify(ttsRequestPublisher, never()).publish(any());
+        verify(ttsChunkPublisher, never()).publish(any());
+        verify(ttsReadyPublisher, never()).publish(any());
+        verify(storageUploader, never()).upload(any());
     }
 
     @Test
@@ -131,15 +201,49 @@ class TranslationResultConsumerTests {
                 "sess-1:tts.request:3",
                 new TtsRequestPayload("hello", "en-US", "voice-a", "tts:v1:abc", true));
 
+        TtsChunkEvent chunkEvent = new TtsChunkEvent(
+                "evt-out-2",
+                "tts.chunk",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "tts-orchestrator",
+                3L,
+                1713744001000L,
+                "sess-1:tts.chunk:3",
+                new TtsChunkPayload("aGVsbG8=", "audio/pcm", 16000, 0, true));
+
+        TtsReadyEvent readyEvent = new TtsReadyEvent(
+                "evt-out-3",
+                "tts.ready",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "tts-orchestrator",
+                3L,
+                1713744001000L,
+                "sess-1:tts.ready:3",
+                new TtsReadyPayload("https://cdn.local/tts/tts:v1:abc.wav", "audio/pcm", 16000, 400L, "tts:v1:abc"));
+
         String payload = objectMapper.writeValueAsString(input);
-        when(pipelineService.toTtsRequestEvent(any())).thenReturn(output);
+        when(pipelineService.toPipelineEvents(any())).thenReturn(
+                new TtsRequestPipelineService.PipelineOutput(output, chunkEvent, readyEvent));
         when(ttsRequestPublisher.publish(output)).thenReturn(Mono.empty());
+        when(ttsChunkPublisher.publish(chunkEvent)).thenReturn(Mono.empty());
+        when(ttsReadyPublisher.publish(any())).thenReturn(Mono.empty());
 
         consumer.onMessage(payload);
         consumer.onMessage(payload);
 
-        verify(pipelineService, times(1)).toTtsRequestEvent(any());
+        verify(pipelineService, times(1)).toPipelineEvents(any());
         verify(ttsRequestPublisher, times(1)).publish(output);
+        verify(ttsChunkPublisher, times(1)).publish(chunkEvent);
+        verify(storageUploader, times(1)).upload(any());
+        verify(ttsReadyPublisher, times(1)).publish(any());
     }
 
     @Test
@@ -158,11 +262,82 @@ class TranslationResultConsumerTests {
                 "sess-1:translation.result:3",
                 new TranslationResultPayload("你好", "hello", "zh-CN", "en-US", "placeholder"));
         String payload = objectMapper.writeValueAsString(input);
-        when(pipelineService.toTtsRequestEvent(any())).thenThrow(new IllegalStateException("tts failed"));
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
+        when(pipelineService.toPipelineEvents(any())).thenThrow(new IllegalStateException("tts failed"));
 
-        assertThrows(IllegalStateException.class, () -> consumer.onMessage(payload));
-        assertThrows(IllegalStateException.class, () -> consumer.onMessage(payload));
+        assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
 
-        verify(compensationPublisher).publish(anyString(), eq(payload), any(RuntimeException.class));
+        verify(pipelineService, times(2)).toPipelineEvents(any());
+        verify(storageUploader, never()).upload(any());
+        verify(compensationPublisher).publish(
+                eq("translation.result"),
+                eq("translation.result.tenant-a.dlq"),
+                eq(payload),
+                any(RuntimeException.class));
+    }
+
+    @Test
+    void retriesWhenTtsSynthesisExceptionIsRetryable() throws Exception {
+        TranslationResultEvent input = new TranslationResultEvent(
+                "evt-in-1",
+                "translation.result",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "translation-worker",
+                3L,
+                1713744000000L,
+                "sess-1:translation.result:3",
+                new TranslationResultPayload("你好", "hello", "zh-CN", "en-US", "placeholder"));
+        String payload = objectMapper.writeValueAsString(input);
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
+        when(pipelineService.toPipelineEvents(any())).thenThrow(
+                new TtsSynthesisException("TTS_TIMEOUT", "timed out", true));
+
+        assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
+
+        verify(pipelineService, times(2)).toPipelineEvents(any());
+        verify(storageUploader, never()).upload(any());
+        verify(compensationPublisher).publish(
+                eq("translation.result"),
+                eq("translation.result.tenant-a.dlq"),
+                eq(payload),
+                any(RuntimeException.class));
+    }
+
+    @Test
+    void doesNotRetryWhenTtsSynthesisExceptionIsNotRetryable() throws Exception {
+        TranslationResultEvent input = new TranslationResultEvent(
+                "evt-in-1",
+                "translation.result",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "translation-worker",
+                3L,
+                1713744000000L,
+                "sess-1:translation.result:3",
+                new TranslationResultPayload("你好", "hello", "zh-CN", "en-US", "placeholder"));
+        String payload = objectMapper.writeValueAsString(input);
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
+        when(pipelineService.toPipelineEvents(any())).thenThrow(
+                new TtsSynthesisException("TTS_PROVIDER_REJECTED", "rejected", false));
+
+        assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
+
+        verify(pipelineService, times(1)).toPipelineEvents(any());
+        verify(storageUploader, never()).upload(any());
+        verify(compensationPublisher).publish(
+                eq("translation.result"),
+                eq("translation.result.tenant-a.dlq"),
+                eq(payload),
+                any(RuntimeException.class));
     }
 }

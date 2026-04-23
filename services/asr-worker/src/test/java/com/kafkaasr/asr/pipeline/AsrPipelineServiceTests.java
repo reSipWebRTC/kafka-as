@@ -2,6 +2,7 @@ package com.kafkaasr.asr.pipeline;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -13,40 +14,28 @@ import com.kafkaasr.asr.events.AudioIngressRawPayload;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Base64;
 import org.junit.jupiter.api.Test;
 
 class AsrPipelineServiceTests {
 
     @Test
-    void mapsIngressEventToAsrPartialAndAsrFinalEvents() {
+    void emitsPartialOnlyForNonStableInference() {
         AsrKafkaProperties properties = new AsrKafkaProperties();
         properties.setProducerId("asr-worker");
 
         AsrInferenceEngine inferenceEngine = event ->
-                new AsrInferenceEngine.AsrInferenceResult("hello world", "en-US", 0.91d, true);
+                new AsrInferenceEngine.AsrInferenceResult("hello wor", "en-US", 0.91d, false);
 
         AsrPipelineService service = new AsrPipelineService(
                 inferenceEngine,
                 properties,
                 Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
 
-        AudioIngressRawEvent ingressEvent = new AudioIngressRawEvent(
-                "evt-in-1",
-                "audio.ingress.raw",
-                "v1",
-                "trc-1",
-                "sess-1",
-                "tenant-a",
-                null,
-                "speech-gateway",
-                42L,
-                1713744000000L,
-                "sess-1:audio.ingress.raw:42",
-                new AudioIngressRawPayload("pcm16le", 16000, 1, "AQID", true));
+        AudioIngressRawEvent ingressEvent = sampleIngressEvent(false, 42L);
 
         AsrPipelineService.AsrPipelineEvents events = service.toAsrEvents(ingressEvent);
         AsrPartialEvent partialEvent = events.partialEvent();
-        AsrFinalEvent finalEvent = events.finalEvent();
 
         assertTrue(partialEvent.eventId().startsWith("evt_"));
         assertEquals("asr.partial", partialEvent.eventType());
@@ -58,10 +47,31 @@ class AsrPipelineServiceTests {
         assertEquals(42L, partialEvent.seq());
         assertEquals(Instant.parse("2026-04-22T00:00:00Z").toEpochMilli(), partialEvent.ts());
         assertEquals("sess-1:asr.partial:42", partialEvent.idempotencyKey());
-        assertEquals("hello world", partialEvent.payload().text());
+        assertEquals("hello wor", partialEvent.payload().text());
         assertEquals("en-US", partialEvent.payload().language());
         assertEquals(0.91d, partialEvent.payload().confidence());
         assertFalse(partialEvent.payload().stable());
+
+        assertNull(events.finalEvent());
+    }
+
+    @Test
+    void emitsFinalWhenIngressIsEndOfStream() {
+        AsrKafkaProperties properties = new AsrKafkaProperties();
+        properties.setProducerId("asr-worker");
+
+        AsrInferenceEngine inferenceEngine = event ->
+                new AsrInferenceEngine.AsrInferenceResult("hello world", "en-US", 0.91d, false);
+
+        AsrPipelineService service = new AsrPipelineService(
+                inferenceEngine,
+                properties,
+                Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
+
+        AudioIngressRawEvent ingressEvent = sampleIngressEvent(true, 43L);
+
+        AsrPipelineService.AsrPipelineEvents events = service.toAsrEvents(ingressEvent);
+        AsrFinalEvent finalEvent = events.finalEvent();
 
         assertTrue(finalEvent.eventId().startsWith("evt_"));
         assertEquals("asr.final", finalEvent.eventType());
@@ -70,13 +80,29 @@ class AsrPipelineServiceTests {
         assertEquals("sess-1", finalEvent.sessionId());
         assertEquals("tenant-a", finalEvent.tenantId());
         assertEquals("asr-worker", finalEvent.producer());
-        assertEquals(42L, finalEvent.seq());
+        assertEquals(43L, finalEvent.seq());
         assertEquals(Instant.parse("2026-04-22T00:00:00Z").toEpochMilli(), finalEvent.ts());
-        assertEquals("sess-1:asr.final:42", finalEvent.idempotencyKey());
+        assertEquals("sess-1:asr.final:43", finalEvent.idempotencyKey());
         assertEquals("hello world", finalEvent.payload().text());
         assertEquals("en-US", finalEvent.payload().language());
         assertEquals(0.91d, finalEvent.payload().confidence());
         assertTrue(finalEvent.payload().stable());
+
+        assertNull(events.partialEvent());
+    }
+
+    @Test
+    void emitsFinalWhenInferenceIsStableEvenWithoutEndOfStream() {
+        AsrPipelineService service = new AsrPipelineService(
+                event -> new AsrInferenceEngine.AsrInferenceResult("hello world", "en-US", 0.9d, true),
+                new AsrKafkaProperties(),
+                Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
+
+        AsrPipelineService.AsrPipelineEvents events = service.toAsrEvents(sampleIngressEvent(false, 44L));
+
+        assertNull(events.partialEvent());
+        assertEquals("hello world", events.finalEvent().payload().text());
+        assertTrue(events.finalEvent().payload().stable());
     }
 
     @Test
@@ -112,32 +138,124 @@ class AsrPipelineServiceTests {
                 new AsrKafkaProperties(),
                 Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
 
-        AudioIngressRawEvent ingressEvent = new AudioIngressRawEvent(
-                "evt-in-3",
-                "audio.ingress.raw",
-                "v1",
-                "trc-3",
-                "sess-3",
-                "tenant-a",
-                null,
-                "speech-gateway",
-                5L,
-                1713744000000L,
-                "sess-3:audio.ingress.raw:5",
-                new AudioIngressRawPayload("pcm16le", 16000, 1, "AQID", false));
-
-        AsrPipelineService.AsrPipelineEvents events = service.toAsrEvents(ingressEvent);
+        AsrPipelineService.AsrPipelineEvents events = service.toAsrEvents(sampleIngressEvent(false, 45L));
         AsrPartialEvent partialEvent = events.partialEvent();
-        AsrFinalEvent finalEvent = events.finalEvent();
 
         assertEquals("", partialEvent.payload().text());
         assertEquals("und", partialEvent.payload().language());
         assertEquals(1.0d, partialEvent.payload().confidence());
         assertFalse(partialEvent.payload().stable());
+        assertNull(events.finalEvent());
+    }
 
-        assertEquals("", finalEvent.payload().text());
-        assertEquals("und", finalEvent.payload().language());
-        assertEquals(1.0d, finalEvent.payload().confidence());
-        assertFalse(finalEvent.payload().stable());
+    @Test
+    void emitsFinalWhenVadDetectsSilenceBoundary() {
+        AsrInferenceProperties.Vad vad = new AsrInferenceProperties.Vad();
+        vad.setEnabled(true);
+        vad.setSilenceFramesToFinalize(2);
+        vad.setMinActiveFramesPerSegment(1);
+        vad.setSilenceAmplitudeThreshold(64);
+
+        AsrPipelineService service = new AsrPipelineService(
+                event -> {
+                    if (event.seq() == 1L) {
+                        return new AsrInferenceEngine.AsrInferenceResult("hello world", "en-US", 0.9d, false);
+                    }
+                    return new AsrInferenceEngine.AsrInferenceResult("", "en-US", 0.9d, false);
+                },
+                kafkaProperties("asr-worker"),
+                Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC),
+                new AsrVadSegmenter(vad));
+
+        AsrPipelineService.AsrPipelineEvents first = service.toAsrEvents(sampleIngressEvent(false, 1L, voicedAudio()));
+        assertEquals("hello world", first.partialEvent().payload().text());
+        assertNull(first.finalEvent());
+
+        AsrPipelineService.AsrPipelineEvents second = service.toAsrEvents(sampleIngressEvent(false, 2L, silentAudio()));
+        assertEquals("", second.partialEvent().payload().text());
+        assertNull(second.finalEvent());
+
+        AsrPipelineService.AsrPipelineEvents third = service.toAsrEvents(sampleIngressEvent(false, 3L, silentAudio()));
+        assertNull(third.partialEvent());
+        assertEquals("hello world", third.finalEvent().payload().text());
+        assertTrue(third.finalEvent().payload().stable());
+    }
+
+    @Test
+    void resetsVadStateAfterSilenceTriggeredFinal() {
+        AsrInferenceProperties.Vad vad = new AsrInferenceProperties.Vad();
+        vad.setEnabled(true);
+        vad.setSilenceFramesToFinalize(1);
+        vad.setMinActiveFramesPerSegment(1);
+        vad.setSilenceAmplitudeThreshold(64);
+
+        AsrPipelineService service = new AsrPipelineService(
+                event -> {
+                    if (event.seq() == 1L || event.seq() == 4L) {
+                        return new AsrInferenceEngine.AsrInferenceResult("segment-" + event.seq(), "en-US", 0.9d, false);
+                    }
+                    return new AsrInferenceEngine.AsrInferenceResult("", "en-US", 0.9d, false);
+                },
+                kafkaProperties("asr-worker"),
+                Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC),
+                new AsrVadSegmenter(vad));
+
+        AsrPipelineService.AsrPipelineEvents first = service.toAsrEvents(sampleIngressEvent(false, 1L, voicedAudio()));
+        assertNull(first.finalEvent());
+        AsrPipelineService.AsrPipelineEvents second = service.toAsrEvents(sampleIngressEvent(false, 2L, silentAudio()));
+        assertEquals("segment-1", second.finalEvent().payload().text());
+
+        AsrPipelineService.AsrPipelineEvents third = service.toAsrEvents(sampleIngressEvent(false, 3L, silentAudio()));
+        assertNull(third.finalEvent());
+        assertEquals("", third.partialEvent().payload().text());
+
+        AsrPipelineService.AsrPipelineEvents fourth = service.toAsrEvents(sampleIngressEvent(false, 4L, voicedAudio()));
+        assertNull(fourth.finalEvent());
+        AsrPipelineService.AsrPipelineEvents fifth = service.toAsrEvents(sampleIngressEvent(false, 5L, silentAudio()));
+        assertEquals("segment-4", fifth.finalEvent().payload().text());
+    }
+
+    private static AudioIngressRawEvent sampleIngressEvent(boolean endOfStream, long seq) {
+        return sampleIngressEvent(endOfStream, seq, voicedAudio());
+    }
+
+    private static AudioIngressRawEvent sampleIngressEvent(boolean endOfStream, long seq, String audioBase64) {
+        return new AudioIngressRawEvent(
+                "evt-in-1",
+                "audio.ingress.raw",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "speech-gateway",
+                seq,
+                1713744000000L,
+                "sess-1:audio.ingress.raw:" + seq,
+                new AudioIngressRawPayload("pcm16le", 16000, 1, audioBase64, endOfStream));
+    }
+
+    private static AsrKafkaProperties kafkaProperties(String producerId) {
+        AsrKafkaProperties properties = new AsrKafkaProperties();
+        properties.setProducerId(producerId);
+        return properties;
+    }
+
+    private static String voicedAudio() {
+        return pcm16Base64((short) 2000, (short) -1800, (short) 1200);
+    }
+
+    private static String silentAudio() {
+        return pcm16Base64((short) 0, (short) 0, (short) 0);
+    }
+
+    private static String pcm16Base64(short... samples) {
+        byte[] bytes = new byte[samples.length * 2];
+        for (int i = 0; i < samples.length; i++) {
+            short sample = samples[i];
+            bytes[i * 2] = (byte) (sample & 0xFF);
+            bytes[(i * 2) + 1] = (byte) ((sample >> 8) & 0xFF);
+        }
+        return Base64.getEncoder().encodeToString(bytes);
     }
 }

@@ -168,7 +168,7 @@ flowchart TB
 
 当前基线：
 
-- 已承接 `audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
+- 已承接 `audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`
 - 已落地消费侧固定重试、`.dlq` 死信回退、`idempotencyKey` 判重和补偿信号
 - 暂未落地统一重放流程和 Lag 治理文档化闭环
 
@@ -182,8 +182,10 @@ flowchart TB
 
 当前基线：
 
-- 已实现默认 placeholder + 可切换 HTTP 适配的 `audio.ingress.raw -> asr.partial / asr.final`
-- 未实现 FunASR、VAD 分段
+- 已实现默认 placeholder + 可切换 HTTP/FunASR 适配的 `audio.ingress.raw -> asr.partial / asr.final`
+- 已实现会话级 VAD 静音切段触发 `asr.final`
+- 已补齐 FunASR 联调基线（health 探测、并发保护、错误语义映射、引擎级指标）
+- 未实现 FunASR 真机容量/故障演练与高级上下文管理
 
 ### Translation Worker
 
@@ -207,8 +209,9 @@ flowchart TB
 
 当前基线：
 
-- 已实现 `translation.result -> tts.request`（规则 voice + 可切换 HTTP voice-policy 适配）
-- 未实现真实引擎、对象存储、CDN 和回放分发
+- 已实现 `translation.result -> tts.request / tts.chunk / tts.ready`（规则 voice + 可切换 HTTP voice-policy 适配）
+- 已实现 `tts.ready` 可配置对象存储上传与 `playbackUrl` 回填（S3/MinIO 兼容）
+- 未实现真实引擎生产联调、CDN 策略与回放分发治理
 
 ### Control Plane
 

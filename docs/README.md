@@ -14,7 +14,7 @@
 - 会话内有序、状态外置、事件驱动
 - 数据面与控制面分离
 
-## 当前实现基线（2026-04-22）
+## 当前实现基线（2026-04-23）
 
 当前仓库已经具备一条可运行的模块化骨架链路：
 
@@ -24,7 +24,7 @@
 - `session-orchestrator` 调用 `control-plane` 获取租户策略，写 Redis 会话状态，并发布 `session.control`
 - `asr-worker` 消费 `audio.ingress.raw` 并发布 `asr.partial` / `asr.final`
 - `translation-worker` 消费 `asr.final` 并发布 `translation.result`
-- `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`
+- `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request` / `tts.chunk` / `tts.ready`
 
 当前详细实现状态见 [implementation-status.md](implementation-status.md)。
 
@@ -110,6 +110,6 @@ flowchart LR
 - 验证并固化 `subtitle.partial` / `subtitle.final` / `session.closed` 的端到端体验与可靠性
 - 用 `tools/downlink-e2e-smoke.sh` 固定回归检查下行链路顺序、终态和重复消息语义
 - 在现有重试、DLQ、背压与限流 + 第一版幂等/补偿/熔断/灰度基础上升级为自适应治理
-- 完成 TTS 真实引擎接入，并完成 ASR FunASR 与 Translation OpenAI 生产联调
-- 补齐 TTS 的对象存储、CDN 与回放分发能力
+- 完成 ASR FunASR、Translation OpenAI 与 TTS synthesis 生产联调
+- 在已接入对象存储上传基线的前提下补齐 CDN 与回放分发治理能力
 - 完成告警阈值标定与通知路由，补齐压测与故障演练基线

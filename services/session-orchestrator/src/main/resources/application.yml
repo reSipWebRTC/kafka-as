@@ -7,6 +7,11 @@ spring:
       port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: latest
+      enable-auto-commit: false
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -53,3 +58,4 @@ orchestrator:
     circuit-breaker-open-duration: ${ORCHESTRATOR_CONTROL_PLANE_CB_OPEN_DURATION:5s}
     policy-cache-ttl: ${ORCHESTRATOR_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
     fallback-fail-open: ${ORCHESTRATOR_CONTROL_PLANE_FALLBACK_FAIL_OPEN:false}
+    policy-changed-topic: ${ORCHESTRATOR_CONTROL_PLANE_POLICY_CHANGED_TOPIC:tenant.policy.changed}

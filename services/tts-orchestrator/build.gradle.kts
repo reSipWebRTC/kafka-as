@@ -18,6 +18,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework.kafka:spring-kafka")
+    implementation("software.amazon.awssdk:s3:2.26.21")
     implementation("io.micrometer:micrometer-tracing-bridge-otel")
 
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")

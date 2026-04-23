@@ -41,6 +41,10 @@ logging:
     level: "%5p [service=${spring.application.name:-unknown},traceId=%X{traceId:-},spanId=%X{spanId:-}]"
 
 gateway:
+  auth:
+    enabled: ${GATEWAY_AUTH_ENABLED:false}
+    query-param: ${GATEWAY_AUTH_QUERY_PARAM:access_token}
+    tokens: ${GATEWAY_AUTH_TOKENS:}
   kafka:
     enabled: ${GATEWAY_KAFKA_ENABLED:true}
     audio-ingress-topic: ${GATEWAY_AUDIO_INGRESS_TOPIC:audio.ingress.raw}

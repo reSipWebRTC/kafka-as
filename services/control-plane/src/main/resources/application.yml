@@ -5,6 +5,11 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 server:
   port: 8085
@@ -34,6 +39,23 @@ logging:
     level: "%5p [service=${spring.application.name:-unknown},traceId=%X{traceId:-},spanId=%X{spanId:-}]"
 
 control:
+  auth:
+    enabled: ${CONTROL_AUTH_ENABLED:false}
+    mode: ${CONTROL_AUTH_MODE:static}
+    tokens: ${CONTROL_AUTH_TOKENS:}
+    credentials: []
+    external:
+      issuer: ${CONTROL_AUTH_EXTERNAL_ISSUER:}
+      audience: ${CONTROL_AUTH_EXTERNAL_AUDIENCE:}
+      jwks-uri: ${CONTROL_AUTH_EXTERNAL_JWKS_URI:}
+      permission-claim: ${CONTROL_AUTH_EXTERNAL_PERMISSION_CLAIM:scp}
+      tenant-claim: ${CONTROL_AUTH_EXTERNAL_TENANT_CLAIM:tenant_ids}
+      read-permission: ${CONTROL_AUTH_EXTERNAL_READ_PERMISSION:control.policy.read}
+      write-permission: ${CONTROL_AUTH_EXTERNAL_WRITE_PERMISSION:control.policy.write}
+  kafka:
+    enabled: ${CONTROL_KAFKA_ENABLED:false}
+    policy-changed-topic: ${CONTROL_POLICY_CHANGED_TOPIC:tenant.policy.changed}
+    producer-id: ${CONTROL_KAFKA_PRODUCER_ID:control-plane}
   policy-store:
     key-prefix: ${CONTROL_POLICY_STORE_KEY_PREFIX:control:tenant-policy:}
     ttl: ${CONTROL_POLICY_STORE_TTL:12h}

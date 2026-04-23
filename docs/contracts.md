@@ -11,7 +11,7 @@
 - 第一批核心事件类型与字段
 - 错误码与版本演进规则
 
-## 1.1 当前实现注记（2026-04-22）
+## 1.1 当前实现注记（2026-04-23）
 
 本文件仍然是外部行为的权威定义，但当前仓库只实现了其中一部分。
 
@@ -20,20 +20,26 @@
 - WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`
 - WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`session.closed`
 - 低频控制 API：会话 start/stop、租户策略 get/put
-- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`
+- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`
 - 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
-- 核心 Kafka consumer 固定重试与按源 Topic 的 `.dlq` 死信回退
+- 核心 Kafka consumer 已落地重试与按源 Topic 的 `.dlq` 死信回退；`asr-worker`、`translation-worker`、`tts-orchestrator` 已支持按租户策略驱动重试参数与 DLQ 后缀
 - 核心 Kafka consumer 已落地 `idempotencyKey` 判重（TTL 窗口）与重复消息丢弃
 - 核心 Kafka consumer 重复失败达到阈值后会发送 `ops.compensation` 信号到 `platform.compensation`
-- `control-plane` 租户策略已包含灰度/回退字段：`grayEnabled`、`grayTrafficPercent`、`controlPlaneFallbackFailOpen`、`controlPlaneFallbackCacheTtlMs`
+- `asr-worker` FunASR 适配已补齐可用性探测、并发保护与错误语义映射（用于重试/DLQ 分类）
+- `translation-worker` OpenAI 适配已补齐可用性探测、并发保护与错误语义映射（用于重试/DLQ 分类）
+- `tts-orchestrator` HTTP synthesis 适配已补齐可用性探测、并发保护与错误语义映射（用于重试/DLQ 分类）
+- `control-plane` 租户策略已包含灰度/回退与可靠性字段：`grayEnabled`、`grayTrafficPercent`、`controlPlaneFallbackFailOpen`、`controlPlaneFallbackCacheTtlMs`、`retryMaxAttempts`、`retryBackoffMs`、`dlqTopicSuffix`
 - `session-orchestrator` 查询租户策略时已落地第一版熔断与缓存回退（支持 fail-open/fail-closed）
 - 下行 `asr.partial -> subtitle.partial`、`translation.result -> subtitle.final`、`session.control(CLOSED) -> session.closed` 已有仓库内 E2E 稳定性回归测试
 - `session.closed` 触发后下行通道会终止并丢弃晚到消息
+- `asr-worker` 已支持基于静音帧阈值的 VAD 切段终态发布（`asr.final`）
+- `speech-gateway` 已支持可配置 WS token 鉴权（`Authorization: Bearer` 或 query `access_token`），失败返回 `AUTH_INVALID_TOKEN`
+- `control-plane` 已支持可配置 Bearer Token 鉴权与授权（`/api/v1/tenants/**`，支持读/写权限与租户范围约束）
 
-仍在 v1 契约中保留但尚未打通：
+新增说明：
 
-- `tts.chunk`
-- `tts.ready`
+- `tts-orchestrator` 已实现 `translation.result` 同步产出 `tts.request`、`tts.chunk`、`tts.ready` 三类事件
+- `control-plane` 已实现 `tenant.policy.changed` 事件发布，`session-orchestrator` / `asr-worker` / `translation-worker` / `tts-orchestrator` 已消费该事件用于策略缓存刷新
 
 ## 2. 主数据路径（冻结）
 
@@ -83,6 +89,15 @@
 | `asr.final` | ASR 最终识别结果 | `asr.final` | `sessionId` |
 | `translation.result` | 翻译结果 | `translation.result` | `sessionId` |
 | `tts.request` | TTS 合成请求 | `tts.request` | `sessionId` |
+| `tts.chunk` | TTS 流式音频分片 | `tts.chunk` | `sessionId` |
+| `tts.ready` | TTS 回放就绪事件 | `tts.ready` | `sessionId` |
+| `tenant.policy.changed` | 租户策略变更通知（`control-plane` 发布，运行时服务消费刷新） | `tenant.policy.changed` | `tenantId` |
+
+当前实现语义（`asr-worker`）：
+
+- 非稳定识别结果发布为 `asr.partial`
+- 稳定结果、`endOfStream=true`，或命中 VAD 静音切段阈值的结果发布为 `asr.final`
+- 治理事件 `tenant.policy.changed` 没有真实会话上下文时，`sessionId` 使用合成值（建议 `tenant-policy::<tenantId>`）
 
 完整 JSON Schema 与 Protobuf 见第 8 节。
 
@@ -100,6 +115,8 @@
 当前实现说明：
 
 - `speech-gateway` 当前已接受 `session.start`、`session.ping`、`audio.frame`、`session.stop`
+- 当 `gateway.auth.enabled=true` 时，`/ws/audio` 需要携带合法 token（`Authorization: Bearer <token>` 或 query 参数 `access_token`）
+- token 缺失/非法时，网关会下发 `session.error(code=AUTH_INVALID_TOKEN)` 并关闭连接
 
 ### 5.2 服务端下行消息
 
@@ -120,6 +137,7 @@
 | 错误码 | 含义 |
 | --- | --- |
 | `AUTH_INVALID_TOKEN` | 鉴权失败或令牌过期 |
+| `AUTH_FORBIDDEN` | 已认证但无权限访问目标租户或操作 |
 | `INVALID_MESSAGE` | 消息格式不合法、类型不支持或字段校验失败 |
 | `SESSION_NOT_FOUND` | 会话不存在或已关闭 |
 | `SESSION_SEQ_INVALID` | 序号乱序或重复超限 |
@@ -147,3 +165,6 @@
   - `api/json-schema/asr.final.v1.json`
   - `api/json-schema/translation.result.v1.json`
   - `api/json-schema/tts.request.v1.json`
+  - `api/json-schema/tts.chunk.v1.json`
+  - `api/json-schema/tts.ready.v1.json`
+  - `api/json-schema/tenant.policy.changed.v1.json`

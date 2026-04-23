@@ -4,21 +4,21 @@
 
 仓库当前不再处于“只有设计，没有代码”的阶段。
 
-截至 `2026-04-22`，已经完成：
+截至 `2026-04-23`，已经完成：
 
 - 架构、服务边界、事件契约和协议文档基线
 - `api/protobuf` 与 `api/json-schema` 契约文件
 - 6 个核心服务加 `control-plane` 的工程骨架
-- 从 `audio.ingress.raw` 到 `tts.request` 的主链路（默认占位实现 + provider 适配入口，ASR 含 FunASR mode，Translation 含 OpenAI mode）
+- 从 `audio.ingress.raw` 到 `tts.request` 的主链路（默认占位实现 + provider 适配入口，ASR 含 FunASR mode、VAD 静音切段与联调基线，Translation 含 OpenAI mode 与联调基线，TTS 含 synthesis mode 与联调基线）
 - Redis 会话状态和租户策略的最小落地
 - 统一的管理端点、Tracing 和第一版服务指标
-- `deploy/monitoring` 下 Prometheus/Grafana 看板与告警基线
+- `deploy/monitoring` 下 Prometheus/Grafana/Alertmanager 看板、告警与通知路由基线
 
 当前真正的状态是：
 
 - `Phase 0` 基本完成
 - `Phase 1` 已经启动并跑通了“骨架链路”
-- 距离“生产可运行闭环”还差真实引擎、治理能力和压测证据
+- 距离“生产可运行闭环”还差真实流量闭环、自适应治理能力与预发/生产压测证据
 
 ## 2. Phase 0：文档与契约冻结
 
@@ -66,13 +66,13 @@
 - Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行
 - 下行链路仓库内 E2E smoke 基线（顺序、终态、重复与异常计数）
 - 会话 start/stop 控制
-- `audio.ingress.raw -> asr.partial / asr.final -> translation.result -> tts.request`
+- `audio.ingress.raw -> asr.partial / asr.final -> translation.result -> tts.request / tts.chunk / tts.ready`
 - 基础管理端点和服务指标
 
 当前仍缺：
 
 - 面向浏览器/SDK 的明确端到端 demo 与用户可见闭环
-- 压测窗口下的延迟和稳定性证据
+- 预发/生产压测窗口下的延迟和稳定性证据
 
 退出标准保持不变，但当前还未达成：
 
@@ -123,7 +123,11 @@
 当前判断：
 
 - `tts-orchestrator` 模块已存在
-- 但现在只完成了 `translation.result -> tts.request` 的占位编排
+- 已具备 `translation.result -> tts.request / tts.chunk / tts.ready` 编排与 HTTP synthesis 适配入口
+- 已补齐 `tts.ready` 的可配置 S3/MinIO 上传与真实 `playbackUrl` 回填基线
+- 已补齐 `tts.ready` 的 `cache-control` 与 `expires/sig` 签名 URL 策略基线
+- 已补齐 TTS 引擎第一版生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
+- 下一步是推进 TTS 真机容量/故障演练与 CDN 回放分发深度治理（区域路由、回源、命中率优化）
 
 ## 6. Phase 4：控制面与多租户
 
@@ -143,7 +147,8 @@
 当前判断：
 
 - `control-plane` 模块已存在
-- 当前已覆盖租户策略 GET / PUT、版本化 upsert 以及灰度/回退策略字段
+- 当前已覆盖租户策略 GET / PUT、版本化 upsert、`/api/v1/tenants/**` Bearer Token 鉴权/授权基线、`control.auth.mode=static/external-iam/hybrid` 鉴权后端切换与 JWKS 校验后端骨架、`tenant.policy.changed` 发布基线以及灰度/回退策略字段
+- 下一步是补齐外部 IAM/RBAC 提供方联调与生产级运行保障（真实参数、失败策略、监控证据），并推进跨区域分发、策略版本编排与回滚治理能力
 
 ## 7. Phase 5：容量、压测与弹性
 
@@ -162,7 +167,10 @@
 当前判断：
 
 - 观测基线和仓库级看板/告警资产已接入
-- 压测、告警、恢复与弹性证据仍未建立
+- 告警通知路由和值班升级 runbook 基线已落地
+- 仓库内多场景 loadtest + fault-drill + 告警处置脚本闭环已落地
+- 预发环境一键收口入口（loadtest/fault-drill/Alertmanager 恢复采样）已落地
+- 预发/生产环境下的容量、恢复与弹性实战证据仍待建立并持续回填
 
 ## 8. 当前建议优先级
 
@@ -170,8 +178,8 @@
 
 1. 补齐下行链路的稳定性与端到端验证
 2. 补齐幂等、补偿、熔断与灰度治理
-3. 完成 TTS 真实引擎接入，并完成 ASR FunASR 与 Translation OpenAI 生产联调
-4. 完成告警阈值标定与通知路由，形成可执行值班策略
+3. 推进 ASR/Translation/TTS 真实引擎联调（ASR/Translation/TTS 已补齐第一版联调基线，继续做真机容量与故障演练）
+4. 用预发/生产流量持续标定告警阈值，并将通知路由接入真实值班系统
 5. 落地压测与故障演练
 6. 补齐 TTS 分发与控制面高级能力
 

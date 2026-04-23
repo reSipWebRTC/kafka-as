@@ -68,6 +68,88 @@ Checks:
 - user-visible downlink payload mapping (`subtitle.partial` / `subtitle.final` / `session.closed`)
 - duplicate / malformed payload stability regressions in downlink consumers
 
+### Run loadtest + alert closure baseline
+
+Run from repository root or from a feature worktree:
+
+```bash
+tools/loadtest-alert-closure.sh
+```
+
+Outputs:
+
+- `build/reports/loadtest/gateway-pipeline-loadtest-aggregate.json`
+- `build/reports/loadtest/gateway-pipeline-loadtest-summary.md`
+- `build/reports/loadtest/gateway-pipeline-loadtest-<scenario>.json`
+- `build/reports/loadtest/gateway-pipeline-loadtest-<scenario>.log`
+- `build/reports/loadtest/gateway-pipeline-loadtest.json` (legacy compatibility path)
+
+Scenario defaults:
+
+- `smoke`
+- `baseline`
+- `stress`
+
+Scenario-specific overrides:
+
+- `LOADTEST_<SCENARIO>_SESSIONS`
+- `LOADTEST_<SCENARIO>_FRAMES_PER_SESSION`
+- `LOADTEST_<SCENARIO>_MIN_SUCCESS_RATIO`
+- `LOADTEST_<SCENARIO>_MAX_P95_LATENCY_MS`
+
+### Run fault-drill closure baseline
+
+Run from repository root or from a feature worktree:
+
+```bash
+tools/fault-drill-closure.sh
+```
+
+Outputs:
+
+- `build/reports/fault-drill/fault-drill-closure.json`
+- `build/reports/fault-drill/fault-drill-closure-summary.md`
+- `build/reports/fault-drill/fault-drill-<scenario>.log`
+
+Scenario filter:
+
+- `FAULT_DRILL_SCENARIOS="asr-engine-fault-mapping translation-engine-fault-mapping tts-engine-fault-mapping"`
+
+### Run preprod drill closure
+
+Run from repository root or from a feature worktree:
+
+```bash
+PREPROD_TARGET=preprod-cn-a \
+PREPROD_ALERTMANAGER_URL="https://alertmanager.preprod.example.com" \
+PREPROD_LOADTEST_COMMAND="bash scripts/preprod/loadtest.sh" \
+PREPROD_FAULT_DRILL_COMMAND="bash scripts/preprod/fault-drill.sh" \
+tools/preprod-drill-closure.sh
+```
+
+Outputs:
+
+- `build/reports/preprod-drill/preprod-drill-closure.json`
+- `build/reports/preprod-drill/preprod-drill-closure-summary.md`
+- `build/reports/preprod-drill/preprod-loadtest.log`
+- `build/reports/preprod-drill/preprod-fault-drill.log`
+- `build/reports/preprod-drill/alertmanager-*.json`
+
+Useful flags:
+
+- `PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,PipelineErrorRateHigh,KafkaConsumerLagHigh"`
+- `PREPROD_RECOVERY_TIMEOUT_SECONDS=900`
+- `PREPROD_RECOVERY_POLL_SECONDS=30`
+- `PREPROD_SKIP_ALERT_CAPTURE=1` (local integration run without Alertmanager dependency)
+- `PREPROD_DRY_RUN=1` (script flow validation only)
+
+Related docs:
+
+- `docs/reports/loadtest/2026-04-22-baseline.md`
+- `docs/reports/loadtest/2026-04-23-closure.md`
+- `docs/reports/loadtest/2026-04-23-preprod-closure.md`
+- `docs/runbooks/loadtest-alert-closure.md`
+
 ### Start local monitoring baseline
 
 Run from repository root:

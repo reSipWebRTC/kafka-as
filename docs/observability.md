@@ -93,6 +93,13 @@
 - 对象存储写入延迟
 - CDN 回源率
 
+### 4.6 Control-Plane Auth
+
+- 鉴权决策总量（allow/unauthorized/forbidden）
+- 拒绝原因分布（token 缺失、租户越权、权限不足、外部 IAM 不可用）
+- hybrid 模式回退触发次数（external -> static）
+- 鉴权延迟
+
 ## 5. Trace 与日志要求
 
 ### Trace
@@ -206,19 +213,42 @@
 - `tts.pipeline.messages.total` / `tts.pipeline.duration`
 - `controlplane.tenant.policy.upsert.total` / `controlplane.tenant.policy.upsert.duration`
 - `controlplane.tenant.policy.get.total` / `controlplane.tenant.policy.get.duration`
+- `controlplane.auth.decision.total` / `controlplane.auth.decision.duration`
+- `controlplane.auth.hybrid.fallback.total`
 
 ### 已落地监控资产（2026-04-22）
 
 - `deploy/monitoring/docker-compose.yml`：本地 Prometheus + Grafana 启停
 - `deploy/monitoring/prometheus/prometheus.yml`：六服务 `/actuator/prometheus` 抓取
-- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`：错误率、P95 延迟、Kafka lag 与控制面回退告警
+- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`：错误率、P95 延迟、Kafka lag、控制面回退与鉴权告警
 - `deploy/monitoring/grafana/dashboards/kafka-asr-overview.json`：主链路吞吐/错误/延迟 + downlink + lag 看板
 - `tools/monitoring-up.sh` / `tools/monitoring-down.sh`：一键启停入口
+
+### 已落地压测与告警闭环基线（2026-04-22）
+
+- `tools/loadtest-alert-closure.sh`：仓库内可重复执行的网关压测入口
+- `build/reports/loadtest/gateway-pipeline-loadtest.json`：结构化结果输出
+- `docs/reports/loadtest/2026-04-22-baseline.md`：本次基线证据与风险说明
+- `docs/runbooks/loadtest-alert-closure.md`：执行频率、门槛和告警升级路径
+- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`：按该基线收紧的第一版阈值
+
+基线结果摘要：
+
+- `successRatio=1.0`
+- `throughputFramesPerSecond=7452.5`
+- `frameLatencyMsP95=0`
+- `gatewayWsErrorCount=0`
+- `downlinkErrorCount=0`
+
+说明：
+
+- 上述结果来自 in-memory harness，不等于生产流量表现。
+- 当前告警阈值已完成“基线校准”，上线前仍需按预发/生产真实流量再标定。
 
 ### 当前仍缺失
 
 - 客户端可感知的字幕首包 / 最终字幕延迟指标
-- 告警阈值的生产环境标定与分级路由（通知/升级）
+- 告警阈值的生产环境再标定与分级路由（通知/升级）
 - 结构化 JSON 日志
-- 压测报告与 SLO 达成证据
+- 真实引擎链路（Kafka + 外部 ASR/翻译/TTS）的压测报告与 SLO 达成证据
 - 故障注入与恢复演练基线

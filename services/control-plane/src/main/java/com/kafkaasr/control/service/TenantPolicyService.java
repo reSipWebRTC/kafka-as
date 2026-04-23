@@ -2,12 +2,17 @@ package com.kafkaasr.control.service;
 
 import com.kafkaasr.control.api.TenantPolicyResponse;
 import com.kafkaasr.control.api.TenantPolicyUpsertRequest;
+import com.kafkaasr.control.events.ControlKafkaProperties;
+import com.kafkaasr.control.events.TenantPolicyChangedEvent;
+import com.kafkaasr.control.events.TenantPolicyChangedPayload;
+import com.kafkaasr.control.events.TenantPolicyChangedPublisher;
 import com.kafkaasr.control.policy.TenantPolicyRepository;
 import com.kafkaasr.control.policy.TenantPolicyState;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -18,23 +23,39 @@ public class TenantPolicyService {
     private static final int DEFAULT_GRAY_TRAFFIC_PERCENT = 0;
     private static final boolean DEFAULT_FALLBACK_FAIL_OPEN = false;
     private static final long DEFAULT_FALLBACK_CACHE_TTL_MS = 30000L;
+    private static final int DEFAULT_RETRY_MAX_ATTEMPTS = 3;
+    private static final long DEFAULT_RETRY_BACKOFF_MS = 200L;
+    private static final String DEFAULT_DLQ_TOPIC_SUFFIX = ".dlq";
+    private static final String EVENT_TYPE = "tenant.policy.changed";
+    private static final String EVENT_VERSION = "v1";
+    private static final String SYNTHETIC_SESSION_PREFIX = "tenant-policy::";
+    private static final String OPERATION_CREATED = "CREATED";
+    private static final String OPERATION_UPDATED = "UPDATED";
 
     private final TenantPolicyRepository tenantPolicyRepository;
+    private final TenantPolicyChangedPublisher tenantPolicyChangedPublisher;
+    private final ControlKafkaProperties kafkaProperties;
     private final Clock clock;
     private final MeterRegistry meterRegistry;
 
     @Autowired
     public TenantPolicyService(
             TenantPolicyRepository tenantPolicyRepository,
+            TenantPolicyChangedPublisher tenantPolicyChangedPublisher,
+            ControlKafkaProperties kafkaProperties,
             MeterRegistry meterRegistry) {
-        this(tenantPolicyRepository, Clock.systemUTC(), meterRegistry);
+        this(tenantPolicyRepository, tenantPolicyChangedPublisher, kafkaProperties, Clock.systemUTC(), meterRegistry);
     }
 
     TenantPolicyService(
             TenantPolicyRepository tenantPolicyRepository,
+            TenantPolicyChangedPublisher tenantPolicyChangedPublisher,
+            ControlKafkaProperties kafkaProperties,
             Clock clock,
             MeterRegistry meterRegistry) {
         this.tenantPolicyRepository = tenantPolicyRepository;
+        this.tenantPolicyChangedPublisher = tenantPolicyChangedPublisher;
+        this.kafkaProperties = kafkaProperties;
         this.clock = clock;
         this.meterRegistry = meterRegistry;
     }
@@ -55,6 +76,13 @@ public class TenantPolicyService {
             long fallbackCacheTtlMs = request.controlPlaneFallbackCacheTtlMs() == null
                     ? DEFAULT_FALLBACK_CACHE_TTL_MS
                     : request.controlPlaneFallbackCacheTtlMs();
+            int retryMaxAttempts = request.retryMaxAttempts() == null
+                    ? DEFAULT_RETRY_MAX_ATTEMPTS
+                    : request.retryMaxAttempts();
+            long retryBackoffMs = request.retryBackoffMs() == null
+                    ? DEFAULT_RETRY_BACKOFF_MS
+                    : request.retryBackoffMs();
+            String dlqTopicSuffix = normalizeDlqTopicSuffix(request.dlqTopicSuffix());
 
             TenantPolicyState target;
             if (current == null) {
@@ -72,6 +100,9 @@ public class TenantPolicyService {
                         grayTrafficPercent,
                         fallbackFailOpen,
                         fallbackCacheTtlMs,
+                        retryMaxAttempts,
+                        retryBackoffMs,
+                        dlqTopicSuffix,
                         1L,
                         now);
                 if (!tenantPolicyRepository.createIfAbsent(target)) {
@@ -92,6 +123,9 @@ public class TenantPolicyService {
                             grayTrafficPercent,
                             fallbackFailOpen,
                             fallbackCacheTtlMs,
+                            retryMaxAttempts,
+                            retryBackoffMs,
+                            dlqTopicSuffix,
                             existing.version() + 1,
                             now);
                     tenantPolicyRepository.save(target);
@@ -111,6 +145,9 @@ public class TenantPolicyService {
                         grayTrafficPercent,
                         fallbackFailOpen,
                         fallbackCacheTtlMs,
+                        retryMaxAttempts,
+                        retryBackoffMs,
+                        dlqTopicSuffix,
                         current.version() + 1,
                         now);
                 tenantPolicyRepository.save(target);
@@ -123,7 +160,10 @@ public class TenantPolicyService {
                             "code",
                             "OK")
                     .increment();
-            return Mono.just(toResponse(target, created));
+            TenantPolicyResponse response = toResponse(target, created);
+            String operation = created ? OPERATION_CREATED : OPERATION_UPDATED;
+            return publishPolicyChangedEvent(toPolicyChangedEvent(target, operation))
+                    .thenReturn(response);
         } catch (RuntimeException exception) {
             meterRegistry.counter(
                             "controlplane.tenant.policy.upsert.total",
@@ -185,6 +225,9 @@ public class TenantPolicyService {
                 state.grayTrafficPercent(),
                 state.controlPlaneFallbackFailOpen(),
                 state.controlPlaneFallbackCacheTtlMs(),
+                state.retryMaxAttempts(),
+                state.retryBackoffMs(),
+                state.dlqTopicSuffix(),
                 state.version(),
                 state.updatedAtMs(),
                 created);
@@ -211,6 +254,13 @@ public class TenantPolicyService {
         return normalized;
     }
 
+    private String normalizeDlqTopicSuffix(String dlqTopicSuffix) {
+        if (dlqTopicSuffix == null || dlqTopicSuffix.isBlank()) {
+            return DEFAULT_DLQ_TOPIC_SUFFIX;
+        }
+        return dlqTopicSuffix;
+    }
+
     private String normalizeErrorCode(Throwable throwable) {
         if (throwable instanceof ControlPlaneException exception) {
             return exception.code();
@@ -219,5 +269,49 @@ public class TenantPolicyService {
             return "INVALID_MESSAGE";
         }
         return "INTERNAL_ERROR";
+    }
+
+    private Mono<Void> publishPolicyChangedEvent(TenantPolicyChangedEvent event) {
+        return tenantPolicyChangedPublisher.publish(event)
+                .doOnSuccess(ignored -> meterRegistry.counter(
+                                "controlplane.tenant.policy.distribution.publish.total",
+                                "result",
+                                "success",
+                                "operation",
+                                event.payload().operation())
+                        .increment())
+                .doOnError(ignored -> meterRegistry.counter(
+                                "controlplane.tenant.policy.distribution.publish.total",
+                                "result",
+                                "error",
+                                "operation",
+                                event.payload().operation())
+                        .increment())
+                .onErrorResume(ignored -> Mono.empty());
+    }
+
+    private TenantPolicyChangedEvent toPolicyChangedEvent(TenantPolicyState state, String operation) {
+        return new TenantPolicyChangedEvent(
+                prefixedId("evt"),
+                EVENT_TYPE,
+                EVENT_VERSION,
+                prefixedId("trc"),
+                SYNTHETIC_SESSION_PREFIX + state.tenantId(),
+                state.tenantId(),
+                null,
+                kafkaProperties.getProducerId(),
+                state.version(),
+                nowMs(),
+                state.tenantId() + ":" + EVENT_TYPE + ":" + state.version(),
+                new TenantPolicyChangedPayload(
+                        state.tenantId(),
+                        state.version(),
+                        state.updatedAtMs(),
+                        operation,
+                        null));
+    }
+
+    private String prefixedId(String prefix) {
+        return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
     }
 }
