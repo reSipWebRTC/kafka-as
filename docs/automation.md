@@ -174,6 +174,29 @@ Related docs:
 - `deploy/env/control-plane-iam.env.template`
 - `docs/runbooks/control-plane-iam-provider-integration.md`
 
+### Run control-plane local JWKS/JWT drill (simulated)
+
+Run from repository root:
+
+```bash
+tools/control-plane-jwks-jwt-drill.sh
+```
+
+Outputs:
+
+- `build/reports/preprod-drill/control-plane-jwks-jwt-drill.json`
+- `build/reports/preprod-drill/control-plane-jwks-jwt-drill-summary.md`
+- `build/reports/preprod-drill/control-plane-jwks-jwt-*.log`
+
+Useful flags:
+
+- `--skip-tests`
+- `--report-dir <path>`
+
+Related docs:
+
+- `docs/runbooks/control-plane-iam-provider-integration.md`
+
 ### Run control-plane auth failure drill (simulated)
 
 Run from repository root:

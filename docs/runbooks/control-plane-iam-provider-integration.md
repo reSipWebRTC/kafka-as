@@ -67,6 +67,27 @@ tools/control-plane-iam-precheck.sh \
 3. 租户范围：跨租户访问被拒绝。
 4. 拒绝原因：`OPERATION_DENIED`、`TENANT_SCOPE_DENIED`、`MISSING_OR_INVALID_TOKEN`。
 
+### 3.2 本地 JWKS + JWT 全链路联调（simulated）
+
+在接入真实 IAM 前，使用本地 mock JWKS 与签发 JWT 验证 `external-iam/hybrid` HTTP 全链路：
+
+```bash
+tools/control-plane-jwks-jwt-drill.sh
+```
+
+产物：
+
+- `build/reports/preprod-drill/control-plane-jwks-jwt-drill.json`
+- `build/reports/preprod-drill/control-plane-jwks-jwt-drill-summary.md`
+- `build/reports/preprod-drill/control-plane-jwks-jwt-*.log`
+
+覆盖项：
+
+1. `external-iam` 模式下真实 JWKS 拉取 + JWT 校验链路
+2. 读/写权限与租户范围授权结果（200/403）
+3. 非法 token 拒绝（401）
+4. `hybrid` 模式下外部 IAM 不可用时 static fallback 行为
+
 ## 4. 切换策略
 
 推荐顺序：
@@ -138,7 +159,8 @@ tools/control-plane-auth-failure-drill.sh
 2. `control-plane-auth-drill` `overallPass=true`
 3. `preprod-drill-closure` `overallPass=true`
 4. `control-plane-auth-failure-drill`（simulated）`overallPass=true`
-5. 关键告警无持续异常：
+5. `control-plane-jwks-jwt-drill`（simulated）`overallPass=true`
+6. 关键告警无持续异常：
    - `ControlPlaneAuthDenyRateHigh`
    - `ControlPlaneExternalIamUnavailableSpike`
    - `ControlPlaneHybridFallbackSpike`
