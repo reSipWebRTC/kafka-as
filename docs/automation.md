@@ -174,6 +174,29 @@ Related docs:
 - `deploy/env/control-plane-iam.env.template`
 - `docs/runbooks/control-plane-iam-provider-integration.md`
 
+### Run control-plane real IAM env drill
+
+Run from repository root:
+
+```bash
+tools/control-plane-iam-real-env-drill.sh --env-file .secrets/control-plane-iam.env
+```
+
+Outputs:
+
+- `build/reports/preprod-drill/real-iam-drill/control-plane-iam-real-env-drill.json`
+- `build/reports/preprod-drill/real-iam-drill/control-plane-iam-real-env-drill-summary.md`
+- `build/reports/preprod-drill/real-iam-drill/*.log`
+
+Useful flags:
+
+- `--run-preprod-closure` (chain `tools/preprod-drill-closure.sh` after precheck + auth drill)
+- `--report-dir <path>`
+
+Related docs:
+
+- `docs/runbooks/control-plane-iam-provider-integration.md`
+
 ### Run control-plane local JWKS/JWT drill (simulated)
 
 Run from repository root:

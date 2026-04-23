@@ -153,6 +153,30 @@ tools/control-plane-auth-failure-drill.sh
 3. `hybrid` 回退逻辑与 fallback 指标计数
 4. 关键告警规则存在性（deny ratio / external unavailable / hybrid fallback）
 
+### 5.2 真实 IAM 参数联调一键入口
+
+当真实 IAM 参数、token 与预发地址已经准备好时，推荐用一条命令串联 precheck + auth drill：
+
+```bash
+tools/control-plane-iam-real-env-drill.sh --env-file .secrets/control-plane-iam.env
+```
+
+如需连同预发闭环一起执行（loadtest/fault/alert 恢复采样）：
+
+```bash
+tools/control-plane-iam-real-env-drill.sh \
+  --env-file .secrets/control-plane-iam.env \
+  --run-preprod-closure
+```
+
+说明：
+
+1. 该脚本不会启用 `--allow-placeholder-values`，必须使用真实参数值。
+2. 输出目录默认是 `build/reports/preprod-drill/real-iam-drill/`。
+3. 报告主文件为：
+   - `control-plane-iam-real-env-drill.json`
+   - `control-plane-iam-real-env-drill-summary.md`
+
 ## 6. 通过标准
 
 1. 预检 `overallPass=true`
