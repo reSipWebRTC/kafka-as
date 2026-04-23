@@ -127,6 +127,12 @@ public class AsrInferenceProperties {
 
         private boolean enableInverseTextNormalization = true;
 
+        @Min(1)
+        private int maxConcurrentRequests = 16;
+
+        @Valid
+        private Health health = new Health();
+
         public String getEndpoint() {
             return endpoint;
         }
@@ -205,6 +211,78 @@ public class AsrInferenceProperties {
 
         public void setEnableInverseTextNormalization(boolean enableInverseTextNormalization) {
             this.enableInverseTextNormalization = enableInverseTextNormalization;
+        }
+
+        public int getMaxConcurrentRequests() {
+            return maxConcurrentRequests;
+        }
+
+        public void setMaxConcurrentRequests(int maxConcurrentRequests) {
+            this.maxConcurrentRequests = maxConcurrentRequests;
+        }
+
+        public Health getHealth() {
+            return health;
+        }
+
+        public void setHealth(Health health) {
+            this.health = health;
+        }
+    }
+
+    public static class Health {
+
+        private boolean enabled = false;
+
+        @NotBlank
+        private String path = "/health";
+
+        @Min(100)
+        private long timeoutMs = 800L;
+
+        @Min(100)
+        private long cacheTtlMs = 3000L;
+
+        private boolean failOpenOnError = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getPath() {
+            return path;
+        }
+
+        public void setPath(String path) {
+            this.path = path;
+        }
+
+        public long getTimeoutMs() {
+            return timeoutMs;
+        }
+
+        public void setTimeoutMs(long timeoutMs) {
+            this.timeoutMs = timeoutMs;
+        }
+
+        public long getCacheTtlMs() {
+            return cacheTtlMs;
+        }
+
+        public void setCacheTtlMs(long cacheTtlMs) {
+            this.cacheTtlMs = cacheTtlMs;
+        }
+
+        public boolean isFailOpenOnError() {
+            return failOpenOnError;
+        }
+
+        public void setFailOpenOnError(boolean failOpenOnError) {
+            this.failOpenOnError = failOpenOnError;
         }
     }
 

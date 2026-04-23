@@ -83,3 +83,10 @@ asr:
       audio-format: ${ASR_FUNASR_AUDIO_FORMAT:pcm}
       default-sample-rate: ${ASR_FUNASR_DEFAULT_SAMPLE_RATE:16000}
       enable-inverse-text-normalization: ${ASR_FUNASR_ENABLE_ITN:true}
+      max-concurrent-requests: ${ASR_FUNASR_MAX_CONCURRENT_REQUESTS:16}
+      health:
+        enabled: ${ASR_FUNASR_HEALTH_ENABLED:false}
+        path: ${ASR_FUNASR_HEALTH_PATH:/health}
+        timeout-ms: ${ASR_FUNASR_HEALTH_TIMEOUT_MS:800}
+        cache-ttl-ms: ${ASR_FUNASR_HEALTH_CACHE_TTL_MS:3000}
+        fail-open-on-error: ${ASR_FUNASR_HEALTH_FAIL_OPEN_ON_ERROR:true}
