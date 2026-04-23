@@ -16,7 +16,7 @@
 | `speech-gateway` | 已落地骨架 | WebSocket 接入、Kafka 音频发布、会话 start/stop 转发、会话级限流/背压 | Kafka、`session-orchestrator` |
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、发布 `asr.partial` / `asr.final` | Kafka |
-| `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result` | Kafka |
+| `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result`，OpenAI 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
 | `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control` 与 URL 签名 | Kafka |
 | `control-plane` | 已落地骨架 | 租户策略 HTTP API、Redis 存储、版本化 upsert | Redis |
 
@@ -112,13 +112,14 @@
 - `asr.final` 消费
 - 默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配入口
 - OpenAI 响应兼容与错误语义加固（content 数组/Responses output 兼容、`error` 与失败 `status` 快速失败）
+- OpenAI 生产联调基线（可配置 health 探测、并发上限保护、错误码语义映射、引擎级指标）
 - `translation.result` 发布
 - 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
-- OpenAI 生产联调与模型侧运行保障（真实配额、限流与故障演练）
+- OpenAI 真机容量/故障演练与模型侧运行保障（真实配额、限流与故障演练）
 - glossary / context / fallback 策略
 
 ### tts-orchestrator

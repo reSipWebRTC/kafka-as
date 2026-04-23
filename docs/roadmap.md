@@ -4,12 +4,12 @@
 
 仓库当前不再处于“只有设计，没有代码”的阶段。
 
-截至 `2026-04-22`，已经完成：
+截至 `2026-04-23`，已经完成：
 
 - 架构、服务边界、事件契约和协议文档基线
 - `api/protobuf` 与 `api/json-schema` 契约文件
 - 6 个核心服务加 `control-plane` 的工程骨架
-- 从 `audio.ingress.raw` 到 `tts.request` 的主链路（默认占位实现 + provider 适配入口，ASR 含 FunASR mode、VAD 静音切段与联调基线，Translation 含 OpenAI mode，TTS 含 synthesis mode）
+- 从 `audio.ingress.raw` 到 `tts.request` 的主链路（默认占位实现 + provider 适配入口，ASR 含 FunASR mode、VAD 静音切段与联调基线，Translation 含 OpenAI mode 与联调基线，TTS 含 synthesis mode）
 - Redis 会话状态和租户策略的最小落地
 - 统一的管理端点、Tracing 和第一版服务指标
 - `deploy/monitoring` 下 Prometheus/Grafana/Alertmanager 看板、告警与通知路由基线
@@ -174,7 +174,7 @@
 
 1. 补齐下行链路的稳定性与端到端验证
 2. 补齐幂等、补偿、熔断与灰度治理
-3. 推进 ASR/Translation/TTS 真实引擎联调（ASR 已补齐第一版联调基线，继续做真机容量与故障演练）
+3. 推进 ASR/Translation/TTS 真实引擎联调（ASR/Translation 已补齐第一版联调基线，继续做真机容量与故障演练）
 4. 用预发/生产流量持续标定告警阈值，并将通知路由接入真实值班系统
 5. 落地压测与故障演练
 6. 补齐 TTS 分发与控制面高级能力

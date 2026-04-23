@@ -5,15 +5,24 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.translation.events.AsrFinalEvent;
 import com.kafkaasr.translation.events.AsrFinalPayload;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 @Primary
 @Component
@@ -25,13 +34,21 @@ public class OpenaiTranslationEngine implements TranslationEngine {
     private final TranslationEngineProperties properties;
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
+    private final MeterRegistry meterRegistry;
+    private final Semaphore concurrentGuard;
+    private final AtomicInteger inFlightRequests = new AtomicInteger(0);
+    private final AtomicReference<HealthSnapshot> healthSnapshot =
+            new AtomicReference<>(new HealthSnapshot(true, 0L));
+    private final Object healthRefreshLock = new Object();
 
     public OpenaiTranslationEngine(
             TranslationEngineProperties properties,
             WebClient.Builder webClientBuilder,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            MeterRegistry meterRegistry) {
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.meterRegistry = meterRegistry;
 
         String endpoint = properties.getOpenai().getEndpoint();
         if (endpoint == null || endpoint.isBlank()) {
@@ -39,41 +56,86 @@ public class OpenaiTranslationEngine implements TranslationEngine {
                     "translation.engine.openai.endpoint must be set when translation.engine.mode=openai");
         }
         this.webClient = webClientBuilder.baseUrl(endpoint).build();
+        this.concurrentGuard = new Semaphore(properties.getOpenai().getMaxConcurrentRequests(), true);
+        meterRegistry.gauge("translation.openai.inflight", inFlightRequests);
     }
 
     @Override
     public TranslationResult translate(AsrFinalEvent asrFinalEvent, String targetLang) {
-        if (asrFinalEvent == null) {
-            throw new IllegalArgumentException("asr.final event must not be null");
+        String sessionId = asrFinalEvent == null ? "unknown" : asrFinalEvent.sessionId();
+        if (!concurrentGuard.tryAcquire()) {
+            meterRegistry.counter(
+                            "translation.openai.concurrency.rejected.total",
+                            "code",
+                            "TRANSLATION_PROVIDER_BUSY")
+                    .increment();
+            throw new TranslationEngineException(
+                    "TRANSLATION_PROVIDER_BUSY",
+                    "OpenAI concurrency limit reached for session " + sessionId,
+                    true);
         }
-        AsrFinalPayload payload = asrFinalEvent.payload();
-        if (payload == null) {
-            throw new IllegalArgumentException("Missing asr.final payload for session " + asrFinalEvent.sessionId());
+        inFlightRequests.incrementAndGet();
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            if (asrFinalEvent == null) {
+                throw new TranslationEngineException(
+                        "TRANSLATION_INVALID_REQUEST",
+                        "asr.final event must not be null",
+                        false);
+            }
+            AsrFinalPayload payload = asrFinalEvent.payload();
+            if (payload == null) {
+                throw new IllegalArgumentException(
+                        "Missing asr.final payload for session " + asrFinalEvent.sessionId());
+            }
+
+            String sourceText = payload.text() == null ? "" : payload.text();
+            String sourceLang = normalizeLanguage(payload.language());
+            String normalizedTargetLang = normalizeLanguage(targetLang);
+            TranslationEngineProperties.Openai config = properties.getOpenai();
+
+            assertProviderHealthy(sessionId);
+
+            String responseBody = webClient
+                    .post()
+                    .uri(config.getPath())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .headers(headers -> {
+                        String apiKey = config.getApiKey();
+                        if (apiKey != null && !apiKey.isBlank()) {
+                            headers.setBearerAuth(apiKey);
+                        }
+                    })
+                    .bodyValue(toOpenaiRequest(config, sourceText, sourceLang, normalizedTargetLang))
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofMillis(config.getTimeoutMs()))
+                    .block();
+
+            String translatedText = parseTranslatedText(responseBody, asrFinalEvent.sessionId());
+            meterRegistry.counter(
+                            "translation.openai.requests.total",
+                            "result",
+                            "success",
+                            "code",
+                            "OK")
+                    .increment();
+            return new TranslationResult(translatedText, sourceLang, normalizedTargetLang, config.getEngineName());
+        } catch (RuntimeException exception) {
+            TranslationEngineException mapped = toEngineException(exception, sessionId);
+            meterRegistry.counter(
+                            "translation.openai.requests.total",
+                            "result",
+                            "error",
+                            "code",
+                            mapped.errorCode())
+                    .increment();
+            throw mapped;
+        } finally {
+            sample.stop(meterRegistry.timer("translation.openai.request.duration"));
+            inFlightRequests.decrementAndGet();
+            concurrentGuard.release();
         }
-
-        String sourceText = payload.text() == null ? "" : payload.text();
-        String sourceLang = normalizeLanguage(payload.language());
-        String normalizedTargetLang = normalizeLanguage(targetLang);
-        TranslationEngineProperties.Openai config = properties.getOpenai();
-
-        String responseBody = webClient
-                .post()
-                .uri(config.getPath())
-                .contentType(MediaType.APPLICATION_JSON)
-                .headers(headers -> {
-                    String apiKey = config.getApiKey();
-                    if (apiKey != null && !apiKey.isBlank()) {
-                        headers.setBearerAuth(apiKey);
-                    }
-                })
-                .bodyValue(toOpenaiRequest(config, sourceText, sourceLang, normalizedTargetLang))
-                .retrieve()
-                .bodyToMono(String.class)
-                .timeout(Duration.ofMillis(config.getTimeoutMs()))
-                .block();
-
-        String translatedText = parseTranslatedText(responseBody, asrFinalEvent.sessionId());
-        return new TranslationResult(translatedText, sourceLang, normalizedTargetLang, config.getEngineName());
     }
 
     private Map<String, Object> toOpenaiRequest(
@@ -107,14 +169,21 @@ public class OpenaiTranslationEngine implements TranslationEngine {
 
     private String parseTranslatedText(String responseBody, String sessionId) {
         if (responseBody == null || responseBody.isBlank()) {
-            throw new IllegalStateException("Empty OpenAI translation response for session " + sessionId);
+            throw new TranslationEngineException(
+                    "TRANSLATION_PROVIDER_BAD_RESPONSE",
+                    "Empty OpenAI translation response for session " + sessionId,
+                    true);
         }
 
         JsonNode root;
         try {
             root = objectMapper.readTree(responseBody);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Invalid OpenAI translation response for session " + sessionId, exception);
+            throw new TranslationEngineException(
+                    "TRANSLATION_PROVIDER_BAD_RESPONSE",
+                    "Invalid OpenAI translation response for session " + sessionId,
+                    true,
+                    exception);
         }
 
         assertProviderSuccess(root, sessionId);
@@ -134,7 +203,10 @@ public class OpenaiTranslationEngine implements TranslationEngine {
                 firstTextFromResponsesOutput(root.path("output")));
 
         if (translatedText.isBlank()) {
-            throw new IllegalStateException("Empty OpenAI translated text for session " + sessionId);
+            throw new TranslationEngineException(
+                    "TRANSLATION_PROVIDER_EMPTY_TEXT",
+                    "Empty OpenAI translated text for session " + sessionId,
+                    true);
         }
         return translatedText;
     }
@@ -158,13 +230,7 @@ public class OpenaiTranslationEngine implements TranslationEngine {
     private void assertProviderSuccess(JsonNode root, String sessionId) {
         JsonNode errorNode = root.path("error");
         if (!errorNode.isMissingNode() && !errorNode.isNull()) {
-            String message = firstNonBlank(
-                    errorNode.path("message").asText(""),
-                    errorNode.path("code").asText(""),
-                    errorNode.path("type").asText(""),
-                    "unknown");
-            throw new IllegalStateException(
-                    "OpenAI provider error for session " + sessionId + " (message=" + message + ")");
+            throw toProviderErrorException(errorNode, sessionId);
         }
 
         JsonNode statusNode = root.path("status");
@@ -181,8 +247,58 @@ public class OpenaiTranslationEngine implements TranslationEngine {
                 || "ok".equalsIgnoreCase(status)) {
             return;
         }
-        throw new IllegalStateException(
-                "OpenAI provider status is not successful for session " + sessionId + " (status=" + status + ")");
+        String normalized = status.toLowerCase(Locale.ROOT);
+        if ("failed".equals(normalized) || "error".equals(normalized)) {
+            throw new TranslationEngineException(
+                    "TRANSLATION_PROVIDER_FAILURE",
+                    "OpenAI provider status is failed for session " + sessionId + " (status=" + status + ")",
+                    true);
+        }
+        throw new TranslationEngineException(
+                "TRANSLATION_PROVIDER_REJECTED",
+                "OpenAI provider status is not successful for session " + sessionId + " (status=" + status + ")",
+                false);
+    }
+
+    private TranslationEngineException toProviderErrorException(JsonNode errorNode, String sessionId) {
+        String message = firstNonBlank(
+                errorNode.path("message").asText(""),
+                errorNode.path("code").asText(""),
+                errorNode.path("type").asText(""),
+                "unknown");
+        String code = errorNode.path("code").asText("");
+        String type = errorNode.path("type").asText("");
+        String detail = (message + " " + code + " " + type).toLowerCase(Locale.ROOT);
+
+        if (detail.contains("rate") || detail.contains("429")) {
+            return new TranslationEngineException(
+                    "TRANSLATION_PROVIDER_RATE_LIMIT",
+                    "OpenAI provider rate-limited for session " + sessionId + " (message=" + message + ")",
+                    true);
+        }
+        if (detail.contains("unavailable")
+                || detail.contains("overload")
+                || detail.contains("temporar")
+                || detail.contains("server_error")) {
+            return new TranslationEngineException(
+                    "TRANSLATION_PROVIDER_UNAVAILABLE",
+                    "OpenAI provider unavailable for session " + sessionId + " (message=" + message + ")",
+                    true);
+        }
+        if (detail.contains("invalid")
+                || detail.contains("unsupported")
+                || detail.contains("auth")
+                || detail.contains("permission")
+                || detail.contains("context_length")) {
+            return new TranslationEngineException(
+                    "TRANSLATION_PROVIDER_REJECTED",
+                    "OpenAI provider rejected request for session " + sessionId + " (message=" + message + ")",
+                    false);
+        }
+        return new TranslationEngineException(
+                "TRANSLATION_PROVIDER_FAILURE",
+                "OpenAI provider error for session " + sessionId + " (message=" + message + ")",
+                true);
     }
 
     private String firstTextFromMessageContentArray(JsonNode contentNode) {
@@ -222,5 +338,234 @@ public class OpenaiTranslationEngine implements TranslationEngine {
                 first.path("text").asText(""),
                 first.path("output_text").asText(""),
                 first.path("value").asText(""));
+    }
+
+    private void assertProviderHealthy(String sessionId) {
+        TranslationEngineProperties.Health healthProperties = properties.getOpenai().getHealth();
+        if (healthProperties == null || !healthProperties.isEnabled()) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        HealthSnapshot snapshot = healthSnapshot.get();
+        if (snapshot.expiresAtMs() > now) {
+            if (!snapshot.healthy()) {
+                throw new TranslationEngineException(
+                        "TRANSLATION_PROVIDER_UNHEALTHY",
+                        "OpenAI health check is unhealthy for session " + sessionId,
+                        true);
+            }
+            return;
+        }
+
+        synchronized (healthRefreshLock) {
+            snapshot = healthSnapshot.get();
+            if (snapshot.expiresAtMs() > now) {
+                if (!snapshot.healthy()) {
+                    throw new TranslationEngineException(
+                            "TRANSLATION_PROVIDER_UNHEALTHY",
+                            "OpenAI health check is unhealthy for session " + sessionId,
+                            true);
+                }
+                return;
+            }
+
+            try {
+                String responseBody = webClient
+                        .get()
+                        .uri(healthProperties.getPath())
+                        .accept(MediaType.APPLICATION_JSON)
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .timeout(Duration.ofMillis(healthProperties.getTimeoutMs()))
+                        .block();
+                boolean healthy = parseHealthResponse(responseBody);
+                cacheHealth(healthy, now, healthProperties.getCacheTtlMs());
+                meterRegistry.counter(
+                                "translation.openai.healthcheck.total",
+                                "result",
+                                healthy ? "up" : "down")
+                        .increment();
+                if (!healthy) {
+                    throw new TranslationEngineException(
+                            "TRANSLATION_PROVIDER_UNHEALTHY",
+                            "OpenAI health check is unhealthy for session " + sessionId,
+                            true);
+                }
+            } catch (TranslationEngineException exception) {
+                throw exception;
+            } catch (RuntimeException exception) {
+                if (healthProperties.isFailOpenOnError()) {
+                    cacheHealth(true, now, healthProperties.getCacheTtlMs());
+                    meterRegistry.counter(
+                                    "translation.openai.healthcheck.total",
+                                    "result",
+                                    "error_fail_open")
+                            .increment();
+                    return;
+                }
+                cacheHealth(false, now, healthProperties.getCacheTtlMs());
+                meterRegistry.counter(
+                                "translation.openai.healthcheck.total",
+                                "result",
+                                "error")
+                        .increment();
+                throw new TranslationEngineException(
+                        "TRANSLATION_PROVIDER_UNHEALTHY",
+                        "OpenAI health check failed for session " + sessionId,
+                        true,
+                        exception);
+            }
+        }
+    }
+
+    private boolean parseHealthResponse(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return true;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            JsonNode healthyNode = firstPresentNode(
+                    root.path("healthy"),
+                    root.path("ok"),
+                    root.path("ready"));
+            if (healthyNode != null) {
+                Boolean healthy = firstBooleanLike(healthyNode);
+                if (healthy != null) {
+                    return healthy;
+                }
+            }
+
+            JsonNode statusNode = firstPresentNode(
+                    root.path("status"),
+                    root.path("state"));
+            if (statusNode == null || !statusNode.isTextual()) {
+                return true;
+            }
+            String status = statusNode.asText().trim();
+            if (status.isEmpty()) {
+                return true;
+            }
+            return "up".equalsIgnoreCase(status)
+                    || "ok".equalsIgnoreCase(status)
+                    || "healthy".equalsIgnoreCase(status)
+                    || "ready".equalsIgnoreCase(status)
+                    || "success".equalsIgnoreCase(status);
+        } catch (JsonProcessingException exception) {
+            return true;
+        }
+    }
+
+    private void cacheHealth(boolean healthy, long nowMs, long ttlMs) {
+        long expiresAt = nowMs + Math.max(100L, ttlMs);
+        healthSnapshot.set(new HealthSnapshot(healthy, expiresAt));
+    }
+
+    private TranslationEngineException toEngineException(RuntimeException exception, String sessionId) {
+        if (exception instanceof TranslationEngineException translationEngineException) {
+            return translationEngineException;
+        }
+
+        Throwable root = rootCause(exception);
+        if (root instanceof TimeoutException) {
+            return new TranslationEngineException(
+                    "TRANSLATION_TIMEOUT",
+                    "OpenAI translation timeout for session " + sessionId,
+                    true,
+                    exception);
+        }
+        if (root instanceof WebClientResponseException responseException) {
+            int status = responseException.getStatusCode().value();
+            if (status == 429) {
+                return new TranslationEngineException(
+                        "TRANSLATION_PROVIDER_RATE_LIMIT",
+                        "OpenAI returned HTTP 429 for session " + sessionId,
+                        true,
+                        exception);
+            }
+            if (status >= 500) {
+                return new TranslationEngineException(
+                        "TRANSLATION_PROVIDER_UNAVAILABLE",
+                        "OpenAI returned HTTP " + status + " for session " + sessionId,
+                        true,
+                        exception);
+            }
+            return new TranslationEngineException(
+                    "TRANSLATION_PROVIDER_REJECTED",
+                    "OpenAI returned HTTP " + status + " for session " + sessionId,
+                    false,
+                    exception);
+        }
+        if (root instanceof WebClientRequestException) {
+            return new TranslationEngineException(
+                    "TRANSLATION_PROVIDER_UNAVAILABLE",
+                    "OpenAI request failed for session " + sessionId,
+                    true,
+                    exception);
+        }
+        if (exception instanceof IllegalArgumentException) {
+            return new TranslationEngineException(
+                    "TRANSLATION_INVALID_PAYLOAD",
+                    exception.getMessage() == null
+                            ? "Invalid asr.final payload for session " + sessionId
+                            : exception.getMessage(),
+                    false,
+                    exception);
+        }
+        return new TranslationEngineException(
+                "TRANSLATION_PROVIDER_FAILURE",
+                "OpenAI translation failed for session " + sessionId,
+                true,
+                exception);
+    }
+
+    private Throwable rootCause(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private JsonNode firstPresentNode(JsonNode... nodes) {
+        for (JsonNode node : nodes) {
+            if (node != null && !node.isNull() && !node.isMissingNode()) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private Boolean firstBooleanLike(JsonNode... values) {
+        for (JsonNode value : values) {
+            if (value == null || value.isNull() || value.isMissingNode()) {
+                continue;
+            }
+            if (value.isBoolean()) {
+                return value.asBoolean();
+            }
+            if (value.isNumber()) {
+                int numeric = value.asInt();
+                if (numeric == 1) {
+                    return true;
+                }
+                if (numeric == 0) {
+                    return false;
+                }
+            }
+            if (value.isTextual()) {
+                String raw = value.asText().trim();
+                if ("true".equalsIgnoreCase(raw) || "1".equals(raw) || "yes".equalsIgnoreCase(raw)) {
+                    return true;
+                }
+                if ("false".equalsIgnoreCase(raw) || "0".equals(raw) || "no".equalsIgnoreCase(raw)) {
+                    return false;
+                }
+            }
+        }
+        return null;
+    }
+
+    private record HealthSnapshot(boolean healthy, long expiresAtMs) {
     }
 }

@@ -3,8 +3,9 @@ package com.kafkaasr.translation.kafka;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.translation.events.AsrFinalEvent;
-import com.kafkaasr.translation.events.TranslationResultEvent;
 import com.kafkaasr.translation.events.TranslationKafkaProperties;
+import com.kafkaasr.translation.events.TranslationResultEvent;
+import com.kafkaasr.translation.pipeline.TranslationEngineException;
 import com.kafkaasr.translation.pipeline.TranslationPipelineService;
 import com.kafkaasr.translation.policy.TenantReliabilityPolicy;
 import com.kafkaasr.translation.policy.TenantReliabilityPolicyResolver;
@@ -142,10 +143,16 @@ public class AsrFinalConsumer {
         if (throwable instanceof IllegalArgumentException) {
             return "INVALID_PAYLOAD";
         }
+        if (throwable instanceof TranslationEngineException translationEngineException) {
+            return translationEngineException.errorCode();
+        }
         return "PIPELINE_FAILURE";
     }
 
     private boolean isRetryable(RuntimeException failure) {
+        if (failure instanceof TranslationEngineException translationEngineException) {
+            return translationEngineException.retryable();
+        }
         return !(failure instanceof IllegalArgumentException);
     }
 

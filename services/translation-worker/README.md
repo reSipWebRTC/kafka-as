@@ -8,9 +8,10 @@ Current scope:
 - Kafka integration foundation for consume/publish flow
 - Placeholder translation pipeline with contract-aligned event mapping
 - Configurable translation modes: `placeholder` / `http` / `openai`
+- OpenAI production-drill baseline: health probe, bounded concurrency, explicit error semantics, and engine-level metrics
 
 Out of scope in this phase:
 
-- Production OpenAI runtime validation and model-side scaling controls
+- OpenAI real-traffic capacity validation and fault drills
 - Terminology/glossary/context enhancement
 - WebSocket subtitle downlink changes
