@@ -18,7 +18,7 @@
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、发布 `asr.partial` / `asr.final` | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result`，OpenAI 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
 | `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control` 与 URL 签名，HTTP synthesis 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
-| `control-plane` | 已落地骨架 | 租户策略 HTTP API、可配置 Bearer Token 鉴权/授权（读写 + 租户范围）、Redis 存储、版本化 upsert、`tenant.policy.changed` 发布 | Redis、Kafka |
+| `control-plane` | 已落地骨架 | 租户策略 HTTP API、可配置 Bearer Token 鉴权/授权（读写 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 鉴权后端切换、JWKS 外部 IAM 校验后端骨架、Redis 存储、版本化 upsert、`tenant.policy.changed` 发布 | Redis、Kafka |
 
 基础设施：
 
@@ -167,6 +167,7 @@
 
 - 租户策略的 GET / PUT API
 - `/api/v1/tenants/**` 的 Bearer Token 鉴权与授权（读/写权限 + 租户范围）
+- `control.auth.mode` 模式切换（`static` / `external-iam` / `hybrid`）与 JWKS 外部 IAM 校验后端骨架
 - Redis 持久化抽象
 - 版本化更新语义
 - 灰度与控制面回退策略字段（canary percent / fail-open / cache ttl）
@@ -175,7 +176,7 @@
 
 当前未实现：
 
-- 外部 IAM/RBAC 集成
+- 外部 IAM/RBAC 提供方联调与生产级运行保障（真实 issuer/audience/JWKS、故障策略、运营监控）
 - 数据库持久化
 - 高级动态策略治理（跨区域分发、版本编排、回滚编排）
 

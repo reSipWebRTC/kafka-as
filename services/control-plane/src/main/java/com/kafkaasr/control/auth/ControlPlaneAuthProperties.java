@@ -12,9 +12,17 @@ import org.springframework.util.StringUtils;
 @ConfigurationProperties(prefix = "control.auth")
 public class ControlPlaneAuthProperties {
 
+    public enum Mode {
+        STATIC,
+        EXTERNAL_IAM,
+        HYBRID
+    }
+
     private boolean enabled = false;
+    private Mode mode = Mode.STATIC;
     private List<String> tokens = new ArrayList<>();
     private List<Credential> credentials = new ArrayList<>();
+    private External external = new External();
 
     public boolean isEnabled() {
         return enabled;
@@ -22,6 +30,14 @@ public class ControlPlaneAuthProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public Mode getMode() {
+        return mode;
+    }
+
+    public void setMode(Mode mode) {
+        this.mode = mode == null ? Mode.STATIC : mode;
     }
 
     public List<String> getTokens() {
@@ -38,6 +54,14 @@ public class ControlPlaneAuthProperties {
 
     public void setCredentials(List<Credential> credentials) {
         this.credentials = credentials == null ? new ArrayList<>() : new ArrayList<>(credentials);
+    }
+
+    public External getExternal() {
+        return external;
+    }
+
+    public void setExternal(External external) {
+        this.external = external == null ? new External() : external;
     }
 
     public Set<String> tokenSet() {
@@ -113,6 +137,73 @@ public class ControlPlaneAuthProperties {
             }
             return patterns.stream()
                     .anyMatch(pattern -> PatternMatchUtils.simpleMatch(pattern, tenantId));
+        }
+    }
+
+    public static class External {
+
+        private String issuer = "";
+        private String audience = "";
+        private String jwksUri = "";
+        private String permissionClaim = "scp";
+        private String tenantClaim = "tenant_ids";
+        private String readPermission = "control.policy.read";
+        private String writePermission = "control.policy.write";
+
+        public String getIssuer() {
+            return issuer;
+        }
+
+        public void setIssuer(String issuer) {
+            this.issuer = issuer == null ? "" : issuer;
+        }
+
+        public String getAudience() {
+            return audience;
+        }
+
+        public void setAudience(String audience) {
+            this.audience = audience == null ? "" : audience;
+        }
+
+        public String getJwksUri() {
+            return jwksUri;
+        }
+
+        public void setJwksUri(String jwksUri) {
+            this.jwksUri = jwksUri == null ? "" : jwksUri;
+        }
+
+        public String getPermissionClaim() {
+            return permissionClaim;
+        }
+
+        public void setPermissionClaim(String permissionClaim) {
+            this.permissionClaim = permissionClaim == null ? "scp" : permissionClaim;
+        }
+
+        public String getTenantClaim() {
+            return tenantClaim;
+        }
+
+        public void setTenantClaim(String tenantClaim) {
+            this.tenantClaim = tenantClaim == null ? "tenant_ids" : tenantClaim;
+        }
+
+        public String getReadPermission() {
+            return readPermission;
+        }
+
+        public void setReadPermission(String readPermission) {
+            this.readPermission = readPermission == null ? "control.policy.read" : readPermission;
+        }
+
+        public String getWritePermission() {
+            return writePermission;
+        }
+
+        public void setWritePermission(String writePermission) {
+            this.writePermission = writePermission == null ? "control.policy.write" : writePermission;
         }
     }
 }

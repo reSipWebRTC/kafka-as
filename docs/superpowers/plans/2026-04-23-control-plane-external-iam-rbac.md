@@ -15,13 +15,13 @@ Integrate external IAM/RBAC for `control-plane` while keeping current static tok
 
 ### Stage 2 (next): External IAM backend
 
-- [ ] Add `ExternalIamAuthBackend` (JWT/JWKS first)
-- [ ] Add config for issuer/audience/jwks and claim mapping
-- [ ] Implement permission + tenant scope mapping from claims
+- [x] Add `ExternalIamAuthBackend` (JWT/JWKS first)
+- [x] Add config for issuer/audience/jwks and claim mapping
+- [x] Implement permission + tenant scope mapping from claims
 
 ### Stage 3 (next): Mode switch and rollout
 
-- [ ] Add `control.auth.mode` (`static` default, `external-iam`, `hybrid`)
+- [x] Add `control.auth.mode` (`static` default, `external-iam`, `hybrid`)
 - [ ] Add backend-level metrics and deny reason counters
 - [ ] Add rollout runbook and preprod drill evidence
 

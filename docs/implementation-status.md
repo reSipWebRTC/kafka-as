@@ -44,7 +44,7 @@
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配（含 FunASR v2 响应兼容、health 探测、并发保护、错误语义映射）、按稳定度 + VAD 静音切段分流发布 `asr.partial` / `asr.final`、按租户策略驱动重试/DLQ（含控制面失败回退） | FunASR 真机容量/故障演练、高级上下文与切段策略 |
 | `translation-worker` | `8083` | 消费 `asr.final`、默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容、health 探测、并发保护、错误语义映射）、发布 `translation.result`、按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 真机容量/故障演练、术语治理、上下文增强 |
 | `tts-orchestrator` | `8084` | 消费 `translation.result`、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容、health 探测、并发保护、错误语义映射）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、`tts.ready` 支持可配置 S3/MinIO 上传并回填真实 `playbackUrl`、支持 `cache-control` 与 `expires/sig` URL 签名策略、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS 真机容量/故障演练、对象存储高可用治理、CDN 区域路由与高级缓存治理 |
-| `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、Redis 策略存储、版本化 upsert、灰度/回退/可靠性策略字段、可配置 Bearer Token 鉴权与授权（读/写权限 + 租户范围）、`tenant.policy.changed` 发布 | 外部 IAM/RBAC 集成、持久化数据库、跨区域分发与版本编排/回滚治理 |
+| `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、Redis 策略存储、版本化 upsert、灰度/回退/可靠性策略字段、可配置 Bearer Token 鉴权与授权（读/写权限 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 切换与 JWKS 外部 IAM 校验后端骨架、`tenant.policy.changed` 发布 | 外部 IAM/RBAC 提供方联调与生产级运行保障、持久化数据库、跨区域分发与版本编排/回滚治理 |
 
 ## 3. 当前协议与接口面
 
@@ -78,6 +78,10 @@
 | `session-orchestrator` | `POST /api/v1/sessions/{sessionId}:stop` | 关闭或幂等返回会话 |
 | `control-plane` | `PUT /api/v1/tenants/{tenantId}/policy` | 创建/更新租户策略（当 `control.auth.enabled=true` 时需 Bearer Token 且具备写权限） |
 | `control-plane` | `GET /api/v1/tenants/{tenantId}/policy` | 查询租户策略（当 `control.auth.enabled=true` 时需 Bearer Token 且具备读权限） |
+
+补充说明：
+
+- `control-plane` 当前默认鉴权模式为 `static`；已支持切换到 `external-iam` 或 `hybrid`，但生产仍需真实 IAM 参数与联调验证。
 
 ## 4. 当前 Kafka 事件路径
 
