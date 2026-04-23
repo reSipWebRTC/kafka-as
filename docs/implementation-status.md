@@ -25,6 +25,7 @@
 - `asr-worker` 已补齐会话级 VAD 静音切段基线（命中阈值时发布 `asr.final`）
 - `asr-worker` FunASR 适配已补齐生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
 - `translation-worker` OpenAI 适配已补齐生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
+- `tts-orchestrator` HTTP synthesis 适配已补齐生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
 - `speech-gateway` 下行链路已补充仓库内 E2E 稳定性验证（顺序、终态、重复/异常计数）
 - `deploy/monitoring` 已补齐 Prometheus/Grafana 资产（含 Kafka lag、延迟、错误率看板与告警规则）
 - `deploy/monitoring` 已补齐 Alertmanager 通知路由基线（default/warning/critical）
@@ -38,7 +39,7 @@
 | `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、控制面熔断与缓存回退、Redis 会话状态、`session.control` Kafka 发布 | 超时编排、结果聚合、补偿工作流 |
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配（含 FunASR v2 响应兼容、health 探测、并发保护、错误语义映射）、按稳定度 + VAD 静音切段分流发布 `asr.partial` / `asr.final`、按租户策略驱动重试/DLQ（含控制面失败回退） | FunASR 真机容量/故障演练、高级上下文与切段策略 |
 | `translation-worker` | `8083` | 消费 `asr.final`、默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容、health 探测、并发保护、错误语义映射）、发布 `translation.result`、按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 真机容量/故障演练、术语治理、上下文增强 |
-| `tts-orchestrator` | `8084` | 消费 `translation.result`、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容与错误语义加固）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、`tts.ready` 支持可配置 S3/MinIO 上传并回填真实 `playbackUrl`、支持 `cache-control` 与 `expires/sig` URL 签名策略、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS synthesis 生产联调、对象存储高可用治理、CDN 区域路由与高级缓存治理 |
+| `tts-orchestrator` | `8084` | 消费 `translation.result`、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容、health 探测、并发保护、错误语义映射）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、`tts.ready` 支持可配置 S3/MinIO 上传并回填真实 `playbackUrl`、支持 `cache-control` 与 `expires/sig` URL 签名策略、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS 真机容量/故障演练、对象存储高可用治理、CDN 区域路由与高级缓存治理 |
 | `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、Redis 策略存储、版本化 upsert、灰度/回退/可靠性策略字段 | 认证鉴权、持久化数据库、动态策略下发 |
 
 ## 3. 当前协议与接口面

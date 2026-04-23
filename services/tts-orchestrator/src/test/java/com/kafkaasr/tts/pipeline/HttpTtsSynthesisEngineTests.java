@@ -8,6 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.tts.events.TranslationResultEvent;
 import com.kafkaasr.tts.events.TranslationResultPayload;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -35,7 +39,8 @@ class HttpTtsSynthesisEngineTests {
         HttpTtsSynthesisEngine engine = new HttpTtsSynthesisEngine(
                 httpProperties("token-tts"),
                 WebClient.builder().exchangeFunction(exchangeFunction),
-                new ObjectMapper());
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
 
         TtsSynthesisEngine.SynthesisPlan plan = engine.synthesize(
                 sampleEvent(),
@@ -51,20 +56,22 @@ class HttpTtsSynthesisEngineTests {
     }
 
     @Test
-    void synthesizeFallsBackWhenHttpFails() {
+    void synthesizeMapsProviderFailureWhenUpstreamThrows() {
         ExchangeFunction exchangeFunction = request -> Mono.error(new RuntimeException("upstream unavailable"));
 
         HttpTtsSynthesisEngine engine = new HttpTtsSynthesisEngine(
                 httpProperties(""),
                 WebClient.builder().exchangeFunction(exchangeFunction),
-                new ObjectMapper());
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
 
-        RuntimeException exception = assertThrows(
-                RuntimeException.class,
+        TtsSynthesisException exception = assertThrows(
+                TtsSynthesisException.class,
                 () -> engine.synthesize(
                         sampleEvent(),
                         new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true)));
-        assertTrue(exception.getMessage().contains("upstream unavailable"));
+        assertEquals("TTS_PROVIDER_FAILURE", exception.errorCode());
+        assertTrue(exception.retryable());
     }
 
     @Test
@@ -81,7 +88,8 @@ class HttpTtsSynthesisEngineTests {
         HttpTtsSynthesisEngine engine = new HttpTtsSynthesisEngine(
                 httpProperties(""),
                 WebClient.builder().exchangeFunction(exchangeFunction),
-                new ObjectMapper());
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
 
         engine.synthesize(
                 sampleEvent(),
@@ -100,7 +108,8 @@ class HttpTtsSynthesisEngineTests {
         HttpTtsSynthesisEngine engine = new HttpTtsSynthesisEngine(
                 httpProperties(""),
                 WebClient.builder().exchangeFunction(exchangeFunction),
-                new ObjectMapper());
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
 
         TtsSynthesisEngine.SynthesisPlan plan = engine.synthesize(
                 sampleEvent(),
@@ -122,15 +131,16 @@ class HttpTtsSynthesisEngineTests {
         HttpTtsSynthesisEngine engine = new HttpTtsSynthesisEngine(
                 httpProperties(""),
                 WebClient.builder().exchangeFunction(exchangeFunction),
-                new ObjectMapper());
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
 
-        IllegalStateException exception = assertThrows(
-                IllegalStateException.class,
+        TtsSynthesisException exception = assertThrows(
+                TtsSynthesisException.class,
                 () -> engine.synthesize(
                         sampleEvent(),
                         new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true)));
-        assertTrue(exception.getMessage().contains("provider error"));
-        assertTrue(exception.getMessage().contains("quota exceeded"));
+        assertEquals("TTS_PROVIDER_RATE_LIMIT", exception.errorCode());
+        assertTrue(exception.retryable());
     }
 
     @Test
@@ -143,14 +153,120 @@ class HttpTtsSynthesisEngineTests {
         HttpTtsSynthesisEngine engine = new HttpTtsSynthesisEngine(
                 httpProperties(""),
                 WebClient.builder().exchangeFunction(exchangeFunction),
-                new ObjectMapper());
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
 
-        IllegalStateException exception = assertThrows(
-                IllegalStateException.class,
+        TtsSynthesisException exception = assertThrows(
+                TtsSynthesisException.class,
                 () -> engine.synthesize(
                         sampleEvent(),
                         new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true)));
-        assertTrue(exception.getMessage().contains("status is not successful"));
+        assertEquals("TTS_PROVIDER_FAILURE", exception.errorCode());
+        assertTrue(exception.retryable());
+    }
+
+    @Test
+    void synthesizeFailsFastWhenHealthCheckIsDown() {
+        TtsSynthesisProperties properties = httpProperties("");
+        properties.getHttp().getHealth().setEnabled(true);
+        properties.getHttp().getHealth().setFailOpenOnError(false);
+        properties.getHttp().getHealth().setPath("/health");
+
+        ExchangeFunction exchangeFunction = request -> {
+            if ("/health".equals(request.url().getPath())) {
+                return Mono.just(ClientResponse.create(HttpStatus.SERVICE_UNAVAILABLE)
+                        .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                        .body("{\"status\":\"DOWN\"}")
+                        .build());
+            }
+            return Mono.just(ClientResponse.create(HttpStatus.OK)
+                    .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .body("{\"text\":\"hello\"}")
+                    .build());
+        };
+
+        HttpTtsSynthesisEngine engine = new HttpTtsSynthesisEngine(
+                properties,
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
+
+        TtsSynthesisException exception = assertThrows(
+                TtsSynthesisException.class,
+                () -> engine.synthesize(
+                        sampleEvent(),
+                        new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true)));
+        assertEquals("TTS_PROVIDER_UNHEALTHY", exception.errorCode());
+    }
+
+    @Test
+    void synthesizeMapsTimeoutAsTtsTimeout() {
+        TtsSynthesisProperties properties = httpProperties("");
+        properties.getHttp().setTimeoutMs(50L);
+
+        ExchangeFunction exchangeFunction = request -> Mono.never();
+
+        HttpTtsSynthesisEngine engine = new HttpTtsSynthesisEngine(
+                properties,
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
+
+        TtsSynthesisException exception = assertThrows(
+                TtsSynthesisException.class,
+                () -> engine.synthesize(
+                        sampleEvent(),
+                        new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true)));
+        assertEquals("TTS_TIMEOUT", exception.errorCode());
+        assertTrue(exception.retryable());
+    }
+
+    @Test
+    void synthesizeRejectsWhenConcurrencyLimitReached() throws Exception {
+        TtsSynthesisProperties properties = httpProperties("");
+        properties.getHttp().setMaxConcurrentRequests(1);
+        CountDownLatch firstRequestStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirstRequest = new CountDownLatch(1);
+
+        ExchangeFunction exchangeFunction = request -> Mono.create(sink -> {
+            firstRequestStarted.countDown();
+            try {
+                if (!releaseFirstRequest.await(2, TimeUnit.SECONDS)) {
+                    sink.error(new IllegalStateException("timed out waiting test release"));
+                    return;
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                sink.error(exception);
+                return;
+            }
+            sink.success(ClientResponse.create(HttpStatus.OK)
+                    .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .body("{\"text\":\"hello\"}")
+                    .build());
+        });
+
+        HttpTtsSynthesisEngine engine = new HttpTtsSynthesisEngine(
+                properties,
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
+
+        CompletableFuture<Void> firstCall = CompletableFuture.runAsync(() -> engine.synthesize(
+                sampleEvent(),
+                new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true)));
+        assertTrue(firstRequestStarted.await(1, TimeUnit.SECONDS));
+
+        TtsSynthesisException exception = assertThrows(
+                TtsSynthesisException.class,
+                () -> engine.synthesize(
+                        sampleEvent(),
+                        new TtsSynthesisEngine.SynthesisInput("hello", "en-US", "en-US-neural-a", true)));
+        assertEquals("TTS_PROVIDER_BUSY", exception.errorCode());
+        assertTrue(exception.retryable());
+
+        releaseFirstRequest.countDown();
+        firstCall.get(2, TimeUnit.SECONDS);
     }
 
     private static TtsSynthesisProperties httpProperties(String authToken) {
@@ -160,6 +276,7 @@ class HttpTtsSynthesisEngineTests {
         http.setEndpoint("http://tts-engine.local");
         http.setPath("/v1/tts/synthesize");
         http.setTimeoutMs(2000L);
+        http.setMaxConcurrentRequests(16);
         http.setAuthToken(authToken);
         return properties;
     }

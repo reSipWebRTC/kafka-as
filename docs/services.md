@@ -17,7 +17,7 @@
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、发布 `asr.partial` / `asr.final` | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result`，OpenAI 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
-| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control` 与 URL 签名 | Kafka |
+| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control` 与 URL 签名，HTTP synthesis 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
 | `control-plane` | 已落地骨架 | 租户策略 HTTP API、Redis 存储、版本化 upsert | Redis |
 
 基础设施：
@@ -138,6 +138,7 @@
 - 规则 voice 选择 + 可切换 HTTP voice-policy 适配入口
 - 可切换 HTTP TTS synthesis 适配入口
 - TTS synthesis 响应兼容与错误语义加固（`code/status` 校验、`error` 快速失败、boolean-like stream 兼容）
+- TTS synthesis 生产联调基线（可配置 health 探测、并发上限保护、错误码语义映射、引擎级指标）
 - cacheKey 生成
 - `tts.request` / `tts.chunk` / `tts.ready` 发布
 - `tts.ready` 对应音频对象上传（`tts.storage`：`none` / `s3`，支持 MinIO path-style）
@@ -147,7 +148,7 @@
 
 当前未实现：
 
-- TTS synthesis 生产联调与模型侧运行保障（真实配额、限流与故障演练）
+- TTS synthesis 真机容量/故障演练与模型侧运行保障（真实配额、限流与故障演练）
 - 对象存储高可用治理、CDN 区域路由与高级缓存治理
 
 ### control-plane

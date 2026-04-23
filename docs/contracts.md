@@ -27,6 +27,7 @@
 - 核心 Kafka consumer 重复失败达到阈值后会发送 `ops.compensation` 信号到 `platform.compensation`
 - `asr-worker` FunASR 适配已补齐可用性探测、并发保护与错误语义映射（用于重试/DLQ 分类）
 - `translation-worker` OpenAI 适配已补齐可用性探测、并发保护与错误语义映射（用于重试/DLQ 分类）
+- `tts-orchestrator` HTTP synthesis 适配已补齐可用性探测、并发保护与错误语义映射（用于重试/DLQ 分类）
 - `control-plane` 租户策略已包含灰度/回退与可靠性字段：`grayEnabled`、`grayTrafficPercent`、`controlPlaneFallbackFailOpen`、`controlPlaneFallbackCacheTtlMs`、`retryMaxAttempts`、`retryBackoffMs`、`dlqTopicSuffix`
 - `session-orchestrator` 查询租户策略时已落地第一版熔断与缓存回退（支持 fail-open/fail-closed）
 - 下行 `asr.partial -> subtitle.partial`、`translation.result -> subtitle.final`、`session.control(CLOSED) -> session.closed` 已有仓库内 E2E 稳定性回归测试

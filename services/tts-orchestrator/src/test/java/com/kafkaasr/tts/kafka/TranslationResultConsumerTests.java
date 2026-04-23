@@ -22,6 +22,7 @@ import com.kafkaasr.tts.events.TtsRequestPayload;
 import com.kafkaasr.tts.events.TranslationResultEvent;
 import com.kafkaasr.tts.events.TranslationResultPayload;
 import com.kafkaasr.tts.pipeline.TtsRequestPipelineService;
+import com.kafkaasr.tts.pipeline.TtsSynthesisException;
 import com.kafkaasr.tts.policy.TenantReliabilityPolicy;
 import com.kafkaasr.tts.policy.TenantReliabilityPolicyResolver;
 import com.kafkaasr.tts.storage.TtsObjectStorageUploader;
@@ -268,6 +269,70 @@ class TranslationResultConsumerTests {
         assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
 
         verify(pipelineService, times(2)).toPipelineEvents(any());
+        verify(storageUploader, never()).upload(any());
+        verify(compensationPublisher).publish(
+                eq("translation.result"),
+                eq("translation.result.tenant-a.dlq"),
+                eq(payload),
+                any(RuntimeException.class));
+    }
+
+    @Test
+    void retriesWhenTtsSynthesisExceptionIsRetryable() throws Exception {
+        TranslationResultEvent input = new TranslationResultEvent(
+                "evt-in-1",
+                "translation.result",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "translation-worker",
+                3L,
+                1713744000000L,
+                "sess-1:translation.result:3",
+                new TranslationResultPayload("你好", "hello", "zh-CN", "en-US", "placeholder"));
+        String payload = objectMapper.writeValueAsString(input);
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
+        when(pipelineService.toPipelineEvents(any())).thenThrow(
+                new TtsSynthesisException("TTS_TIMEOUT", "timed out", true));
+
+        assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
+
+        verify(pipelineService, times(2)).toPipelineEvents(any());
+        verify(storageUploader, never()).upload(any());
+        verify(compensationPublisher).publish(
+                eq("translation.result"),
+                eq("translation.result.tenant-a.dlq"),
+                eq(payload),
+                any(RuntimeException.class));
+    }
+
+    @Test
+    void doesNotRetryWhenTtsSynthesisExceptionIsNotRetryable() throws Exception {
+        TranslationResultEvent input = new TranslationResultEvent(
+                "evt-in-1",
+                "translation.result",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "translation-worker",
+                3L,
+                1713744000000L,
+                "sess-1:translation.result:3",
+                new TranslationResultPayload("你好", "hello", "zh-CN", "en-US", "placeholder"));
+        String payload = objectMapper.writeValueAsString(input);
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
+        when(pipelineService.toPipelineEvents(any())).thenThrow(
+                new TtsSynthesisException("TTS_PROVIDER_REJECTED", "rejected", false));
+
+        assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
+
+        verify(pipelineService, times(1)).toPipelineEvents(any());
         verify(storageUploader, never()).upload(any());
         verify(compensationPublisher).publish(
                 eq("translation.result"),

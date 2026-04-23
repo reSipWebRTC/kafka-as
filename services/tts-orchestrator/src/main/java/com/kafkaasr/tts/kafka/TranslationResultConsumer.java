@@ -7,6 +7,7 @@ import com.kafkaasr.tts.events.TtsReadyEvent;
 import com.kafkaasr.tts.events.TtsReadyPayload;
 import com.kafkaasr.tts.events.TranslationResultEvent;
 import com.kafkaasr.tts.pipeline.TtsRequestPipelineService;
+import com.kafkaasr.tts.pipeline.TtsSynthesisException;
 import com.kafkaasr.tts.policy.TenantReliabilityPolicy;
 import com.kafkaasr.tts.policy.TenantReliabilityPolicyResolver;
 import com.kafkaasr.tts.storage.TtsObjectStorageUploader;
@@ -198,10 +199,16 @@ public class TranslationResultConsumer {
         if (throwable instanceof IllegalArgumentException) {
             return "INVALID_PAYLOAD";
         }
+        if (throwable instanceof TtsSynthesisException ttsSynthesisException) {
+            return ttsSynthesisException.errorCode();
+        }
         return "PIPELINE_FAILURE";
     }
 
     private boolean isRetryable(RuntimeException failure) {
+        if (failure instanceof TtsSynthesisException ttsSynthesisException) {
+            return ttsSynthesisException.retryable();
+        }
         return !(failure instanceof IllegalArgumentException);
     }
 
