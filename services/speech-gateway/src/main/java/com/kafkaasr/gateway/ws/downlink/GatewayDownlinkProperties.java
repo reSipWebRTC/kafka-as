@@ -23,6 +23,12 @@ public class GatewayDownlinkProperties {
     @NotBlank
     private String sessionControlTopic = "session.control";
 
+    @NotBlank
+    private String ttsChunkTopic = "tts.chunk";
+
+    @NotBlank
+    private String ttsReadyTopic = "tts.ready";
+
     @Min(1)
     private int retryMaxAttempts = 3;
 
@@ -78,6 +84,22 @@ public class GatewayDownlinkProperties {
 
     public void setSessionControlTopic(String sessionControlTopic) {
         this.sessionControlTopic = sessionControlTopic;
+    }
+
+    public String getTtsChunkTopic() {
+        return ttsChunkTopic;
+    }
+
+    public void setTtsChunkTopic(String ttsChunkTopic) {
+        this.ttsChunkTopic = ttsChunkTopic;
+    }
+
+    public String getTtsReadyTopic() {
+        return ttsReadyTopic;
+    }
+
+    public void setTtsReadyTopic(String ttsReadyTopic) {
+        this.ttsReadyTopic = ttsReadyTopic;
     }
 
     public int getRetryMaxAttempts() {

@@ -47,7 +47,7 @@
 
 | 服务 | 端口 | 当前已实现 | 当前未实现 |
 | --- | --- | --- | --- |
-| `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `session.ping` / `audio.frame` / `session.stop` 路由、`audio.ingress.raw` Kafka 发布、会话级限流/背压控制、错误下行 `session.error`、Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行、下行 E2E 稳定性测试基线、可配置 WS token 鉴权（`Authorization: Bearer` 或 `access_token`） | 外部 IAM/RBAC 集成、更完整的下行聚合策略 |
+| `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `session.ping` / `audio.frame` / `session.stop` 路由、`audio.ingress.raw` Kafka 发布、会话级限流/背压控制、错误下行 `session.error`、Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `tts.chunk` / `tts.ready` / `session.closed` 下行、下行 E2E 稳定性测试基线、可配置 WS token 鉴权（`Authorization: Bearer` 或 `access_token`） | 外部 IAM/RBAC 集成、更完整的下行聚合策略 |
 | `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、控制面熔断与缓存回退、Redis 会话状态、`session.control` Kafka 发布 | 超时编排、结果聚合、补偿工作流 |
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配（含 FunASR v2 响应兼容、health 探测、并发保护、错误语义映射）、按稳定度 + VAD 静音切段分流发布 `asr.partial` / `asr.final`、按租户策略驱动重试/DLQ（含控制面失败回退） | FunASR 真机容量/故障演练、高级上下文与切段策略 |
 | `translation-worker` | `8083` | 消费 `asr.final`、默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容、health 探测、并发保护、错误语义映射）、发布 `translation.result`、按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 真机容量/故障演练、术语治理、上下文增强 |
@@ -76,6 +76,8 @@
 - `session.error`
 - `subtitle.partial`
 - `subtitle.final`
+- `tts.chunk`
+- `tts.ready`
 - `session.closed`
 
 ### 3.2 HTTP API
@@ -104,14 +106,16 @@
 | `asr.final` | `asr-worker` | `translation-worker` | 当前翻译入口 |
 | `translation.result` | `translation-worker` | `tts-orchestrator` | 当前 TTS 入口 |
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | TTS 编排输出，等待真实引擎接入 |
-| `tts.chunk` | `tts-orchestrator` | 暂无仓库内下游 | TTS 分片输出，供实时播放链路接入 |
-| `tts.ready` | `tts-orchestrator` | 暂无仓库内下游 | TTS 回放就绪输出，供对象存储/CDN 链路接入 |
+| `tts.chunk` | `tts-orchestrator` | `speech-gateway` | TTS 分片输出，当前回推到 WebSocket 下行 |
+| `tts.ready` | `tts-orchestrator` | `speech-gateway` | TTS 回放就绪输出，当前回推到 WebSocket 下行 |
 | `tenant.policy.changed` | `control-plane` | `session-orchestrator`、`asr-worker`、`translation-worker`、`tts-orchestrator` | 租户策略变更通知（运行时消费刷新已落地） |
 
 同时，`speech-gateway` 当前也消费以下下行 Topic 并回推 WebSocket：
 
 - `asr.partial` -> `subtitle.partial`
 - `translation.result` -> `subtitle.final`
+- `tts.chunk` -> `tts.chunk`
+- `tts.ready` -> `tts.ready`
 - `session.control(status=CLOSED)` -> `session.closed`
 
 ## 5. 当前缺口

@@ -18,7 +18,7 @@
 当前已经落地：
 
 - WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`
-- WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`session.closed`
+- WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`session.closed`
 - 低频控制 API：会话 start/stop、租户策略 get/put
 - 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`
 - 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
@@ -30,7 +30,7 @@
 - `tts-orchestrator` HTTP synthesis 适配已补齐可用性探测、并发保护与错误语义映射（用于重试/DLQ 分类）
 - `control-plane` 租户策略已包含灰度/回退与可靠性字段：`grayEnabled`、`grayTrafficPercent`、`controlPlaneFallbackFailOpen`、`controlPlaneFallbackCacheTtlMs`、`retryMaxAttempts`、`retryBackoffMs`、`dlqTopicSuffix`
 - `session-orchestrator` 查询租户策略时已落地第一版熔断与缓存回退（支持 fail-open/fail-closed）
-- 下行 `asr.partial -> subtitle.partial`、`translation.result -> subtitle.final`、`session.control(CLOSED) -> session.closed` 已有仓库内 E2E 稳定性回归测试
+- 下行 `asr.partial -> subtitle.partial`、`translation.result -> subtitle.final`、`tts.chunk -> tts.chunk`、`tts.ready -> tts.ready`、`session.control(CLOSED) -> session.closed` 已有仓库内 E2E 稳定性回归测试
 - `session.closed` 触发后下行通道会终止并丢弃晚到消息
 - `asr-worker` 已支持基于静音帧阈值的 VAD 切段终态发布（`asr.final`）
 - `speech-gateway` 已支持可配置 WS token 鉴权（`Authorization: Bearer` 或 query `access_token`），失败返回 `AUTH_INVALID_TOKEN`
@@ -124,13 +124,15 @@
 | --- | --- | --- |
 | `subtitle.partial` | 中间字幕 | `sessionId` `seq` `text` |
 | `subtitle.final` | 最终字幕 | `sessionId` `seq` `text` |
+| `tts.chunk` | TTS 音频分片下行 | `sessionId` `seq` `audioBase64` `codec` `sampleRate` `chunkSeq` `lastChunk` |
+| `tts.ready` | TTS 回放就绪下行 | `sessionId` `seq` `playbackUrl` `codec` `sampleRate` `durationMs` `cacheKey` |
 | `session.error` | 错误信息 | `sessionId` `code` `message` |
 | `session.closed` | 会话关闭 | `sessionId` `reason` |
 
 当前实现说明：
 
 - `session.error` 已由 `speech-gateway` 落地，用于协议校验和控制面错误
-- `subtitle.partial`、`subtitle.final`、`session.closed` 已通过 Kafka 下游事件回推到 WebSocket 客户端
+- `subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`session.closed` 已通过 Kafka 下游事件回推到 WebSocket 客户端
 
 ## 6. 错误码（v1）
 
