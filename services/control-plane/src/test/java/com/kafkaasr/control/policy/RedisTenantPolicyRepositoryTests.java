@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.ListOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
@@ -27,6 +29,9 @@ class RedisTenantPolicyRepositoryTests {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
+    @Mock
+    private ListOperations<String, String> listOperations;
+
     private RedisTenantPolicyRepository repository;
     private ObjectMapper objectMapper;
     private TenantPolicyStoreProperties storeProperties;
@@ -36,9 +41,12 @@ class RedisTenantPolicyRepositoryTests {
         objectMapper = new ObjectMapper();
         storeProperties = new TenantPolicyStoreProperties();
         storeProperties.setKeyPrefix("control:tenant-policy:");
+        storeProperties.setHistoryKeyPrefix("control:tenant-policy:history:");
+        storeProperties.setHistoryMaxEntries(10);
         storeProperties.setTtl(Duration.ofHours(12));
 
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        lenient().when(redisTemplate.opsForList()).thenReturn(listOperations);
         repository = new RedisTenantPolicyRepository(redisTemplate, objectMapper, storeProperties);
     }
 
@@ -134,5 +142,71 @@ class RedisTenantPolicyRepositoryTests {
         repository.save(state);
 
         verify(valueOperations).set(eq("control:tenant-policy:tenant-a"), any(), eq(Duration.ofHours(12)));
+    }
+
+    @Test
+    void appendHistoryPushesAndTrimsWithTtl() {
+        TenantPolicyState state = new TenantPolicyState(
+                "tenant-a",
+                "zh-CN",
+                "en-US",
+                "funasr-v1",
+                "mt-v1",
+                "en-US-neural-a",
+                200,
+                2000,
+                true,
+                false,
+                0,
+                false,
+                30000L,
+                3,
+                200L,
+                ".dlq",
+                2L,
+                1713744001000L);
+
+        repository.appendHistory(state);
+
+        verify(listOperations).rightPush(eq("control:tenant-policy:history:tenant-a"), any());
+        verify(listOperations).trim("control:tenant-policy:history:tenant-a", -10, -1);
+        verify(redisTemplate).expire("control:tenant-policy:history:tenant-a", Duration.ofHours(12));
+    }
+
+    @Test
+    void findLatestHistoryReadsListTail() throws Exception {
+        TenantPolicyState state = new TenantPolicyState(
+                "tenant-a",
+                "zh-CN",
+                "en-US",
+                "funasr-v1",
+                "mt-v1",
+                "en-US-neural-a",
+                200,
+                2000,
+                true,
+                false,
+                0,
+                false,
+                30000L,
+                3,
+                200L,
+                ".dlq",
+                1L,
+                1713744000000L);
+        String payload = objectMapper.writeValueAsString(state);
+        when(listOperations.index("control:tenant-policy:history:tenant-a", -1)).thenReturn(payload);
+
+        TenantPolicyState loaded = repository.findLatestHistory("tenant-a");
+
+        assertEquals("tenant-a", loaded.tenantId());
+        assertEquals(1L, loaded.version());
+    }
+
+    @Test
+    void removeLatestHistoryPopsListTail() {
+        repository.removeLatestHistory("tenant-a");
+
+        verify(listOperations).rightPop("control:tenant-policy:history:tenant-a");
     }
 }

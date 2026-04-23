@@ -146,6 +146,58 @@ class TenantPolicyControllerTests {
     }
 
     @Test
+    void rollbackPolicyReturnsRolledBackVersion() {
+        TenantPolicyResponse rollbackResponse = new TenantPolicyResponse(
+                "tenant-api-a",
+                "zh-CN",
+                "en-US",
+                "funasr-v1",
+                "mt-v1",
+                "en-US-neural-a",
+                200,
+                2000,
+                true,
+                false,
+                0,
+                false,
+                30000L,
+                3,
+                200L,
+                ".dlq",
+                3L,
+                1713744100000L,
+                false);
+        when(tenantPolicyService.rollbackTenantPolicy("tenant-api-a"))
+                .thenReturn(Mono.just(rollbackResponse));
+
+        webTestClient.post()
+                .uri("/api/v1/tenants/tenant-api-a/policy:rollback")
+                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.tenantId").isEqualTo("tenant-api-a")
+                .jsonPath("$.version").isEqualTo(3)
+                .jsonPath("$.asrModel").isEqualTo("funasr-v1")
+                .jsonPath("$.created").isEqualTo(false);
+    }
+
+    @Test
+    void rollbackWithoutPreviousVersionReturnsConflict() {
+        when(tenantPolicyService.rollbackTenantPolicy("tenant-no-history"))
+                .thenReturn(Mono.error(ControlPlaneException.tenantPolicyRollbackNotAvailable("tenant-no-history")));
+
+        webTestClient.post()
+                .uri("/api/v1/tenants/tenant-no-history/policy:rollback")
+                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+                .exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("TENANT_POLICY_ROLLBACK_NOT_AVAILABLE")
+                .jsonPath("$.tenantId").isEqualTo("tenant-no-history");
+    }
+
+    @Test
     void upsertInvalidBodyReturnsBadRequest() {
         webTestClient.put()
                 .uri("/api/v1/tenants/tenant-api-b/policy")

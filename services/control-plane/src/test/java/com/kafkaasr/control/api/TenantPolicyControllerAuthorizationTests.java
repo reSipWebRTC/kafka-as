@@ -80,6 +80,18 @@ class TenantPolicyControllerAuthorizationTests {
     }
 
     @Test
+    void scopedReaderCannotRollback() {
+        webTestClient.post()
+                .uri("/api/v1/tenants/tenant-a/policy:rollback")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer viewer-tenant-a")
+                .exchange()
+                .expectStatus().isForbidden()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("AUTH_FORBIDDEN")
+                .jsonPath("$.tenantId").isEqualTo("tenant-a");
+    }
+
+    @Test
     void scopedReaderCannotAccessOtherTenant() {
         webTestClient.get()
                 .uri("/api/v1/tenants/tenant-b/policy")
@@ -100,6 +112,21 @@ class TenantPolicyControllerAuthorizationTests {
                 .expectStatus().isUnauthorized()
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("AUTH_INVALID_TOKEN");
+    }
+
+    @Test
+    void scopedWriterCanRollbackInTenantScope() {
+        TenantPolicyResponse response = tenantPolicyResponse("tenant-b-main");
+        org.mockito.Mockito.when(tenantPolicyService.rollbackTenantPolicy("tenant-b-main"))
+                .thenReturn(Mono.just(response));
+
+        webTestClient.post()
+                .uri("/api/v1/tenants/tenant-b-main/policy:rollback")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer writer-tenant-b")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.tenantId").isEqualTo("tenant-b-main");
     }
 
     private static TenantPolicyResponse tenantPolicyResponse(String tenantId) {

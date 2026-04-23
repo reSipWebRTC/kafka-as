@@ -58,4 +58,6 @@ control:
     producer-id: ${CONTROL_KAFKA_PRODUCER_ID:control-plane}
   policy-store:
     key-prefix: ${CONTROL_POLICY_STORE_KEY_PREFIX:control:tenant-policy:}
+    history-key-prefix: ${CONTROL_POLICY_STORE_HISTORY_KEY_PREFIX:control:tenant-policy:history:}
+    history-max-entries: ${CONTROL_POLICY_STORE_HISTORY_MAX_ENTRIES:20}
     ttl: ${CONTROL_POLICY_STORE_TTL:12h}
