@@ -6,8 +6,9 @@
 
 1. 运行多场景网关压测并产出聚合报告。
 2. 运行 ASR/Translation/TTS 故障演练测试并产出聚合报告。
-3. 对照门槛判断是否退化。
-4. 按告警阈值和处置流程执行回滚/升级。
+3. 在预发环境执行真实链路收口并采集告警恢复证据。
+4. 对照门槛判断是否退化。
+5. 按告警阈值和处置流程执行回滚/升级。
 
 ## 2. 执行节奏
 
@@ -74,6 +75,31 @@ tools/fault-drill-closure.sh
 - `build/reports/fault-drill/fault-drill-closure-summary.md`
 - `build/reports/fault-drill/fault-drill-<scenario>.log`
 
+预发环境一键收口入口：
+
+```bash
+PREPROD_TARGET=preprod-cn-a \
+PREPROD_ALERTMANAGER_URL="https://alertmanager.preprod.example.com" \
+PREPROD_LOADTEST_COMMAND="bash scripts/preprod/loadtest.sh" \
+PREPROD_FAULT_DRILL_COMMAND="bash scripts/preprod/fault-drill.sh" \
+PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,PipelineErrorRateHigh,KafkaConsumerLagHigh" \
+tools/preprod-drill-closure.sh
+```
+
+预发收口产物：
+
+- `build/reports/preprod-drill/preprod-drill-closure.json`
+- `build/reports/preprod-drill/preprod-drill-closure-summary.md`
+- `build/reports/preprod-drill/preprod-loadtest.log`
+- `build/reports/preprod-drill/preprod-fault-drill.log`
+- `build/reports/preprod-drill/alertmanager-*.json`
+
+调试模式（仅验证脚本流程，不访问预发服务）：
+
+```bash
+PREPROD_DRY_RUN=1 tools/preprod-drill-closure.sh
+```
+
 ### 3.1 告警路由启动与检查
 
 在仓库根目录先启动观测栈：
@@ -106,6 +132,8 @@ tools/monitoring-up.sh
   - `frameLatencyMsP95 <= maxP95LatencyMs`
 - baseline 场景必须满足 `gatewayWsErrorCount == 0` 且 `downlinkErrorCount == 0`（基线阶段要求无错误）。
 - `tools/fault-drill-closure.sh` 聚合报告中 `overallPass` 必须为 `true`。
+- `tools/preprod-drill-closure.sh` 聚合报告中 `overallPass` 必须为 `true`。
+- `tools/preprod-drill-closure.sh` 必须记录 “告警触发后恢复” 采样轨迹（`recovery.samples`）。
 
 若任一条件失败，当前分支不得提审。
 
@@ -135,7 +163,7 @@ tools/monitoring-up.sh
 
 ## 7. 记录要求
 
-每次执行后记录到版本化报告（示例：`docs/reports/loadtest/2026-04-22-baseline.md`、`docs/reports/loadtest/2026-04-23-closure.md`），至少包含：
+每次执行后记录到版本化报告（示例：`docs/reports/loadtest/2026-04-22-baseline.md`、`docs/reports/loadtest/2026-04-23-closure.md`、`docs/reports/loadtest/2026-04-23-preprod-closure.md`），至少包含：
 
 - 执行参数
 - 关键指标结果
