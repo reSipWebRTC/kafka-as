@@ -13,7 +13,9 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -222,9 +224,163 @@ class TenantPolicyServiceTests {
                 .verify();
     }
 
+    @Test
+    void rollbackRevertsToPreviousPolicyAndIncrementsVersion() {
+        TenantPolicyUpsertRequest first = new TenantPolicyUpsertRequest(
+                "zh-CN",
+                "en-US",
+                "funasr-v1",
+                "mt-v1",
+                "en-US-neural-a",
+                100,
+                1200,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+        TenantPolicyUpsertRequest second = new TenantPolicyUpsertRequest(
+                "zh-CN",
+                "ja-JP",
+                "funasr-v2",
+                "mt-v2",
+                "ja-JP-neural-a",
+                50,
+                800,
+                true,
+                true,
+                25,
+                false,
+                60000L,
+                5,
+                500L,
+                ".tenant-rollback.dlq");
+
+        StepVerifier.create(service.upsertTenantPolicy("tenant-rollback", first))
+                .expectNextCount(1)
+                .verifyComplete();
+        StepVerifier.create(service.upsertTenantPolicy("tenant-rollback", second))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        StepVerifier.create(service.rollbackTenantPolicy("tenant-rollback"))
+                .assertNext(response -> {
+                    assertEquals("tenant-rollback", response.tenantId());
+                    assertEquals(3L, response.version());
+                    assertEquals(false, response.created());
+                    assertEquals("en-US", response.targetLang());
+                    assertEquals("funasr-v1", response.asrModel());
+                    assertEquals(100, response.maxConcurrentSessions());
+                    assertEquals(".dlq", response.dlqTopicSuffix());
+                })
+                .verifyComplete();
+
+        assertEquals(3, policyChangedPublisher.events().size());
+        TenantPolicyChangedEvent rollbackEvent = policyChangedPublisher.events().get(2);
+        assertEquals("ROLLED_BACK", rollbackEvent.payload().operation());
+        assertEquals(3L, rollbackEvent.payload().policyVersion());
+    }
+
+    @Test
+    void rollbackWithoutPreviousVersionReturnsDomainError() {
+        TenantPolicyUpsertRequest request = new TenantPolicyUpsertRequest(
+                "zh-CN",
+                "en-US",
+                "funasr-v1",
+                "mt-v1",
+                "en-US-neural-a",
+                100,
+                1200,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+
+        StepVerifier.create(service.upsertTenantPolicy("tenant-no-history", request))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        StepVerifier.create(service.rollbackTenantPolicy("tenant-no-history"))
+                .expectErrorSatisfies(error -> {
+                    ControlPlaneException exception = (ControlPlaneException) error;
+                    assertEquals("TENANT_POLICY_ROLLBACK_NOT_AVAILABLE", exception.code());
+                })
+                .verify();
+    }
+
+    @Test
+    void rollbackMissingPolicyReturnsDomainError() {
+        StepVerifier.create(service.rollbackTenantPolicy("missing-tenant"))
+                .expectErrorSatisfies(error -> {
+                    ControlPlaneException exception = (ControlPlaneException) error;
+                    assertEquals("TENANT_POLICY_NOT_FOUND", exception.code());
+                })
+                .verify();
+    }
+
+    @Test
+    void rollbackKeepsHttpSuccessWhenPolicyChangedPublishFails() {
+        TenantPolicyUpsertRequest first = new TenantPolicyUpsertRequest(
+                "zh-CN",
+                "en-US",
+                "funasr-v1",
+                "mt-v1",
+                "en-US-neural-a",
+                100,
+                1200,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+        TenantPolicyUpsertRequest second = new TenantPolicyUpsertRequest(
+                "zh-CN",
+                "ja-JP",
+                "funasr-v2",
+                "mt-v2",
+                "ja-JP-neural-a",
+                50,
+                800,
+                true,
+                true,
+                25,
+                false,
+                60000L,
+                5,
+                500L,
+                ".tenant-rollback-fail.dlq");
+
+        StepVerifier.create(service.upsertTenantPolicy("tenant-rollback-fail", first))
+                .expectNextCount(1)
+                .verifyComplete();
+        StepVerifier.create(service.upsertTenantPolicy("tenant-rollback-fail", second))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        policyChangedPublisher.setFailPublishing(true);
+        StepVerifier.create(service.rollbackTenantPolicy("tenant-rollback-fail"))
+                .assertNext(response -> {
+                    assertEquals("tenant-rollback-fail", response.tenantId());
+                    assertEquals(3L, response.version());
+                })
+                .verifyComplete();
+        assertEquals(2, policyChangedPublisher.events().size());
+    }
+
     private static final class InMemoryTenantPolicyRepository implements TenantPolicyRepository {
 
         private final Map<String, TenantPolicyState> states = new HashMap<>();
+        private final Map<String, Deque<TenantPolicyState>> histories = new HashMap<>();
 
         @Override
         public TenantPolicyState findByTenantId(String tenantId) {
@@ -239,6 +395,25 @@ class TenantPolicyServiceTests {
         @Override
         public void save(TenantPolicyState state) {
             states.put(state.tenantId(), state);
+        }
+
+        @Override
+        public void appendHistory(TenantPolicyState state) {
+            histories.computeIfAbsent(state.tenantId(), ignored -> new ArrayDeque<>()).addLast(state);
+        }
+
+        @Override
+        public TenantPolicyState findLatestHistory(String tenantId) {
+            Deque<TenantPolicyState> history = histories.get(tenantId);
+            return history == null ? null : history.peekLast();
+        }
+
+        @Override
+        public void removeLatestHistory(String tenantId) {
+            Deque<TenantPolicyState> history = histories.get(tenantId);
+            if (history != null) {
+                history.pollLast();
+            }
         }
     }
 

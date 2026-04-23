@@ -23,6 +23,14 @@ public class ControlPlaneException extends RuntimeException {
                 HttpStatus.NOT_FOUND);
     }
 
+    public static ControlPlaneException tenantPolicyRollbackNotAvailable(String tenantId) {
+        return new ControlPlaneException(
+                "TENANT_POLICY_ROLLBACK_NOT_AVAILABLE",
+                "No previous tenant policy version available for rollback: " + tenantId,
+                tenantId,
+                HttpStatus.CONFLICT);
+    }
+
     public static ControlPlaneException invalidMessage(String message, String tenantId) {
         return new ControlPlaneException("INVALID_MESSAGE", message, tenantId, HttpStatus.BAD_REQUEST);
     }

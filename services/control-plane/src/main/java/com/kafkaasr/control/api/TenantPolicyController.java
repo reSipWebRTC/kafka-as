@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -33,5 +34,10 @@ public class TenantPolicyController {
     @GetMapping("/{tenantId}/policy")
     public Mono<TenantPolicyResponse> getPolicy(@PathVariable @NotBlank String tenantId) {
         return tenantPolicyService.getTenantPolicy(tenantId);
+    }
+
+    @PostMapping("/{tenantId}/policy:rollback")
+    public Mono<TenantPolicyResponse> rollbackPolicy(@PathVariable @NotBlank String tenantId) {
+        return tenantPolicyService.rollbackTenantPolicy(tenantId);
     }
 }

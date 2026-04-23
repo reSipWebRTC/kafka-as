@@ -31,6 +31,7 @@ public class TenantPolicyService {
     private static final String SYNTHETIC_SESSION_PREFIX = "tenant-policy::";
     private static final String OPERATION_CREATED = "CREATED";
     private static final String OPERATION_UPDATED = "UPDATED";
+    private static final String OPERATION_ROLLED_BACK = "ROLLED_BACK";
 
     private final TenantPolicyRepository tenantPolicyRepository;
     private final TenantPolicyChangedPublisher tenantPolicyChangedPublisher;
@@ -128,6 +129,7 @@ public class TenantPolicyService {
                             dlqTopicSuffix,
                             existing.version() + 1,
                             now);
+                    tenantPolicyRepository.appendHistory(existing);
                     tenantPolicyRepository.save(target);
                     created = false;
                 }
@@ -150,6 +152,7 @@ public class TenantPolicyService {
                         dlqTopicSuffix,
                         current.version() + 1,
                         now);
+                tenantPolicyRepository.appendHistory(current);
                 tenantPolicyRepository.save(target);
             }
 
@@ -207,6 +210,67 @@ public class TenantPolicyService {
             return Mono.error(exception);
         } finally {
             sample.stop(meterRegistry.timer("controlplane.tenant.policy.get.duration"));
+        }
+    }
+
+    public Mono<TenantPolicyResponse> rollbackTenantPolicy(String tenantId) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            validateTenantId(tenantId);
+
+            long now = nowMs();
+            TenantPolicyState current = tenantPolicyRepository.findByTenantId(tenantId);
+            if (current == null) {
+                throw ControlPlaneException.tenantPolicyNotFound(tenantId);
+            }
+
+            TenantPolicyState previous = tenantPolicyRepository.findLatestHistory(tenantId);
+            if (previous == null) {
+                throw ControlPlaneException.tenantPolicyRollbackNotAvailable(tenantId);
+            }
+
+            TenantPolicyState target = previous.withUpdated(
+                    previous.sourceLang(),
+                    previous.targetLang(),
+                    previous.asrModel(),
+                    previous.translationModel(),
+                    previous.ttsVoice(),
+                    previous.maxConcurrentSessions(),
+                    previous.rateLimitPerMinute(),
+                    previous.enabled(),
+                    previous.grayEnabled(),
+                    previous.grayTrafficPercent(),
+                    previous.controlPlaneFallbackFailOpen(),
+                    previous.controlPlaneFallbackCacheTtlMs(),
+                    previous.retryMaxAttempts(),
+                    previous.retryBackoffMs(),
+                    previous.dlqTopicSuffix(),
+                    current.version() + 1,
+                    now);
+            tenantPolicyRepository.save(target);
+            tenantPolicyRepository.removeLatestHistory(tenantId);
+
+            meterRegistry.counter(
+                            "controlplane.tenant.policy.rollback.total",
+                            "result",
+                            "rolled_back",
+                            "code",
+                            "OK")
+                    .increment();
+            TenantPolicyResponse response = toResponse(target, false);
+            return publishPolicyChangedEvent(toPolicyChangedEvent(target, OPERATION_ROLLED_BACK))
+                    .thenReturn(response);
+        } catch (RuntimeException exception) {
+            meterRegistry.counter(
+                            "controlplane.tenant.policy.rollback.total",
+                            "result",
+                            "error",
+                            "code",
+                            normalizeErrorCode(exception))
+                    .increment();
+            return Mono.error(exception);
+        } finally {
+            sample.stop(meterRegistry.timer("controlplane.tenant.policy.rollback.duration"));
         }
     }
 

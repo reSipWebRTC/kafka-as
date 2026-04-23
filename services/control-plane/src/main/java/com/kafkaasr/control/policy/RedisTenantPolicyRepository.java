@@ -24,14 +24,7 @@ public class RedisTenantPolicyRepository implements TenantPolicyRepository {
     @Override
     public TenantPolicyState findByTenantId(String tenantId) {
         String payload = redisTemplate.opsForValue().get(key(tenantId));
-        if (payload == null || payload.isBlank()) {
-            return null;
-        }
-        try {
-            return objectMapper.readValue(payload, TenantPolicyState.class);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Failed to deserialize tenant policy for " + tenantId, exception);
-        }
+        return deserialize(payload, tenantId);
     }
 
     @Override
@@ -51,6 +44,27 @@ public class RedisTenantPolicyRepository implements TenantPolicyRepository {
                 storeProperties.getTtl());
     }
 
+    @Override
+    public void appendHistory(TenantPolicyState state) {
+        String historyKey = historyKey(state.tenantId());
+        redisTemplate.opsForList().rightPush(historyKey, serialize(state));
+        if (storeProperties.getHistoryMaxEntries() > 0) {
+            redisTemplate.opsForList().trim(historyKey, -storeProperties.getHistoryMaxEntries(), -1);
+        }
+        redisTemplate.expire(historyKey, storeProperties.getTtl());
+    }
+
+    @Override
+    public TenantPolicyState findLatestHistory(String tenantId) {
+        String payload = redisTemplate.opsForList().index(historyKey(tenantId), -1);
+        return deserialize(payload, tenantId);
+    }
+
+    @Override
+    public void removeLatestHistory(String tenantId) {
+        redisTemplate.opsForList().rightPop(historyKey(tenantId));
+    }
+
     private String serialize(TenantPolicyState state) {
         try {
             return objectMapper.writeValueAsString(state);
@@ -59,7 +73,22 @@ public class RedisTenantPolicyRepository implements TenantPolicyRepository {
         }
     }
 
+    private TenantPolicyState deserialize(String payload, String tenantId) {
+        if (payload == null || payload.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(payload, TenantPolicyState.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to deserialize tenant policy for " + tenantId, exception);
+        }
+    }
+
     private String key(String tenantId) {
         return storeProperties.getKeyPrefix() + tenantId;
+    }
+
+    private String historyKey(String tenantId) {
+        return storeProperties.getHistoryKeyPrefix() + tenantId;
     }
 }

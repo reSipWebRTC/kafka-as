@@ -37,7 +37,7 @@
         "updatedAtMs": { "type": "integer", "minimum": 0 },
         "operation": {
           "type": "string",
-          "enum": ["CREATED", "UPDATED"]
+          "enum": ["CREATED", "UPDATED", "ROLLED_BACK"]
         },
         "changedFields": {
           "type": "array",

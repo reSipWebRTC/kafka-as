@@ -19,7 +19,7 @@
 
 - WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`
 - WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`session.closed`
-- 低频控制 API：会话 start/stop、租户策略 get/put
+- 低频控制 API：会话 start/stop、租户策略 get/put/rollback
 - 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`
 - 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
 - 核心 Kafka consumer 已落地重试与按源 Topic 的 `.dlq` 死信回退；`asr-worker`、`translation-worker`、`tts-orchestrator` 已支持按租户策略驱动重试参数与 DLQ 后缀
@@ -40,7 +40,7 @@
 
 - `tts-orchestrator` 已实现 `translation.result` 同步产出 `tts.request`、`tts.chunk`、`tts.ready` 三类事件
 - `tts.ready.payload.playbackUrl` 已支持按租户映射的区域 CDN 路由，并可在区域路由缺失时回退到 origin URL
-- `control-plane` 已实现 `tenant.policy.changed` 事件发布，`session-orchestrator` / `asr-worker` / `translation-worker` / `tts-orchestrator` 已消费该事件用于策略缓存刷新
+- `control-plane` 已实现 `tenant.policy.changed` 事件发布（upsert/rollback），`session-orchestrator` / `asr-worker` / `translation-worker` / `tts-orchestrator` 已消费该事件用于策略缓存刷新
 
 ## 2. 主数据路径（冻结）
 
@@ -99,6 +99,7 @@
 - 非稳定识别结果发布为 `asr.partial`
 - 稳定结果、`endOfStream=true`，或命中 VAD 静音切段阈值的结果发布为 `asr.final`
 - 治理事件 `tenant.policy.changed` 没有真实会话上下文时，`sessionId` 使用合成值（建议 `tenant-policy::<tenantId>`）
+- 治理事件 `tenant.policy.changed.payload.operation` 当前取值：`CREATED`、`UPDATED`、`ROLLED_BACK`
 
 完整 JSON Schema 与 Protobuf 见第 8 节。
 
