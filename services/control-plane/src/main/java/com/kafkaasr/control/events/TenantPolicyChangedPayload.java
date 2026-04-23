@@ -9,5 +9,8 @@ public record TenantPolicyChangedPayload(
         long policyVersion,
         long updatedAtMs,
         String operation,
+        Long sourcePolicyVersion,
+        Long targetPolicyVersion,
+        List<String> distributionRegions,
         List<String> changedFields) {
 }

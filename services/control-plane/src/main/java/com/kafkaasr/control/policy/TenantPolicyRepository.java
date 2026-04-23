@@ -12,5 +12,7 @@ public interface TenantPolicyRepository {
 
     TenantPolicyState findLatestHistory(String tenantId);
 
+    TenantPolicyState findHistoryByVersion(String tenantId, long version);
+
     void removeLatestHistory(String tenantId);
 }

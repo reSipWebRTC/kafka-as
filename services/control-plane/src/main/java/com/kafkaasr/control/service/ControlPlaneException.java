@@ -31,6 +31,28 @@ public class ControlPlaneException extends RuntimeException {
                 HttpStatus.CONFLICT);
     }
 
+    public static ControlPlaneException tenantPolicyVersionNotFound(String tenantId, long targetVersion) {
+        return new ControlPlaneException(
+                "TENANT_POLICY_VERSION_NOT_FOUND",
+                "Tenant policy version does not exist: " + tenantId + " version=" + targetVersion,
+                tenantId,
+                HttpStatus.NOT_FOUND);
+    }
+
+    public static ControlPlaneException tenantPolicyRollbackVersionInvalid(
+            String tenantId, long targetVersion, long currentVersion) {
+        return new ControlPlaneException(
+                "TENANT_POLICY_ROLLBACK_VERSION_INVALID",
+                "Invalid rollback target version for tenant "
+                        + tenantId
+                        + ": targetVersion="
+                        + targetVersion
+                        + ", currentVersion="
+                        + currentVersion,
+                tenantId,
+                HttpStatus.CONFLICT);
+    }
+
     public static ControlPlaneException invalidMessage(String message, String tenantId) {
         return new ControlPlaneException("INVALID_MESSAGE", message, tenantId, HttpStatus.BAD_REQUEST);
     }

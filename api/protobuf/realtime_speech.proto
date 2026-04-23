@@ -101,6 +101,9 @@ message TenantPolicyChangedPayload {
   uint64 policy_version = 2;
   int64 updated_at_ms = 3;
   string operation = 4;
+  uint64 source_policy_version = 5;
+  uint64 target_policy_version = 6;
+  repeated string distribution_regions = 7;
 }
 
 message TenantPolicyChangedEvent {

@@ -1,6 +1,7 @@
 package com.kafkaasr.control.service;
 
 import com.kafkaasr.control.api.TenantPolicyResponse;
+import com.kafkaasr.control.api.TenantPolicyRollbackRequest;
 import com.kafkaasr.control.api.TenantPolicyUpsertRequest;
 import com.kafkaasr.control.events.ControlKafkaProperties;
 import com.kafkaasr.control.events.TenantPolicyChangedEvent;
@@ -12,6 +13,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -32,6 +35,7 @@ public class TenantPolicyService {
     private static final String OPERATION_CREATED = "CREATED";
     private static final String OPERATION_UPDATED = "UPDATED";
     private static final String OPERATION_ROLLED_BACK = "ROLLED_BACK";
+    private static final String OPERATION_ROLLED_BACK_TO_VERSION = "ROLLED_BACK_TO_VERSION";
 
     private final TenantPolicyRepository tenantPolicyRepository;
     private final TenantPolicyChangedPublisher tenantPolicyChangedPublisher;
@@ -165,7 +169,7 @@ public class TenantPolicyService {
                     .increment();
             TenantPolicyResponse response = toResponse(target, created);
             String operation = created ? OPERATION_CREATED : OPERATION_UPDATED;
-            return publishPolicyChangedEvent(toPolicyChangedEvent(target, operation))
+            return publishPolicyChangedEvent(toPolicyChangedEvent(target, operation, null, null, List.of()))
                     .thenReturn(response);
         } catch (RuntimeException exception) {
             meterRegistry.counter(
@@ -214,7 +218,13 @@ public class TenantPolicyService {
     }
 
     public Mono<TenantPolicyResponse> rollbackTenantPolicy(String tenantId) {
+        return rollbackTenantPolicy(tenantId, null);
+    }
+
+    public Mono<TenantPolicyResponse> rollbackTenantPolicy(String tenantId, TenantPolicyRollbackRequest request) {
         Timer.Sample sample = Timer.start(meterRegistry);
+        Long requestedTargetVersion = request == null ? null : request.targetVersion();
+        String operation = requestedTargetVersion == null ? OPERATION_ROLLED_BACK : OPERATION_ROLLED_BACK_TO_VERSION;
         try {
             validateTenantId(tenantId);
 
@@ -224,10 +234,9 @@ public class TenantPolicyService {
                 throw ControlPlaneException.tenantPolicyNotFound(tenantId);
             }
 
-            TenantPolicyState previous = tenantPolicyRepository.findLatestHistory(tenantId);
-            if (previous == null) {
-                throw ControlPlaneException.tenantPolicyRollbackNotAvailable(tenantId);
-            }
+            List<String> distributionRegions = normalizeDistributionRegions(
+                    request == null ? null : request.distributionRegions());
+            TenantPolicyState previous = resolveRollbackTarget(tenantId, current, requestedTargetVersion);
 
             TenantPolicyState target = previous.withUpdated(
                     previous.sourceLang(),
@@ -247,18 +256,27 @@ public class TenantPolicyService {
                     previous.dlqTopicSuffix(),
                     current.version() + 1,
                     now);
+            tenantPolicyRepository.appendHistory(current);
             tenantPolicyRepository.save(target);
-            tenantPolicyRepository.removeLatestHistory(tenantId);
 
             meterRegistry.counter(
                             "controlplane.tenant.policy.rollback.total",
                             "result",
                             "rolled_back",
                             "code",
-                            "OK")
+                            "OK",
+                            "operation",
+                            operation,
+                            "distributionRegionsCount",
+                            Integer.toString(distributionRegions.size()))
                     .increment();
             TenantPolicyResponse response = toResponse(target, false);
-            return publishPolicyChangedEvent(toPolicyChangedEvent(target, OPERATION_ROLLED_BACK))
+            return publishPolicyChangedEvent(toPolicyChangedEvent(
+                            target,
+                            operation,
+                            current.version(),
+                            previous.version(),
+                            distributionRegions))
                     .thenReturn(response);
         } catch (RuntimeException exception) {
             meterRegistry.counter(
@@ -266,7 +284,9 @@ public class TenantPolicyService {
                             "result",
                             "error",
                             "code",
-                            normalizeErrorCode(exception))
+                            normalizeErrorCode(exception),
+                            "operation",
+                            operation)
                     .increment();
             return Mono.error(exception);
         } finally {
@@ -325,6 +345,42 @@ public class TenantPolicyService {
         return dlqTopicSuffix;
     }
 
+    private List<String> normalizeDistributionRegions(List<String> distributionRegions) {
+        if (distributionRegions == null || distributionRegions.isEmpty()) {
+            return List.of();
+        }
+
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String region : distributionRegions) {
+            if (region == null || region.isBlank()) {
+                throw ControlPlaneException.invalidMessage("distributionRegions must not contain blank values", "");
+            }
+            normalized.add(region.trim());
+        }
+        return List.copyOf(normalized);
+    }
+
+    private TenantPolicyState resolveRollbackTarget(String tenantId, TenantPolicyState current, Long requestedTargetVersion) {
+        if (requestedTargetVersion == null) {
+            TenantPolicyState previous = tenantPolicyRepository.findLatestHistory(tenantId);
+            if (previous == null) {
+                throw ControlPlaneException.tenantPolicyRollbackNotAvailable(tenantId);
+            }
+            return previous;
+        }
+
+        if (requestedTargetVersion >= current.version()) {
+            throw ControlPlaneException.tenantPolicyRollbackVersionInvalid(
+                    tenantId, requestedTargetVersion, current.version());
+        }
+
+        TenantPolicyState target = tenantPolicyRepository.findHistoryByVersion(tenantId, requestedTargetVersion);
+        if (target == null) {
+            throw ControlPlaneException.tenantPolicyVersionNotFound(tenantId, requestedTargetVersion);
+        }
+        return target;
+    }
+
     private String normalizeErrorCode(Throwable throwable) {
         if (throwable instanceof ControlPlaneException exception) {
             return exception.code();
@@ -354,7 +410,12 @@ public class TenantPolicyService {
                 .onErrorResume(ignored -> Mono.empty());
     }
 
-    private TenantPolicyChangedEvent toPolicyChangedEvent(TenantPolicyState state, String operation) {
+    private TenantPolicyChangedEvent toPolicyChangedEvent(
+            TenantPolicyState state,
+            String operation,
+            Long sourcePolicyVersion,
+            Long targetPolicyVersion,
+            List<String> distributionRegions) {
         return new TenantPolicyChangedEvent(
                 prefixedId("evt"),
                 EVENT_TYPE,
@@ -372,6 +433,9 @@ public class TenantPolicyService {
                         state.version(),
                         state.updatedAtMs(),
                         operation,
+                        sourcePolicyVersion,
+                        targetPolicyVersion,
+                        distributionRegions == null || distributionRegions.isEmpty() ? null : distributionRegions,
                         null));
     }
 
