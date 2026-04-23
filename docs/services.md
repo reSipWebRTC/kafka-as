@@ -169,6 +169,7 @@
 - `/api/v1/tenants/**` 的 Bearer Token 鉴权与授权（读/写权限 + 租户范围）
 - `control.auth.mode` 模式切换（`static` / `external-iam` / `hybrid`）与 JWKS 外部 IAM 校验后端骨架
 - 鉴权决策/耗时/回退指标（`controlplane.auth.decision.total` / `controlplane.auth.decision.duration` / `controlplane.auth.hybrid.fallback.total`）
+- 真实 IAM 对接准备层（`deploy/env/control-plane-iam.env.template` + `tools/control-plane-iam-precheck.sh`）
 - Redis 持久化抽象
 - 版本化更新语义
 - 灰度与控制面回退策略字段（canary percent / fail-open / cache ttl）

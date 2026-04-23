@@ -150,6 +150,30 @@ Related docs:
 - `docs/reports/loadtest/2026-04-23-preprod-closure.md`
 - `docs/runbooks/loadtest-alert-closure.md`
 
+### Run control-plane IAM precheck
+
+Run from repository root:
+
+```bash
+tools/control-plane-iam-precheck.sh --env-file .secrets/control-plane-iam.env
+```
+
+Outputs:
+
+- `build/reports/control-plane-iam-precheck/control-plane-iam-precheck.json`
+- `build/reports/control-plane-iam-precheck/control-plane-iam-precheck-summary.md`
+
+Useful flags:
+
+- `--skip-network` (validate config only)
+- `--allow-placeholder-values` (template smoke check)
+- `--print-env` (write resolved env snapshot under report dir)
+
+Related docs:
+
+- `deploy/env/control-plane-iam.env.template`
+- `docs/runbooks/control-plane-iam-provider-integration.md`
+
 ### Start local monitoring baseline
 
 Run from repository root:

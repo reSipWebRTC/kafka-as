@@ -35,6 +35,7 @@
 - `tools/preprod-drill-closure.sh` 已补齐预发一键收口入口（loadtest/fault-drill/Alertmanager 恢复采样聚合）
 - `control-plane` 鉴权链路已补齐后端级决策/耗时指标与 hybrid 回退计数（`controlplane.auth.*`）
 - `tools/control-plane-auth-drill.sh` 已补齐控制面鉴权预发演练脚本，并可接入 `tools/preprod-drill-closure.sh` 的 `control-auth` 阶段
+- 已补齐真实 IAM 对接准备层：参数模板（`deploy/env/control-plane-iam.env.template`）、预检脚本（`tools/control-plane-iam-precheck.sh`）与 runbook 清单
 - 全仓测试与 `tools/verify.sh` 校验基线
 
 ## 2. 服务模块现状
@@ -46,7 +47,7 @@
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配（含 FunASR v2 响应兼容、health 探测、并发保护、错误语义映射）、按稳定度 + VAD 静音切段分流发布 `asr.partial` / `asr.final`、按租户策略驱动重试/DLQ（含控制面失败回退） | FunASR 真机容量/故障演练、高级上下文与切段策略 |
 | `translation-worker` | `8083` | 消费 `asr.final`、默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容、health 探测、并发保护、错误语义映射）、发布 `translation.result`、按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 真机容量/故障演练、术语治理、上下文增强 |
 | `tts-orchestrator` | `8084` | 消费 `translation.result`、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容、health 探测、并发保护、错误语义映射）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、`tts.ready` 支持可配置 S3/MinIO 上传并回填真实 `playbackUrl`、支持 `cache-control` 与 `expires/sig` URL 签名策略、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS 真机容量/故障演练、对象存储高可用治理、CDN 区域路由与高级缓存治理 |
-| `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、Redis 策略存储、版本化 upsert、灰度/回退/可靠性策略字段、可配置 Bearer Token 鉴权与授权（读/写权限 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 切换与 JWKS 外部 IAM 校验后端骨架、鉴权决策/耗时/回退指标（`controlplane.auth.*`）、`tenant.policy.changed` 发布 | 外部 IAM/RBAC 提供方联调与生产级运行保障（真实参数、阈值与告警闭环）、持久化数据库、跨区域分发与版本编排/回滚治理 |
+| `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、Redis 策略存储、版本化 upsert、灰度/回退/可靠性策略字段、可配置 Bearer Token 鉴权与授权（读/写权限 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 切换与 JWKS 外部 IAM 校验后端骨架、鉴权决策/耗时/回退指标（`controlplane.auth.*`）、真实 IAM 对接参数模板与预检工具、`tenant.policy.changed` 发布 | 外部 IAM/RBAC 提供方联调与生产级运行保障（真实参数、阈值与告警闭环）、持久化数据库、跨区域分发与版本编排/回滚治理 |
 
 ## 3. 当前协议与接口面
 
@@ -84,6 +85,7 @@
 补充说明：
 
 - `control-plane` 当前默认鉴权模式为 `static`；已支持切换到 `external-iam` 或 `hybrid`，但生产仍需真实 IAM 参数与联调验证。
+- 真实 IAM 环境到位前，可先用 `tools/control-plane-iam-precheck.sh` 完成参数与连通性预检，减少上线前变更风险。
 
 ## 4. 当前 Kafka 事件路径
 
