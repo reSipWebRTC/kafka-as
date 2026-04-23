@@ -115,10 +115,39 @@ Scenario filter:
 
 - `FAULT_DRILL_SCENARIOS="asr-engine-fault-mapping translation-engine-fault-mapping tts-engine-fault-mapping"`
 
+### Run preprod drill closure
+
+Run from repository root or from a feature worktree:
+
+```bash
+PREPROD_TARGET=preprod-cn-a \
+PREPROD_ALERTMANAGER_URL="https://alertmanager.preprod.example.com" \
+PREPROD_LOADTEST_COMMAND="bash scripts/preprod/loadtest.sh" \
+PREPROD_FAULT_DRILL_COMMAND="bash scripts/preprod/fault-drill.sh" \
+tools/preprod-drill-closure.sh
+```
+
+Outputs:
+
+- `build/reports/preprod-drill/preprod-drill-closure.json`
+- `build/reports/preprod-drill/preprod-drill-closure-summary.md`
+- `build/reports/preprod-drill/preprod-loadtest.log`
+- `build/reports/preprod-drill/preprod-fault-drill.log`
+- `build/reports/preprod-drill/alertmanager-*.json`
+
+Useful flags:
+
+- `PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,PipelineErrorRateHigh,KafkaConsumerLagHigh"`
+- `PREPROD_RECOVERY_TIMEOUT_SECONDS=900`
+- `PREPROD_RECOVERY_POLL_SECONDS=30`
+- `PREPROD_SKIP_ALERT_CAPTURE=1` (local integration run without Alertmanager dependency)
+- `PREPROD_DRY_RUN=1` (script flow validation only)
+
 Related docs:
 
 - `docs/reports/loadtest/2026-04-22-baseline.md`
 - `docs/reports/loadtest/2026-04-23-closure.md`
+- `docs/reports/loadtest/2026-04-23-preprod-closure.md`
 - `docs/runbooks/loadtest-alert-closure.md`
 
 ### Start local monitoring baseline
