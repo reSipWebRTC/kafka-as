@@ -4,9 +4,10 @@
 
 建立一条可重复执行的闭环：
 
-1. 运行网关压测夹具并产出报告。
-2. 对照门槛判断是否退化。
-3. 按告警阈值和处置流程执行回滚/升级。
+1. 运行多场景网关压测并产出聚合报告。
+2. 运行 ASR/Translation/TTS 故障演练测试并产出聚合报告。
+3. 对照门槛判断是否退化。
+4. 按告警阈值和处置流程执行回滚/升级。
 
 ## 2. 执行节奏
 
@@ -25,17 +26,53 @@ tools/loadtest-alert-closure.sh
 可选参数：
 
 ```bash
-LOADTEST_SESSIONS=48 \
-LOADTEST_FRAMES_PER_SESSION=240 \
-LOADTEST_MIN_SUCCESS_RATIO=0.999 \
-LOADTEST_MAX_P95_LATENCY_MS=1500 \
+LOADTEST_SCENARIOS="smoke baseline stress" \
+LOADTEST_BASELINE_SESSIONS=24 \
+LOADTEST_BASELINE_FRAMES_PER_SESSION=180 \
+LOADTEST_STRESS_SESSIONS=48 \
+LOADTEST_STRESS_FRAMES_PER_SESSION=240 \
 tools/loadtest-alert-closure.sh
 ```
 
-产物：
+`tools/loadtest-alert-closure.sh` 默认场景：
 
-- `build/reports/loadtest/gateway-pipeline-loadtest.json`
+- `smoke`
+- `baseline`
+- `stress`
+
+场景级覆盖变量（优先于全局变量）：
+
+- `LOADTEST_<SCENARIO>_SESSIONS`
+- `LOADTEST_<SCENARIO>_FRAMES_PER_SESSION`
+- `LOADTEST_<SCENARIO>_MIN_SUCCESS_RATIO`
+- `LOADTEST_<SCENARIO>_MAX_P95_LATENCY_MS`
+
+压测产物：
+
+- `build/reports/loadtest/gateway-pipeline-loadtest-aggregate.json`
 - `build/reports/loadtest/gateway-pipeline-loadtest-summary.md`
+- `build/reports/loadtest/gateway-pipeline-loadtest-<scenario>.json`
+- `build/reports/loadtest/gateway-pipeline-loadtest-<scenario>.log`
+- `build/reports/loadtest/gateway-pipeline-loadtest.json`（兼容旧路径，优先复制 baseline）
+
+再执行故障演练收口：
+
+```bash
+tools/fault-drill-closure.sh
+```
+
+可选参数：
+
+```bash
+FAULT_DRILL_SCENARIOS="asr-engine-fault-mapping translation-engine-fault-mapping tts-engine-fault-mapping" \
+tools/fault-drill-closure.sh
+```
+
+故障演练产物：
+
+- `build/reports/fault-drill/fault-drill-closure.json`
+- `build/reports/fault-drill/fault-drill-closure-summary.md`
+- `build/reports/fault-drill/fault-drill-<scenario>.log`
 
 ### 3.1 告警路由启动与检查
 
@@ -63,9 +100,12 @@ tools/monitoring-up.sh
 
 ## 4. 通过/失败判定
 
-- 必须满足 `successRatio >= 0.999`。
-- 必须满足 `frameLatencyMsP95 <= 1500ms`。
-- 必须满足 `gatewayWsErrorCount == 0` 且 `downlinkErrorCount == 0`（基线阶段要求无错误）。
+- `tools/loadtest-alert-closure.sh` 聚合报告中 `overallPass` 必须为 `true`。
+- 每个 loadtest 场景必须满足其门槛：
+  - `successRatio >= minSuccessRatio`
+  - `frameLatencyMsP95 <= maxP95LatencyMs`
+- baseline 场景必须满足 `gatewayWsErrorCount == 0` 且 `downlinkErrorCount == 0`（基线阶段要求无错误）。
+- `tools/fault-drill-closure.sh` 聚合报告中 `overallPass` 必须为 `true`。
 
 若任一条件失败，当前分支不得提审。
 
@@ -95,7 +135,7 @@ tools/monitoring-up.sh
 
 ## 7. 记录要求
 
-每次执行后记录到版本化报告（示例：`docs/reports/loadtest/2026-04-22-baseline.md`），至少包含：
+每次执行后记录到版本化报告（示例：`docs/reports/loadtest/2026-04-22-baseline.md`、`docs/reports/loadtest/2026-04-23-closure.md`），至少包含：
 
 - 执行参数
 - 关键指标结果

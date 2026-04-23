@@ -29,6 +29,8 @@
 - `speech-gateway` 下行链路已补充仓库内 E2E 稳定性验证（顺序、终态、重复/异常计数）
 - `deploy/monitoring` 已补齐 Prometheus/Grafana 资产（含 Kafka lag、延迟、错误率看板与告警规则）
 - `deploy/monitoring` 已补齐 Alertmanager 通知路由基线（default/warning/critical）
+- `tools/loadtest-alert-closure.sh` 已升级为多场景（smoke/baseline/stress）压测聚合收口，并产出机器可读报告
+- `tools/fault-drill-closure.sh` 已补齐 ASR/Translation/TTS 故障演练收口，并产出机器可读报告
 - 全仓测试与 `tools/verify.sh` 校验基线
 
 ## 2. 服务模块现状
@@ -98,7 +100,7 @@
 ## 5. 当前缺口
 
 - `translation.request` 仍是计划扩展 Topic
-- ASR / Translation / TTS 已落地第一版生产联调基线，但尚未完成真实流量闭环、容量压测与故障演练
+- ASR / Translation / TTS 已落地第一版生产联调基线，并补齐仓库内 fault-drill 收口；但尚未完成真实流量闭环与预发/生产容量实战
 - 对象存储 HA 治理、CDN 区域路由/多级缓存治理、完整补偿编排、自适应熔断/灰度治理，以及压测/告警升级实战证据仍待完善
 
 ## 6. 文档使用建议
