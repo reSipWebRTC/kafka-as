@@ -1,5 +1,6 @@
 package com.kafkaasr.gateway;
 
+import com.kafkaasr.gateway.auth.GatewayAuthProperties;
 import com.kafkaasr.gateway.flow.GatewayFlowControlProperties;
 import com.kafkaasr.gateway.ingress.GatewayKafkaProperties;
 import com.kafkaasr.gateway.session.GatewaySessionControlProperties;
@@ -10,6 +11,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 
 @SpringBootApplication
 @EnableConfigurationProperties({
+        GatewayAuthProperties.class,
         GatewayKafkaProperties.class,
         GatewaySessionControlProperties.class,
         GatewayDownlinkProperties.class,

@@ -147,7 +147,7 @@
 当前判断：
 
 - `control-plane` 模块已存在
-- 当前已覆盖租户策略 GET / PUT、版本化 upsert 以及灰度/回退策略字段
+- 当前已覆盖租户策略 GET / PUT、版本化 upsert、`/api/v1/tenants/**` Bearer Token 鉴权基线以及灰度/回退策略字段
 
 ## 7. Phase 5：容量、压测与弹性
 

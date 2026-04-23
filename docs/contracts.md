@@ -33,6 +33,8 @@
 - 下行 `asr.partial -> subtitle.partial`、`translation.result -> subtitle.final`、`session.control(CLOSED) -> session.closed` 已有仓库内 E2E 稳定性回归测试
 - `session.closed` 触发后下行通道会终止并丢弃晚到消息
 - `asr-worker` 已支持基于静音帧阈值的 VAD 切段终态发布（`asr.final`）
+- `speech-gateway` 已支持可配置 WS token 鉴权（`Authorization: Bearer` 或 query `access_token`），失败返回 `AUTH_INVALID_TOKEN`
+- `control-plane` 已支持可配置 Bearer Token 鉴权（`/api/v1/tenants/**`）
 
 新增说明：
 
@@ -110,6 +112,8 @@
 当前实现说明：
 
 - `speech-gateway` 当前已接受 `session.start`、`session.ping`、`audio.frame`、`session.stop`
+- 当 `gateway.auth.enabled=true` 时，`/ws/audio` 需要携带合法 token（`Authorization: Bearer <token>` 或 query 参数 `access_token`）
+- token 缺失/非法时，网关会下发 `session.error(code=AUTH_INVALID_TOKEN)` 并关闭连接
 
 ### 5.2 服务端下行消息
 
