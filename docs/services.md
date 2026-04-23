@@ -18,7 +18,7 @@
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、发布 `asr.partial` / `asr.final` | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result`，OpenAI 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
 | `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control` 与 URL 签名，HTTP synthesis 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
-| `control-plane` | 已落地骨架 | 租户策略 HTTP API、Redis 存储、版本化 upsert | Redis |
+| `control-plane` | 已落地骨架 | 租户策略 HTTP API、Redis 存储、版本化 upsert、`tenant.policy.changed` 发布 | Redis、Kafka |
 
 基础设施：
 
@@ -69,6 +69,7 @@
 - start/stop 生命周期 API
 - 租户策略查询与校验
 - 查询控制面的第一版熔断与缓存回退
+- 消费 `tenant.policy.changed` 并刷新本地策略缓存
 - Redis 会话状态存储
 - `session.control` Kafka 发布
 
@@ -94,6 +95,7 @@
 - 按稳定度 + VAD 切段分流发布 `asr.partial` / `asr.final`（非稳定结果发 partial，稳定/终态/VAD 命中结果发 final）
 - FunASR 生产联调基线（可配置 health 探测、并发上限保护、错误码语义映射、引擎级指标）
 - 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
+- 消费 `tenant.policy.changed` 并刷新本地策略缓存
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
@@ -116,6 +118,7 @@
 - OpenAI 生产联调基线（可配置 health 探测、并发上限保护、错误码语义映射、引擎级指标）
 - `translation.result` 发布
 - 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
+- 消费 `tenant.policy.changed` 并刷新本地策略缓存
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
@@ -145,6 +148,7 @@
 - `tts.ready` 对应音频对象上传（`tts.storage`：`none` / `s3`，支持 MinIO path-style）
 - 上传对象 `cache-control` 策略和 `expires/sig` 回放 URL 签名（配置化）
 - 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
+- 消费 `tenant.policy.changed` 并刷新本地策略缓存
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
@@ -167,12 +171,13 @@
 - 版本化更新语义
 - 灰度与控制面回退策略字段（canary percent / fail-open / cache ttl）
 - 可靠性策略字段（`retryMaxAttempts` / `retryBackoffMs` / `dlqTopicSuffix`）
+- 策略 upsert 后发布 `tenant.policy.changed`
 
 当前未实现：
 
 - 外部 IAM/RBAC 集成
 - 数据库持久化
-- 跨服务动态策略分发
+- 高级动态策略治理（跨区域分发、版本编排、回滚编排）
 
 ## 3. 当前通信方式
 
@@ -186,7 +191,7 @@
 ### 内部通信
 
 - `Kafka`
-  当前主异步总线，已落地 8 个 Topic。
+  当前主异步总线，已落地 9 个 Topic（新增 `tenant.policy.changed`）。
   核心 consumer 已落地 `.dlq` 死信回退、`idempotencyKey` 判重和补偿信号基线；`asr-worker`、`translation-worker`、`tts-orchestrator` 已升级到租户策略驱动重试/DLQ。
 - `HTTP`
   当前用于 `speech-gateway -> session-orchestrator` 和 `session-orchestrator -> control-plane` 的低频调用。
@@ -211,7 +216,7 @@ flowchart LR
 
 - 高频音频帧只允许 `speech-gateway -> Kafka`
 - `session-orchestrator` 不承接高频音频帧
-- 当前所有已落地 Topic 都按 `sessionId` 维持会话内顺序
+- 主链路 Topic 按 `sessionId` 维持会话内顺序；治理事件 `tenant.policy.changed` 按 `tenantId` 路由
 - 服务间同步调用只保留低频控制面路径
 
 ## 5. 当前工程目录结构

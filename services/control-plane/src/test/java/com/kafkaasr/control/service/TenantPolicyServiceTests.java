@@ -1,28 +1,44 @@
 package com.kafkaasr.control.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.kafkaasr.control.api.TenantPolicyUpsertRequest;
+import com.kafkaasr.control.events.ControlKafkaProperties;
+import com.kafkaasr.control.events.TenantPolicyChangedEvent;
+import com.kafkaasr.control.events.TenantPolicyChangedPublisher;
 import com.kafkaasr.control.policy.TenantPolicyRepository;
 import com.kafkaasr.control.policy.TenantPolicyState;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 class TenantPolicyServiceTests {
 
+    private RecordingPolicyChangedPublisher policyChangedPublisher;
     private TenantPolicyService service;
 
     @BeforeEach
     void setUp() {
+        policyChangedPublisher = new RecordingPolicyChangedPublisher();
+
+        ControlKafkaProperties kafkaProperties = new ControlKafkaProperties();
+        kafkaProperties.setProducerId("control-plane");
+        kafkaProperties.setPolicyChangedTopic("tenant.policy.changed");
+
         service = new TenantPolicyService(
                 new InMemoryTenantPolicyRepository(),
+                policyChangedPublisher,
+                kafkaProperties,
                 Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC),
                 new SimpleMeterRegistry());
     }
@@ -61,6 +77,14 @@ class TenantPolicyServiceTests {
                     assertEquals(".tenant-a.dlq", response.dlqTopicSuffix());
                 })
                 .verifyComplete();
+
+        assertEquals(1, policyChangedPublisher.events().size());
+        TenantPolicyChangedEvent event = policyChangedPublisher.events().getFirst();
+        assertEquals("tenant.policy.changed", event.eventType());
+        assertEquals("tenant-a", event.tenantId());
+        assertEquals(1L, event.seq());
+        assertEquals("CREATED", event.payload().operation());
+        assertEquals(1L, event.payload().policyVersion());
     }
 
     @Test
@@ -117,6 +141,11 @@ class TenantPolicyServiceTests {
                     assertEquals(".tenant-b.dlq", response.dlqTopicSuffix());
                 })
                 .verifyComplete();
+
+        assertEquals(2, policyChangedPublisher.events().size());
+        TenantPolicyChangedEvent secondEvent = policyChangedPublisher.events().get(1);
+        assertEquals("UPDATED", secondEvent.payload().operation());
+        assertEquals(2L, secondEvent.payload().policyVersion());
     }
 
     @Test
@@ -149,6 +178,38 @@ class TenantPolicyServiceTests {
                     assertEquals(".dlq", response.dlqTopicSuffix());
                 })
                 .verifyComplete();
+
+        assertEquals(1, policyChangedPublisher.events().size());
+    }
+
+    @Test
+    void upsertKeepsHttpSuccessWhenPolicyChangedPublishFails() {
+        policyChangedPublisher.setFailPublishing(true);
+        TenantPolicyUpsertRequest request = new TenantPolicyUpsertRequest(
+                "zh-CN",
+                "en-US",
+                "funasr-v1",
+                "mt-v1",
+                "en-US-neural-a",
+                100,
+                1200,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+
+        StepVerifier.create(service.upsertTenantPolicy("tenant-publish-fail", request))
+                .assertNext(response -> {
+                    assertEquals("tenant-publish-fail", response.tenantId());
+                    assertEquals(1L, response.version());
+                })
+                .verifyComplete();
+
+        assertTrue(policyChangedPublisher.events().isEmpty());
     }
 
     @Test
@@ -178,6 +239,29 @@ class TenantPolicyServiceTests {
         @Override
         public void save(TenantPolicyState state) {
             states.put(state.tenantId(), state);
+        }
+    }
+
+    private static final class RecordingPolicyChangedPublisher implements TenantPolicyChangedPublisher {
+
+        private final List<TenantPolicyChangedEvent> events = new ArrayList<>();
+        private boolean failPublishing;
+
+        @Override
+        public Mono<Void> publish(TenantPolicyChangedEvent event) {
+            if (failPublishing) {
+                return Mono.error(new IllegalStateException("kafka unavailable"));
+            }
+            events.add(event);
+            return Mono.empty();
+        }
+
+        public List<TenantPolicyChangedEvent> events() {
+            return events;
+        }
+
+        public void setFailPublishing(boolean failPublishing) {
+            this.failPublishing = failPublishing;
         }
     }
 }

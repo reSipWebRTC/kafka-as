@@ -101,6 +101,31 @@ class ControlPlaneTenantPolicyClientTests {
         assertEquals(1, exchangeFunction.calls());
     }
 
+    @Test
+    void invalidateTenantPolicyClearsCacheAndForcesRefetch() {
+        QueueExchangeFunction exchangeFunction = new QueueExchangeFunction();
+        exchangeFunction.enqueue(successPolicyResponse(false, 10, true, 60000L));
+        exchangeFunction.enqueue(successPolicyResponse(true, 40, true, 60000L));
+
+        ControlPlaneTenantPolicyClient client = new ControlPlaneTenantPolicyClient(
+                WebClient.builder().exchangeFunction(exchangeFunction).build(),
+                properties(false, 3),
+                Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC),
+                new SimpleMeterRegistry());
+
+        StepVerifier.create(client.getTenantPolicy("tenant-a"))
+                .assertNext(policy -> assertEquals(10, policy.grayTrafficPercent()))
+                .verifyComplete();
+
+        client.invalidateTenantPolicy("tenant-a");
+
+        StepVerifier.create(client.getTenantPolicy("tenant-a"))
+                .assertNext(policy -> assertEquals(40, policy.grayTrafficPercent()))
+                .verifyComplete();
+
+        assertEquals(2, exchangeFunction.calls());
+    }
+
     private static ClientResponse successPolicyResponse(
             boolean grayEnabled,
             int grayTrafficPercent,

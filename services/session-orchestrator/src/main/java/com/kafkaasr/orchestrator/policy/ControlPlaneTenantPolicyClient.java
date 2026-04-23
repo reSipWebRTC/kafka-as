@@ -78,6 +78,13 @@ public class ControlPlaneTenantPolicyClient implements TenantPolicyClient {
         });
     }
 
+    public void invalidateTenantPolicy(String tenantId) {
+        if (tenantId == null || tenantId.isBlank()) {
+            return;
+        }
+        cachedPolicies.remove(tenantId);
+    }
+
     private Mono<TenantPolicy> fetchTenantPolicy(String tenantId) {
         return webClient.get()
                 .uri("/api/v1/tenants/{tenantId}/policy", tenantId)
