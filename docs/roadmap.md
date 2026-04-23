@@ -9,7 +9,7 @@
 - 架构、服务边界、事件契约和协议文档基线
 - `api/protobuf` 与 `api/json-schema` 契约文件
 - 6 个核心服务加 `control-plane` 的工程骨架
-- 从 `audio.ingress.raw` 到 `tts.request` 的主链路（默认占位实现 + provider 适配入口，ASR 含 FunASR mode、VAD 静音切段与联调基线，Translation 含 OpenAI mode 与联调基线，TTS 含 synthesis mode）
+- 从 `audio.ingress.raw` 到 `tts.request` 的主链路（默认占位实现 + provider 适配入口，ASR 含 FunASR mode、VAD 静音切段与联调基线，Translation 含 OpenAI mode 与联调基线，TTS 含 synthesis mode 与联调基线）
 - Redis 会话状态和租户策略的最小落地
 - 统一的管理端点、Tracing 和第一版服务指标
 - `deploy/monitoring` 下 Prometheus/Grafana/Alertmanager 看板、告警与通知路由基线
@@ -126,7 +126,8 @@
 - 已具备 `translation.result -> tts.request / tts.chunk / tts.ready` 编排与 HTTP synthesis 适配入口
 - 已补齐 `tts.ready` 的可配置 S3/MinIO 上传与真实 `playbackUrl` 回填基线
 - 已补齐 `tts.ready` 的 `cache-control` 与 `expires/sig` 签名 URL 策略基线
-- 下一步是完成 TTS 引擎生产联调与 CDN 回放分发深度治理（区域路由、回源、命中率优化）
+- 已补齐 TTS 引擎第一版生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
+- 下一步是推进 TTS 真机容量/故障演练与 CDN 回放分发深度治理（区域路由、回源、命中率优化）
 
 ## 6. Phase 4：控制面与多租户
 
@@ -174,7 +175,7 @@
 
 1. 补齐下行链路的稳定性与端到端验证
 2. 补齐幂等、补偿、熔断与灰度治理
-3. 推进 ASR/Translation/TTS 真实引擎联调（ASR/Translation 已补齐第一版联调基线，继续做真机容量与故障演练）
+3. 推进 ASR/Translation/TTS 真实引擎联调（ASR/Translation/TTS 已补齐第一版联调基线，继续做真机容量与故障演练）
 4. 用预发/生产流量持续标定告警阈值，并将通知路由接入真实值班系统
 5. 落地压测与故障演练
 6. 补齐 TTS 分发与控制面高级能力

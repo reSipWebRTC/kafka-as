@@ -4,14 +4,23 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.tts.events.TranslationResultEvent;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 @Primary
 @Component
@@ -21,44 +30,97 @@ public class HttpTtsSynthesisEngine implements TtsSynthesisEngine {
     private final TtsSynthesisProperties properties;
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
+    private final MeterRegistry meterRegistry;
+    private final Semaphore concurrentGuard;
+    private final AtomicInteger inFlightRequests = new AtomicInteger(0);
+    private final AtomicReference<HealthSnapshot> healthSnapshot =
+            new AtomicReference<>(new HealthSnapshot(true, 0L));
+    private final Object healthRefreshLock = new Object();
 
     public HttpTtsSynthesisEngine(
             TtsSynthesisProperties properties,
             WebClient.Builder webClientBuilder,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            MeterRegistry meterRegistry) {
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.meterRegistry = meterRegistry;
         String endpoint = properties.getHttp().getEndpoint();
         if (endpoint == null || endpoint.isBlank()) {
             throw new IllegalStateException(
                     "tts.synthesis.http.endpoint must be set when tts.synthesis.mode=http");
         }
         this.webClient = webClientBuilder.baseUrl(endpoint).build();
+        this.concurrentGuard = new Semaphore(properties.getHttp().getMaxConcurrentRequests(), true);
+        meterRegistry.gauge("tts.synthesis.http.inflight", inFlightRequests);
     }
 
     @Override
     public SynthesisPlan synthesize(TranslationResultEvent sourceEvent, SynthesisInput input) {
-        if (input == null) {
-            throw new IllegalArgumentException("tts synthesis input must not be null");
+        String sessionId = sourceEvent == null ? "unknown" : sourceEvent.sessionId();
+        if (!concurrentGuard.tryAcquire()) {
+            meterRegistry.counter(
+                            "tts.synthesis.http.concurrency.rejected.total",
+                            "code",
+                            "TTS_PROVIDER_BUSY")
+                    .increment();
+            throw new TtsSynthesisException(
+                    "TTS_PROVIDER_BUSY",
+                    "TTS synthesis concurrency limit reached for session " + sessionId,
+                    true);
         }
+        inFlightRequests.incrementAndGet();
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            if (input == null) {
+                throw new TtsSynthesisException(
+                        "TTS_INVALID_REQUEST",
+                        "tts synthesis input must not be null",
+                        false);
+            }
 
-        String responseBody = webClient
-                .post()
-                .uri(properties.getHttp().getPath())
-                .contentType(MediaType.APPLICATION_JSON)
-                .headers(headers -> {
-                    String authToken = properties.getHttp().getAuthToken();
-                    if (authToken != null && !authToken.isBlank()) {
-                        headers.setBearerAuth(authToken);
-                    }
-                })
-                .bodyValue(toRequestBody(sourceEvent, input))
-                .retrieve()
-                .bodyToMono(String.class)
-                .timeout(Duration.ofMillis(properties.getHttp().getTimeoutMs()))
-                .block();
+            assertProviderHealthy(sessionId);
 
-        return mergePlan(input, responseBody, sourceEvent == null ? "" : sourceEvent.sessionId());
+            String responseBody = webClient
+                    .post()
+                    .uri(properties.getHttp().getPath())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .headers(headers -> {
+                        String authToken = properties.getHttp().getAuthToken();
+                        if (authToken != null && !authToken.isBlank()) {
+                            headers.setBearerAuth(authToken);
+                        }
+                    })
+                    .bodyValue(toRequestBody(sourceEvent, input))
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofMillis(properties.getHttp().getTimeoutMs()))
+                    .block();
+
+            SynthesisPlan plan = mergePlan(input, responseBody, sessionId);
+            meterRegistry.counter(
+                            "tts.synthesis.http.requests.total",
+                            "result",
+                            "success",
+                            "code",
+                            "OK")
+                    .increment();
+            return plan;
+        } catch (RuntimeException exception) {
+            TtsSynthesisException mapped = toSynthesisException(exception, sessionId);
+            meterRegistry.counter(
+                            "tts.synthesis.http.requests.total",
+                            "result",
+                            "error",
+                            "code",
+                            mapped.errorCode())
+                    .increment();
+            throw mapped;
+        } finally {
+            sample.stop(meterRegistry.timer("tts.synthesis.http.request.duration"));
+            inFlightRequests.decrementAndGet();
+            concurrentGuard.release();
+        }
     }
 
     private Map<String, Object> toRequestBody(TranslationResultEvent sourceEvent, SynthesisInput input) {
@@ -77,14 +139,21 @@ public class HttpTtsSynthesisEngine implements TtsSynthesisEngine {
 
     private SynthesisPlan mergePlan(SynthesisInput input, String responseBody, String sessionId) {
         if (responseBody == null || responseBody.isBlank()) {
-            throw new IllegalStateException("Empty TTS synthesis response for session " + sessionId);
+            throw new TtsSynthesisException(
+                    "TTS_PROVIDER_BAD_RESPONSE",
+                    "Empty TTS synthesis response for session " + sessionId,
+                    true);
         }
 
         JsonNode root;
         try {
             root = objectMapper.readTree(responseBody);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Invalid TTS synthesis response for session " + sessionId, exception);
+            throw new TtsSynthesisException(
+                    "TTS_PROVIDER_BAD_RESPONSE",
+                    "Invalid TTS synthesis response for session " + sessionId,
+                    true,
+                    exception);
         }
 
         assertProviderSuccess(root, sessionId);
@@ -182,13 +251,7 @@ public class HttpTtsSynthesisEngine implements TtsSynthesisEngine {
     private void assertProviderSuccess(JsonNode root, String sessionId) {
         JsonNode errorNode = root.path("error");
         if (!errorNode.isMissingNode() && !errorNode.isNull()) {
-            String message = firstNonBlank(
-                    textField(errorNode, "message"),
-                    textField(errorNode, "msg"),
-                    textField(errorNode, "code"),
-                    "unknown");
-            throw new IllegalStateException(
-                    "TTS provider error for session " + sessionId + " (message=" + message + ")");
+            throw toProviderErrorException(errorNode, sessionId);
         }
 
         JsonNode codeNode = firstPresentNode(
@@ -197,8 +260,7 @@ public class HttpTtsSynthesisEngine implements TtsSynthesisEngine {
                 root.path("data").path("code"),
                 root.path("data").path("status_code"));
         if (codeNode != null && !isSuccessCode(codeNode)) {
-            throw new IllegalStateException(
-                    "TTS provider code is not successful for session " + sessionId + " (code=" + codeNode.asText() + ")");
+            throw toProviderCodeException(codeNode, root, sessionId);
         }
 
         JsonNode statusNode = firstPresentNode(
@@ -207,13 +269,116 @@ public class HttpTtsSynthesisEngine implements TtsSynthesisEngine {
                 root.path("data").path("status"),
                 root.path("data").path("state"));
         if (statusNode != null && !isSuccessStatus(statusNode)) {
-            throw new IllegalStateException(
-                    "TTS provider status is not successful for session "
-                            + sessionId
-                            + " (status="
-                            + statusNode.asText()
-                            + ")");
+            String status = statusNode.asText("");
+            String normalized = status.toLowerCase(Locale.ROOT);
+            if ("failed".equals(normalized) || "error".equals(normalized)) {
+                throw new TtsSynthesisException(
+                        "TTS_PROVIDER_FAILURE",
+                        "TTS provider status is failed for session " + sessionId + " (status=" + status + ")",
+                        true);
+            }
+            throw new TtsSynthesisException(
+                    "TTS_PROVIDER_REJECTED",
+                    "TTS provider status is not successful for session " + sessionId + " (status=" + status + ")",
+                    false);
         }
+    }
+
+    private TtsSynthesisException toProviderErrorException(JsonNode errorNode, String sessionId) {
+        String message = firstNonBlank(
+                textField(errorNode, "message"),
+                textField(errorNode, "msg"),
+                textField(errorNode, "code"),
+                "unknown");
+        String code = textField(errorNode, "code");
+        String type = textField(errorNode, "type");
+        String detail = (message + " " + code + " " + type).toLowerCase(Locale.ROOT);
+
+        if (detail.contains("rate")
+                || detail.contains("quota")
+                || detail.contains("429")) {
+            return new TtsSynthesisException(
+                    "TTS_PROVIDER_RATE_LIMIT",
+                    "TTS provider rate-limited for session " + sessionId + " (message=" + message + ")",
+                    true);
+        }
+        if (detail.contains("unavailable")
+                || detail.contains("overload")
+                || detail.contains("temporar")
+                || detail.contains("server_error")) {
+            return new TtsSynthesisException(
+                    "TTS_PROVIDER_UNAVAILABLE",
+                    "TTS provider unavailable for session " + sessionId + " (message=" + message + ")",
+                    true);
+        }
+        if (detail.contains("invalid")
+                || detail.contains("unsupported")
+                || detail.contains("auth")
+                || detail.contains("permission")) {
+            return new TtsSynthesisException(
+                    "TTS_PROVIDER_REJECTED",
+                    "TTS provider rejected request for session " + sessionId + " (message=" + message + ")",
+                    false);
+        }
+        return new TtsSynthesisException(
+                "TTS_PROVIDER_FAILURE",
+                "TTS provider error for session " + sessionId + " (message=" + message + ")",
+                true);
+    }
+
+    private TtsSynthesisException toProviderCodeException(JsonNode codeNode, JsonNode root, String sessionId) {
+        String code = codeNode.asText("");
+        String message = firstNonBlank(
+                textField(root, "message"),
+                textField(root, "msg"),
+                textField(root, "error"),
+                textField(root.path("data"), "message"),
+                textField(root.path("data"), "msg"),
+                textField(root.path("data"), "error"),
+                "unknown");
+        Integer numericCode = parseInteger(code);
+        if (numericCode != null) {
+            if (numericCode == 429) {
+                return new TtsSynthesisException(
+                        "TTS_PROVIDER_RATE_LIMIT",
+                        "TTS provider rate-limited for session " + sessionId + " (message=" + message + ")",
+                        true);
+            }
+            if (numericCode == 503 || numericCode == 502 || numericCode == 504) {
+                return new TtsSynthesisException(
+                        "TTS_PROVIDER_UNAVAILABLE",
+                        "TTS provider unavailable for session "
+                                + sessionId
+                                + " (code="
+                                + code
+                                + ", message="
+                                + message
+                                + ")",
+                        true);
+            }
+            if (numericCode >= 500) {
+                return new TtsSynthesisException(
+                        "TTS_PROVIDER_FAILURE",
+                        "TTS provider failure for session "
+                                + sessionId
+                                + " (code="
+                                + code
+                                + ", message="
+                                + message
+                                + ")",
+                        true);
+            }
+        }
+        return new TtsSynthesisException(
+                "TTS_PROVIDER_REJECTED",
+                "TTS provider rejected request for session "
+                        + sessionId
+                        + " (code="
+                        + code
+                        + ", message="
+                        + message
+                        + ")",
+                false);
     }
 
     private JsonNode firstPresentNode(JsonNode... nodes) {
@@ -267,4 +432,204 @@ public class HttpTtsSynthesisEngine implements TtsSynthesisEngine {
                 || "ready".equalsIgnoreCase(raw);
     }
 
+    private void assertProviderHealthy(String sessionId) {
+        TtsSynthesisProperties.Health healthProperties = properties.getHttp().getHealth();
+        if (healthProperties == null || !healthProperties.isEnabled()) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        HealthSnapshot snapshot = healthSnapshot.get();
+        if (snapshot.expiresAtMs() > now) {
+            if (!snapshot.healthy()) {
+                throw new TtsSynthesisException(
+                        "TTS_PROVIDER_UNHEALTHY",
+                        "TTS health check is unhealthy for session " + sessionId,
+                        true);
+            }
+            return;
+        }
+
+        synchronized (healthRefreshLock) {
+            snapshot = healthSnapshot.get();
+            if (snapshot.expiresAtMs() > now) {
+                if (!snapshot.healthy()) {
+                    throw new TtsSynthesisException(
+                            "TTS_PROVIDER_UNHEALTHY",
+                            "TTS health check is unhealthy for session " + sessionId,
+                            true);
+                }
+                return;
+            }
+
+            try {
+                String responseBody = webClient
+                        .get()
+                        .uri(healthProperties.getPath())
+                        .accept(MediaType.APPLICATION_JSON)
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .timeout(Duration.ofMillis(healthProperties.getTimeoutMs()))
+                        .block();
+                boolean healthy = parseHealthResponse(responseBody);
+                cacheHealth(healthy, now, healthProperties.getCacheTtlMs());
+                meterRegistry.counter(
+                                "tts.synthesis.http.healthcheck.total",
+                                "result",
+                                healthy ? "up" : "down")
+                        .increment();
+                if (!healthy) {
+                    throw new TtsSynthesisException(
+                            "TTS_PROVIDER_UNHEALTHY",
+                            "TTS health check is unhealthy for session " + sessionId,
+                            true);
+                }
+            } catch (TtsSynthesisException exception) {
+                throw exception;
+            } catch (RuntimeException exception) {
+                if (healthProperties.isFailOpenOnError()) {
+                    cacheHealth(true, now, healthProperties.getCacheTtlMs());
+                    meterRegistry.counter(
+                                    "tts.synthesis.http.healthcheck.total",
+                                    "result",
+                                    "error_fail_open")
+                            .increment();
+                    return;
+                }
+                cacheHealth(false, now, healthProperties.getCacheTtlMs());
+                meterRegistry.counter(
+                                "tts.synthesis.http.healthcheck.total",
+                                "result",
+                                "error")
+                        .increment();
+                throw new TtsSynthesisException(
+                        "TTS_PROVIDER_UNHEALTHY",
+                        "TTS health check failed for session " + sessionId,
+                        true,
+                        exception);
+            }
+        }
+    }
+
+    private boolean parseHealthResponse(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return true;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            JsonNode healthyNode = firstPresentNode(
+                    root.path("healthy"),
+                    root.path("ok"),
+                    root.path("ready"));
+            if (healthyNode != null) {
+                Boolean healthy = firstBooleanLike(healthyNode);
+                if (healthy != null) {
+                    return healthy;
+                }
+            }
+
+            JsonNode statusNode = firstPresentNode(
+                    root.path("status"),
+                    root.path("state"));
+            if (statusNode == null || !statusNode.isTextual()) {
+                return true;
+            }
+            String status = statusNode.asText().trim();
+            if (status.isEmpty()) {
+                return true;
+            }
+            return "up".equalsIgnoreCase(status)
+                    || "ok".equalsIgnoreCase(status)
+                    || "healthy".equalsIgnoreCase(status)
+                    || "ready".equalsIgnoreCase(status)
+                    || "success".equalsIgnoreCase(status);
+        } catch (JsonProcessingException exception) {
+            return true;
+        }
+    }
+
+    private void cacheHealth(boolean healthy, long nowMs, long ttlMs) {
+        long expiresAt = nowMs + Math.max(100L, ttlMs);
+        healthSnapshot.set(new HealthSnapshot(healthy, expiresAt));
+    }
+
+    private TtsSynthesisException toSynthesisException(RuntimeException exception, String sessionId) {
+        if (exception instanceof TtsSynthesisException ttsSynthesisException) {
+            return ttsSynthesisException;
+        }
+
+        Throwable root = rootCause(exception);
+        if (root instanceof TimeoutException) {
+            return new TtsSynthesisException(
+                    "TTS_TIMEOUT",
+                    "TTS synthesis timeout for session " + sessionId,
+                    true,
+                    exception);
+        }
+        if (root instanceof WebClientResponseException responseException) {
+            int status = responseException.getStatusCode().value();
+            if (status == 429) {
+                return new TtsSynthesisException(
+                        "TTS_PROVIDER_RATE_LIMIT",
+                        "TTS provider returned HTTP 429 for session " + sessionId,
+                        true,
+                        exception);
+            }
+            if (status >= 500) {
+                return new TtsSynthesisException(
+                        "TTS_PROVIDER_UNAVAILABLE",
+                        "TTS provider returned HTTP " + status + " for session " + sessionId,
+                        true,
+                        exception);
+            }
+            return new TtsSynthesisException(
+                    "TTS_PROVIDER_REJECTED",
+                    "TTS provider returned HTTP " + status + " for session " + sessionId,
+                    false,
+                    exception);
+        }
+        if (root instanceof WebClientRequestException) {
+            return new TtsSynthesisException(
+                    "TTS_PROVIDER_UNAVAILABLE",
+                    "TTS provider request failed for session " + sessionId,
+                    true,
+                    exception);
+        }
+        if (exception instanceof IllegalArgumentException) {
+            return new TtsSynthesisException(
+                    "TTS_INVALID_REQUEST",
+                    exception.getMessage() == null
+                            ? "Invalid synthesis request for session " + sessionId
+                            : exception.getMessage(),
+                    false,
+                    exception);
+        }
+        return new TtsSynthesisException(
+                "TTS_PROVIDER_FAILURE",
+                "TTS synthesis failed for session " + sessionId,
+                true,
+                exception);
+    }
+
+    private Throwable rootCause(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private Integer parseInteger(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private record HealthSnapshot(boolean healthy, long expiresAtMs) {
+    }
 }

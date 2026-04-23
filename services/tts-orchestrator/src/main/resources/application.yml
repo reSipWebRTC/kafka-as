@@ -78,6 +78,13 @@ tts:
       endpoint: ${TTS_SYNTHESIS_HTTP_ENDPOINT:}
       path: ${TTS_SYNTHESIS_HTTP_PATH:/v1/tts/synthesize}
       timeout-ms: ${TTS_SYNTHESIS_HTTP_TIMEOUT_MS:2000}
+      max-concurrent-requests: ${TTS_SYNTHESIS_HTTP_MAX_CONCURRENT_REQUESTS:16}
+      health:
+        enabled: ${TTS_SYNTHESIS_HTTP_HEALTH_ENABLED:false}
+        path: ${TTS_SYNTHESIS_HTTP_HEALTH_PATH:/health}
+        timeout-ms: ${TTS_SYNTHESIS_HTTP_HEALTH_TIMEOUT_MS:800}
+        cache-ttl-ms: ${TTS_SYNTHESIS_HTTP_HEALTH_CACHE_TTL_MS:3000}
+        fail-open-on-error: ${TTS_SYNTHESIS_HTTP_HEALTH_FAIL_OPEN_ON_ERROR:true}
       auth-token: ${TTS_SYNTHESIS_HTTP_AUTH_TOKEN:}
   storage:
     enabled: ${TTS_STORAGE_ENABLED:false}
