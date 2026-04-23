@@ -9,6 +9,7 @@ services:
       ALERTMANAGER_DEFAULT_WEBHOOK_URL: ${ALERTMANAGER_DEFAULT_WEBHOOK_URL:-http://host.docker.internal:19093/alerts/default}
       ALERTMANAGER_WARNING_WEBHOOK_URL: ${ALERTMANAGER_WARNING_WEBHOOK_URL:-http://host.docker.internal:19093/alerts/warning}
       ALERTMANAGER_CRITICAL_WEBHOOK_URL: ${ALERTMANAGER_CRITICAL_WEBHOOK_URL:-http://host.docker.internal:19093/alerts/critical}
+      ALERTMANAGER_CRITICAL_ESCALATION_WEBHOOK_URL: ${ALERTMANAGER_CRITICAL_ESCALATION_WEBHOOK_URL:-http://host.docker.internal:19093/alerts/critical-escalation}
     ports:
       - "9093:9093"
     volumes:

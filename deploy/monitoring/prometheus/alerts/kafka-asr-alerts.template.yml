@@ -7,16 +7,16 @@ groups:
             sum(rate(gateway_ws_messages_total{result="error"}[5m]))
             /
             clamp_min(sum(rate(gateway_ws_messages_total[5m])), 1e-6)
-          ) > 0.01
+          ) > {{ALERT_GATEWAY_WS_ERROR_RATIO_WARNING}}
           and
-          sum(rate(gateway_ws_messages_total[5m])) > 1
-        for: 10m
+          sum(rate(gateway_ws_messages_total[5m])) > {{ALERT_GATEWAY_WS_ERROR_MIN_RPS_WARNING}}
+        for: {{ALERT_GATEWAY_WS_ERROR_FOR_WARNING}}
         labels:
           severity: warning
           area: gateway
         annotations:
           summary: "Gateway WebSocket error ratio is high"
-          description: "gateway.ws.messages.total error ratio > 0.01 for 10m"
+          description: "gateway.ws.messages.total error ratio > {{ALERT_GATEWAY_WS_ERROR_RATIO_WARNING}} for {{ALERT_GATEWAY_WS_ERROR_FOR_WARNING}}"
 
       - alert: GatewayWsErrorRateCritical
         expr: |
@@ -24,16 +24,16 @@ groups:
             sum(rate(gateway_ws_messages_total{result="error"}[5m]))
             /
             clamp_min(sum(rate(gateway_ws_messages_total[5m])), 1e-6)
-          ) > 0.03
+          ) > {{ALERT_GATEWAY_WS_ERROR_RATIO_CRITICAL}}
           and
-          sum(rate(gateway_ws_messages_total[5m])) > 1
-        for: 5m
+          sum(rate(gateway_ws_messages_total[5m])) > {{ALERT_GATEWAY_WS_ERROR_MIN_RPS_CRITICAL}}
+        for: {{ALERT_GATEWAY_WS_ERROR_FOR_CRITICAL}}
         labels:
           severity: critical
           area: gateway
         annotations:
           summary: "Gateway WebSocket error ratio is critical"
-          description: "gateway.ws.messages.total error ratio > 0.03 for 5m"
+          description: "gateway.ws.messages.total error ratio > {{ALERT_GATEWAY_WS_ERROR_RATIO_CRITICAL}} for {{ALERT_GATEWAY_WS_ERROR_FOR_CRITICAL}}"
 
       - alert: DownlinkErrorRateHigh
         expr: |
@@ -41,16 +41,16 @@ groups:
             sum(rate(gateway_downlink_messages_total{result="error"}[5m]))
             /
             clamp_min(sum(rate(gateway_downlink_messages_total[5m])), 1e-6)
-          ) > 0.005
+          ) > {{ALERT_DOWNLINK_ERROR_RATIO_WARNING}}
           and
-          sum(rate(gateway_downlink_messages_total[5m])) > 0.5
-        for: 10m
+          sum(rate(gateway_downlink_messages_total[5m])) > {{ALERT_DOWNLINK_ERROR_MIN_RPS_WARNING}}
+        for: {{ALERT_DOWNLINK_ERROR_FOR_WARNING}}
         labels:
           severity: warning
           area: gateway
         annotations:
           summary: "Gateway downlink error ratio is high"
-          description: "gateway.downlink.messages.total error ratio > 0.005 for 10m"
+          description: "gateway.downlink.messages.total error ratio > {{ALERT_DOWNLINK_ERROR_RATIO_WARNING}} for {{ALERT_DOWNLINK_ERROR_FOR_WARNING}}"
 
       - alert: DownlinkErrorRateCritical
         expr: |
@@ -58,16 +58,16 @@ groups:
             sum(rate(gateway_downlink_messages_total{result="error"}[5m]))
             /
             clamp_min(sum(rate(gateway_downlink_messages_total[5m])), 1e-6)
-          ) > 0.02
+          ) > {{ALERT_DOWNLINK_ERROR_RATIO_CRITICAL}}
           and
-          sum(rate(gateway_downlink_messages_total[5m])) > 0.5
-        for: 5m
+          sum(rate(gateway_downlink_messages_total[5m])) > {{ALERT_DOWNLINK_ERROR_MIN_RPS_CRITICAL}}
+        for: {{ALERT_DOWNLINK_ERROR_FOR_CRITICAL}}
         labels:
           severity: critical
           area: gateway
         annotations:
           summary: "Gateway downlink error ratio is critical"
-          description: "gateway.downlink.messages.total error ratio > 0.02 for 5m"
+          description: "gateway.downlink.messages.total error ratio > {{ALERT_DOWNLINK_ERROR_RATIO_CRITICAL}} for {{ALERT_DOWNLINK_ERROR_FOR_CRITICAL}}"
 
       - alert: PipelineErrorRateHigh
         expr: |
@@ -82,18 +82,18 @@ groups:
               ),
               1e-6
             )
-          ) > 0.01
+          ) > {{ALERT_PIPELINE_ERROR_RATIO_WARNING}}
           and
           sum by (service) (
             rate({__name__=~"asr_pipeline_messages_total|translation_pipeline_messages_total|tts_pipeline_messages_total"}[5m])
-          ) > 0.5
-        for: 10m
+          ) > {{ALERT_PIPELINE_ERROR_MIN_RPS_WARNING}}
+        for: {{ALERT_PIPELINE_ERROR_FOR_WARNING}}
         labels:
           severity: warning
           area: pipeline
         annotations:
           summary: "Pipeline error ratio is high for {{ $labels.service }}"
-          description: "ASR/Translation/TTS error ratio > 0.01 for 10m"
+          description: "ASR/Translation/TTS error ratio > {{ALERT_PIPELINE_ERROR_RATIO_WARNING}} for {{ALERT_PIPELINE_ERROR_FOR_WARNING}}"
 
       - alert: PipelineErrorRateCritical
         expr: |
@@ -108,102 +108,102 @@ groups:
               ),
               1e-6
             )
-          ) > 0.03
+          ) > {{ALERT_PIPELINE_ERROR_RATIO_CRITICAL}}
           and
           sum by (service) (
             rate({__name__=~"asr_pipeline_messages_total|translation_pipeline_messages_total|tts_pipeline_messages_total"}[5m])
-          ) > 0.5
-        for: 5m
+          ) > {{ALERT_PIPELINE_ERROR_MIN_RPS_CRITICAL}}
+        for: {{ALERT_PIPELINE_ERROR_FOR_CRITICAL}}
         labels:
           severity: critical
           area: pipeline
         annotations:
           summary: "Pipeline error ratio is critical for {{ $labels.service }}"
-          description: "ASR/Translation/TTS error ratio > 0.03 for 5m"
+          description: "ASR/Translation/TTS error ratio > {{ALERT_PIPELINE_ERROR_RATIO_CRITICAL}} for {{ALERT_PIPELINE_ERROR_FOR_CRITICAL}}"
 
       - alert: AsrPipelineP95LatencyHigh
         expr: |
           histogram_quantile(
             0.95,
             sum by (le) (rate(asr_pipeline_duration_seconds_bucket[5m]))
-          ) > 1.5
-        for: 15m
+          ) > {{ALERT_PIPELINE_P95_SECONDS_WARNING}}
+        for: {{ALERT_ASR_P95_FOR_WARNING}}
         labels:
           severity: warning
           area: asr
         annotations:
           summary: "ASR pipeline p95 latency is high"
-          description: "asr.pipeline.duration p95 > 1.5s for 15m"
+          description: "asr.pipeline.duration p95 > {{ALERT_PIPELINE_P95_SECONDS_WARNING}}s for {{ALERT_ASR_P95_FOR_WARNING}}"
 
       - alert: AsrPipelineP95LatencyCritical
         expr: |
           histogram_quantile(
             0.95,
             sum by (le) (rate(asr_pipeline_duration_seconds_bucket[5m]))
-          ) > 3.0
-        for: 5m
+          ) > {{ALERT_PIPELINE_P95_SECONDS_CRITICAL}}
+        for: {{ALERT_ASR_P95_FOR_CRITICAL}}
         labels:
           severity: critical
           area: asr
         annotations:
           summary: "ASR pipeline p95 latency is critical"
-          description: "asr.pipeline.duration p95 > 3.0s for 5m"
+          description: "asr.pipeline.duration p95 > {{ALERT_PIPELINE_P95_SECONDS_CRITICAL}}s for {{ALERT_ASR_P95_FOR_CRITICAL}}"
 
       - alert: TranslationPipelineP95LatencyHigh
         expr: |
           histogram_quantile(
             0.95,
             sum by (le) (rate(translation_pipeline_duration_seconds_bucket[5m]))
-          ) > 1.5
-        for: 15m
+          ) > {{ALERT_PIPELINE_P95_SECONDS_WARNING}}
+        for: {{ALERT_TRANSLATION_P95_FOR_WARNING}}
         labels:
           severity: warning
           area: translation
         annotations:
           summary: "Translation pipeline p95 latency is high"
-          description: "translation.pipeline.duration p95 > 1.5s for 15m"
+          description: "translation.pipeline.duration p95 > {{ALERT_PIPELINE_P95_SECONDS_WARNING}}s for {{ALERT_TRANSLATION_P95_FOR_WARNING}}"
 
       - alert: TranslationPipelineP95LatencyCritical
         expr: |
           histogram_quantile(
             0.95,
             sum by (le) (rate(translation_pipeline_duration_seconds_bucket[5m]))
-          ) > 3.0
-        for: 5m
+          ) > {{ALERT_PIPELINE_P95_SECONDS_CRITICAL}}
+        for: {{ALERT_TRANSLATION_P95_FOR_CRITICAL}}
         labels:
           severity: critical
           area: translation
         annotations:
           summary: "Translation pipeline p95 latency is critical"
-          description: "translation.pipeline.duration p95 > 3.0s for 5m"
+          description: "translation.pipeline.duration p95 > {{ALERT_PIPELINE_P95_SECONDS_CRITICAL}}s for {{ALERT_TRANSLATION_P95_FOR_CRITICAL}}"
 
       - alert: TtsPipelineP95LatencyHigh
         expr: |
           histogram_quantile(
             0.95,
             sum by (le) (rate(tts_pipeline_duration_seconds_bucket[5m]))
-          ) > 1.5
-        for: 15m
+          ) > {{ALERT_PIPELINE_P95_SECONDS_WARNING}}
+        for: {{ALERT_TTS_P95_FOR_WARNING}}
         labels:
           severity: warning
           area: tts
         annotations:
           summary: "TTS pipeline p95 latency is high"
-          description: "tts.pipeline.duration p95 > 1.5s for 15m"
+          description: "tts.pipeline.duration p95 > {{ALERT_PIPELINE_P95_SECONDS_WARNING}}s for {{ALERT_TTS_P95_FOR_WARNING}}"
 
       - alert: TtsPipelineP95LatencyCritical
         expr: |
           histogram_quantile(
             0.95,
             sum by (le) (rate(tts_pipeline_duration_seconds_bucket[5m]))
-          ) > 3.0
-        for: 5m
+          ) > {{ALERT_PIPELINE_P95_SECONDS_CRITICAL}}
+        for: {{ALERT_TTS_P95_FOR_CRITICAL}}
         labels:
           severity: critical
           area: tts
         annotations:
           summary: "TTS pipeline p95 latency is critical"
-          description: "tts.pipeline.duration p95 > 3.0s for 5m"
+          description: "tts.pipeline.duration p95 > {{ALERT_PIPELINE_P95_SECONDS_CRITICAL}}s for {{ALERT_TTS_P95_FOR_CRITICAL}}"
 
       - alert: KafkaConsumerLagHigh
         expr: |
@@ -211,14 +211,14 @@ groups:
             kafka_consumer_records_lag_max{
               service=~"speech-gateway|asr-worker|translation-worker|tts-orchestrator"
             }
-          ) > 1200
-        for: 10m
+          ) > {{ALERT_KAFKA_LAG_WARNING}}
+        for: {{ALERT_KAFKA_LAG_FOR_WARNING}}
         labels:
           severity: warning
           area: kafka
         annotations:
           summary: "Kafka consumer lag is high"
-          description: "kafka.consumer.records.lag.max > 1200 for 10m"
+          description: "kafka.consumer.records.lag.max > {{ALERT_KAFKA_LAG_WARNING}} for {{ALERT_KAFKA_LAG_FOR_WARNING}}"
 
       - alert: KafkaConsumerLagCritical
         expr: |
@@ -226,36 +226,36 @@ groups:
             kafka_consumer_records_lag_max{
               service=~"speech-gateway|asr-worker|translation-worker|tts-orchestrator"
             }
-          ) > 5000
-        for: 5m
+          ) > {{ALERT_KAFKA_LAG_CRITICAL}}
+        for: {{ALERT_KAFKA_LAG_FOR_CRITICAL}}
         labels:
           severity: critical
           area: kafka
         annotations:
           summary: "Kafka consumer lag is critical"
-          description: "kafka.consumer.records.lag.max > 5000 for 5m"
+          description: "kafka.consumer.records.lag.max > {{ALERT_KAFKA_LAG_CRITICAL}} for {{ALERT_KAFKA_LAG_FOR_CRITICAL}}"
 
       - alert: OrchestratorControlPlaneFallbackSpike
         expr: |
-          sum(rate(orchestrator_controlplane_policy_fallback_total[5m])) > 0.2
-        for: 10m
+          sum(rate(orchestrator_controlplane_policy_fallback_total[5m])) > {{ALERT_ORCHESTRATOR_FALLBACK_RPS_WARNING}}
+        for: {{ALERT_ORCHESTRATOR_FALLBACK_FOR_WARNING}}
         labels:
           severity: warning
           area: control-plane
         annotations:
           summary: "Session orchestrator control-plane fallback is active"
-          description: "orchestrator.controlplane.policy.fallback.total > 0.2/s for 10m"
+          description: "orchestrator.controlplane.policy.fallback.total > {{ALERT_ORCHESTRATOR_FALLBACK_RPS_WARNING}}/s for {{ALERT_ORCHESTRATOR_FALLBACK_FOR_WARNING}}"
 
       - alert: OrchestratorControlPlaneFallbackCritical
         expr: |
-          sum(rate(orchestrator_controlplane_policy_fallback_total[5m])) > 1.0
-        for: 5m
+          sum(rate(orchestrator_controlplane_policy_fallback_total[5m])) > {{ALERT_ORCHESTRATOR_FALLBACK_RPS_CRITICAL}}
+        for: {{ALERT_ORCHESTRATOR_FALLBACK_FOR_CRITICAL}}
         labels:
           severity: critical
           area: control-plane
         annotations:
           summary: "Session orchestrator control-plane fallback is critical"
-          description: "orchestrator.controlplane.policy.fallback.total > 1.0/s for 5m"
+          description: "orchestrator.controlplane.policy.fallback.total > {{ALERT_ORCHESTRATOR_FALLBACK_RPS_CRITICAL}}/s for {{ALERT_ORCHESTRATOR_FALLBACK_FOR_CRITICAL}}"
 
       - alert: ControlPlaneAuthDenyRateHigh
         expr: |
@@ -277,21 +277,21 @@ groups:
               ),
               1e-6
             )
-          ) > 0.20
+          ) > {{ALERT_CONTROL_AUTH_DENY_RATIO_WARNING}}
           and
           sum(
             rate(controlplane_auth_decision_total{
               backend="mode-switch",
               mode=~"external_iam|hybrid"
             }[5m])
-          ) > 0.05
-        for: 10m
+          ) > {{ALERT_CONTROL_AUTH_DENY_MIN_RPS_WARNING}}
+        for: {{ALERT_CONTROL_AUTH_DENY_FOR_WARNING}}
         labels:
           severity: warning
           area: control-plane
         annotations:
           summary: "Control-plane auth deny ratio is high"
-          description: "controlplane.auth.decision.total deny ratio > 0.20 for 10m"
+          description: "controlplane.auth.decision.total deny ratio > {{ALERT_CONTROL_AUTH_DENY_RATIO_WARNING}} for {{ALERT_CONTROL_AUTH_DENY_FOR_WARNING}}"
 
       - alert: ControlPlaneAuthDenyRateCritical
         expr: |
@@ -313,21 +313,21 @@ groups:
               ),
               1e-6
             )
-          ) > 0.40
+          ) > {{ALERT_CONTROL_AUTH_DENY_RATIO_CRITICAL}}
           and
           sum(
             rate(controlplane_auth_decision_total{
               backend="mode-switch",
               mode=~"external_iam|hybrid"
             }[5m])
-          ) > 0.10
-        for: 5m
+          ) > {{ALERT_CONTROL_AUTH_DENY_MIN_RPS_CRITICAL}}
+        for: {{ALERT_CONTROL_AUTH_DENY_FOR_CRITICAL}}
         labels:
           severity: critical
           area: control-plane
         annotations:
           summary: "Control-plane auth deny ratio is critical"
-          description: "controlplane.auth.decision.total deny ratio > 0.40 for 5m"
+          description: "controlplane.auth.decision.total deny ratio > {{ALERT_CONTROL_AUTH_DENY_RATIO_CRITICAL}} for {{ALERT_CONTROL_AUTH_DENY_FOR_CRITICAL}}"
 
       - alert: ControlPlaneExternalIamUnavailableWarning
         expr: |
@@ -336,14 +336,14 @@ groups:
               backend="external-iam",
               reason="external_unavailable"
             }[5m])
-          ) > 0.01
-        for: 10m
+          ) > {{ALERT_CONTROL_EXTERNAL_UNAVAILABLE_RPS_WARNING}}
+        for: {{ALERT_CONTROL_EXTERNAL_UNAVAILABLE_FOR_WARNING}}
         labels:
           severity: warning
           area: control-plane
         annotations:
           summary: "Control-plane external IAM unavailable warning"
-          description: "controlplane.auth.decision.total{backend=external-iam,reason=external_unavailable} > 0.01/s for 10m"
+          description: "controlplane.auth.decision.total{backend=external-iam,reason=external_unavailable} > {{ALERT_CONTROL_EXTERNAL_UNAVAILABLE_RPS_WARNING}}/s for {{ALERT_CONTROL_EXTERNAL_UNAVAILABLE_FOR_WARNING}}"
 
       - alert: ControlPlaneExternalIamUnavailableSpike
         expr: |
@@ -352,33 +352,33 @@ groups:
               backend="external-iam",
               reason="external_unavailable"
             }[5m])
-          ) > 0.05
-        for: 10m
+          ) > {{ALERT_CONTROL_EXTERNAL_UNAVAILABLE_RPS_CRITICAL}}
+        for: {{ALERT_CONTROL_EXTERNAL_UNAVAILABLE_FOR_CRITICAL}}
         labels:
           severity: critical
           area: control-plane
         annotations:
           summary: "Control-plane external IAM unavailable spike"
-          description: "controlplane.auth.decision.total{backend=external-iam,reason=external_unavailable} > 0.05/s for 10m"
+          description: "controlplane.auth.decision.total{backend=external-iam,reason=external_unavailable} > {{ALERT_CONTROL_EXTERNAL_UNAVAILABLE_RPS_CRITICAL}}/s for {{ALERT_CONTROL_EXTERNAL_UNAVAILABLE_FOR_CRITICAL}}"
 
       - alert: ControlPlaneHybridFallbackSpike
         expr: |
-          sum(rate(controlplane_auth_hybrid_fallback_total[5m])) > 0.05
-        for: 10m
+          sum(rate(controlplane_auth_hybrid_fallback_total[5m])) > {{ALERT_CONTROL_HYBRID_FALLBACK_RPS_WARNING}}
+        for: {{ALERT_CONTROL_HYBRID_FALLBACK_FOR_WARNING}}
         labels:
           severity: warning
           area: control-plane
         annotations:
           summary: "Control-plane hybrid auth fallback is active"
-          description: "controlplane.auth.hybrid.fallback.total > 0.05/s for 10m"
+          description: "controlplane.auth.hybrid.fallback.total > {{ALERT_CONTROL_HYBRID_FALLBACK_RPS_WARNING}}/s for {{ALERT_CONTROL_HYBRID_FALLBACK_FOR_WARNING}}"
 
       - alert: ControlPlaneHybridFallbackCritical
         expr: |
-          sum(rate(controlplane_auth_hybrid_fallback_total[5m])) > 0.20
-        for: 5m
+          sum(rate(controlplane_auth_hybrid_fallback_total[5m])) > {{ALERT_CONTROL_HYBRID_FALLBACK_RPS_CRITICAL}}
+        for: {{ALERT_CONTROL_HYBRID_FALLBACK_FOR_CRITICAL}}
         labels:
           severity: critical
           area: control-plane
         annotations:
           summary: "Control-plane hybrid auth fallback is critical"
-          description: "controlplane.auth.hybrid.fallback.total > 0.20/s for 5m"
+          description: "controlplane.auth.hybrid.fallback.total > {{ALERT_CONTROL_HYBRID_FALLBACK_RPS_CRITICAL}}/s for {{ALERT_CONTROL_HYBRID_FALLBACK_FOR_CRITICAL}}"

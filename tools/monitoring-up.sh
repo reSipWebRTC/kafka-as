@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 compose_file="$repo_root/deploy/monitoring/docker-compose.yml"
+render_script="$repo_root/tools/render-monitoring-config.sh"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker command not found" >&2
@@ -13,6 +14,13 @@ if [[ ! -f "$compose_file" ]]; then
   echo "missing compose file: $compose_file" >&2
   exit 1
 fi
+
+if [[ ! -x "$render_script" ]]; then
+  echo "missing render script: $render_script" >&2
+  exit 1
+fi
+
+"$render_script"
 
 docker compose -f "$compose_file" up -d
 

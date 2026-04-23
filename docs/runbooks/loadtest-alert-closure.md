@@ -84,7 +84,7 @@ PREPROD_LOADTEST_COMMAND="bash scripts/preprod/loadtest.sh" \
 PREPROD_FAULT_DRILL_COMMAND="bash scripts/preprod/fault-drill.sh" \
 PREPROD_AUTH_DRILL_COMMAND="tools/control-plane-auth-drill.sh" \
 PREPROD_AUTH_DRILL_REQUIRED=1 \
-PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,PipelineErrorRateHigh,KafkaConsumerLagHigh,ControlPlaneAuthDenyRateHigh,ControlPlaneExternalIamUnavailableSpike,ControlPlaneHybridFallbackSpike" \
+PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,GatewayWsErrorRateCritical,PipelineErrorRateHigh,PipelineErrorRateCritical,KafkaConsumerLagHigh,KafkaConsumerLagCritical,ControlPlaneAuthDenyRateHigh,ControlPlaneAuthDenyRateCritical,ControlPlaneExternalIamUnavailableSpike,ControlPlaneHybridFallbackSpike,ControlPlaneHybridFallbackCritical" \
 tools/preprod-drill-closure.sh
 ```
 
@@ -150,8 +150,22 @@ curl -s http://localhost:9093/api/v2/alerts
 export ALERTMANAGER_DEFAULT_WEBHOOK_URL="https://alerts.example.com/default"
 export ALERTMANAGER_WARNING_WEBHOOK_URL="https://alerts.example.com/warning"
 export ALERTMANAGER_CRITICAL_WEBHOOK_URL="https://alerts.example.com/critical"
+export ALERTMANAGER_CRITICAL_ESCALATION_WEBHOOK_URL="https://alerts.example.com/critical-escalation"
 tools/monitoring-up.sh
 ```
+
+### 3.2 告警运营化校验
+
+在仓库根目录执行：
+
+```bash
+tools/alert-ops-validate.sh
+```
+
+产物：
+
+- `build/reports/alert-ops/alert-ops-validation.json`
+- `build/reports/alert-ops/alert-ops-validation-summary.md`
 
 ## 4. 通过/失败判定
 
@@ -174,13 +188,21 @@ tools/monitoring-up.sh
 | 告警 | 首要检查 | 处置动作 |
 | --- | --- | --- |
 | `GatewayWsErrorRateHigh` | `gateway_ws_messages_total` 按错误码拆分 | 先检查最近网关变更与异常码分布，必要时回滚网关 |
+| `GatewayWsErrorRateCritical` | 与 `GatewayWsErrorRateHigh` 同指标，阈值更高 | 触发升级链路（critical + escalation），优先执行回滚/限流 |
 | `DownlinkErrorRateHigh` | `gateway_downlink_messages_total`、补偿信号 | 检查下行 payload 兼容性与幂等键冲突，必要时降级下行 |
+| `DownlinkErrorRateCritical` | 与 `DownlinkErrorRateHigh` 同指标，阈值更高 | 触发升级链路，优先切换到稳定下行策略 |
 | `PipelineErrorRateHigh` | `*_pipeline_messages_total{result="error"}` | 定位异常服务并切换到稳定 provider/策略 |
+| `PipelineErrorRateCritical` | 与 `PipelineErrorRateHigh` 同指标，阈值更高 | 触发升级链路，必要时暂停问题服务入口流量 |
 | `*PipelineP95LatencyHigh` | `*_pipeline_duration_seconds_bucket` | 检查外部引擎超时和积压，必要时限流或降级 |
+| `*PipelineP95LatencyCritical` | 与 `*PipelineP95LatencyHigh` 同指标，阈值更高 | 触发升级链路，优先降级高耗时 provider |
 | `KafkaConsumerLagHigh` | `kafka_consumer_records_lag_max` | 增加 consumer 并发或排查 broker 抖动 |
+| `KafkaConsumerLagCritical` | 与 `KafkaConsumerLagHigh` 同指标，阈值更高 | 触发升级链路，优先扩容并评估是否暂停入口 |
 | `ControlPlaneAuthDenyRateHigh` | `controlplane_auth_decision_total`（mode=`external_iam|hybrid`） | 检查 IAM 权限变更、token audience/claim 映射与租户范围策略 |
+| `ControlPlaneAuthDenyRateCritical` | 与 `ControlPlaneAuthDenyRateHigh` 同指标，阈值更高 | 触发升级链路，必要时切换 `hybrid/static` 保可用 |
+| `ControlPlaneExternalIamUnavailableWarning` | `controlplane_auth_decision_total{reason="external_unavailable"}` | 检查 JWKS/issuer 连通性并预警值班 |
 | `ControlPlaneExternalIamUnavailableSpike` | `controlplane_auth_decision_total{reason="external_unavailable"}` | 检查 JWKS/issuer 连通性，必要时切到 `hybrid` 保障可用性 |
 | `ControlPlaneHybridFallbackSpike` | `controlplane_auth_hybrid_fallback_total` | 检查 external IAM 稳定性与 fallback 比例，避免长期退化为 static |
+| `ControlPlaneHybridFallbackCritical` | 与 `ControlPlaneHybridFallbackSpike` 同指标，阈值更高 | 触发升级链路，必要时切回 static 并启动 IAM 故障通报 |
 
 ## 6. 升级策略
 
