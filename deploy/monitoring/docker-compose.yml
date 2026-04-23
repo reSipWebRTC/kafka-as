@@ -1,4 +1,22 @@
 services:
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: kafka-asr-alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --config.expand-env
+    environment:
+      ALERTMANAGER_DEFAULT_WEBHOOK_URL: ${ALERTMANAGER_DEFAULT_WEBHOOK_URL:-http://host.docker.internal:19093/alerts/default}
+      ALERTMANAGER_WARNING_WEBHOOK_URL: ${ALERTMANAGER_WARNING_WEBHOOK_URL:-http://host.docker.internal:19093/alerts/warning}
+      ALERTMANAGER_CRITICAL_WEBHOOK_URL: ${ALERTMANAGER_CRITICAL_WEBHOOK_URL:-http://host.docker.internal:19093/alerts/critical}
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v2.55.0
     container_name: kafka-asr-prometheus
@@ -10,6 +28,8 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/alerts:/etc/prometheus/alerts:ro
+    depends_on:
+      - alertmanager
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

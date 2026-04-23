@@ -24,6 +24,7 @@
 - `session-orchestrator` 查询 `control-plane` 已落地第一版熔断 + 缓存回退（fail-open/fail-closed）
 - `speech-gateway` 下行链路已补充仓库内 E2E 稳定性验证（顺序、终态、重复/异常计数）
 - `deploy/monitoring` 已补齐 Prometheus/Grafana 资产（含 Kafka lag、延迟、错误率看板与告警规则）
+- `deploy/monitoring` 已补齐 Alertmanager 通知路由基线（default/warning/critical）
 - 全仓测试与 `tools/verify.sh` 校验基线
 
 ## 2. 服务模块现状
@@ -94,7 +95,7 @@
 
 - `translation.request` 仍是计划扩展 Topic
 - ASR / Translation / TTS 尚未完成生产级真实引擎闭环，当前是“placeholder/规则默认 + provider 适配入口（ASR 含 FunASR mode，Translation 含 OpenAI mode，TTS 含 synthesis mode）”阶段
-- 对象存储 HA 治理、CDN 区域路由/多级缓存治理、完整补偿编排、自适应熔断/灰度治理和压测体系仍待完善
+- 对象存储 HA 治理、CDN 区域路由/多级缓存治理、完整补偿编排、自适应熔断/灰度治理，以及压测/告警升级实战证据仍待完善
 
 ## 6. 文档使用建议
 
