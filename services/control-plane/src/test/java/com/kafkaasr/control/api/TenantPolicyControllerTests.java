@@ -7,6 +7,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 
 import com.kafkaasr.control.auth.ControlPlaneAuthProperties;
 import com.kafkaasr.control.auth.ControlPlaneAuthWebFilter;
+import com.kafkaasr.control.auth.StaticAuthBackend;
 import com.kafkaasr.control.service.ControlPlaneException;
 import com.kafkaasr.control.service.TenantPolicyService;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,7 @@ import reactor.core.publisher.Mono;
                 "control.auth.enabled=true",
                 "control.auth.tokens=test-control-token"
         })
-@Import({ControlPlaneExceptionHandler.class, ControlPlaneAuthWebFilter.class})
+@Import({ControlPlaneExceptionHandler.class, ControlPlaneAuthWebFilter.class, StaticAuthBackend.class})
 @EnableConfigurationProperties(ControlPlaneAuthProperties.class)
 class TenantPolicyControllerTests {
 

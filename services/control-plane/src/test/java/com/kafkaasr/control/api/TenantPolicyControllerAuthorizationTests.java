@@ -4,6 +4,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 
 import com.kafkaasr.control.auth.ControlPlaneAuthProperties;
 import com.kafkaasr.control.auth.ControlPlaneAuthWebFilter;
+import com.kafkaasr.control.auth.StaticAuthBackend;
 import com.kafkaasr.control.service.TenantPolicyService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +29,7 @@ import reactor.core.publisher.Mono;
                 "control.auth.credentials[1].write=true",
                 "control.auth.credentials[1].tenant-patterns[0]=tenant-b*"
         })
-@Import({ControlPlaneExceptionHandler.class, ControlPlaneAuthWebFilter.class})
+@Import({ControlPlaneExceptionHandler.class, ControlPlaneAuthWebFilter.class, StaticAuthBackend.class})
 @EnableConfigurationProperties(ControlPlaneAuthProperties.class)
 class TenantPolicyControllerAuthorizationTests {
 
