@@ -12,7 +12,7 @@
 - 从 `audio.ingress.raw` 到 `tts.request` 的主链路（默认占位实现 + provider 适配入口，ASR 含 FunASR mode，Translation 含 OpenAI mode，TTS 含 synthesis mode）
 - Redis 会话状态和租户策略的最小落地
 - 统一的管理端点、Tracing 和第一版服务指标
-- `deploy/monitoring` 下 Prometheus/Grafana 看板与告警基线
+- `deploy/monitoring` 下 Prometheus/Grafana/Alertmanager 看板、告警与通知路由基线
 
 当前真正的状态是：
 
@@ -165,7 +165,8 @@
 当前判断：
 
 - 观测基线和仓库级看板/告警资产已接入
-- 压测、告警、恢复与弹性证据仍未建立
+- 告警通知路由和值班升级 runbook 基线已落地
+- 压测、告警、恢复与弹性实战证据仍未建立
 
 ## 8. 当前建议优先级
 
@@ -174,7 +175,7 @@
 1. 补齐下行链路的稳定性与端到端验证
 2. 补齐幂等、补偿、熔断与灰度治理
 3. 完成 ASR FunASR、Translation OpenAI 与 TTS synthesis 生产联调
-4. 完成告警阈值标定与通知路由，形成可执行值班策略
+4. 用预发/生产流量持续标定告警阈值，并将通知路由接入真实值班系统
 5. 落地压测与故障演练
 6. 补齐 TTS 分发与控制面高级能力
 

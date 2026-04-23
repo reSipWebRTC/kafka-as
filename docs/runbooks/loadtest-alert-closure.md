@@ -37,6 +37,30 @@ tools/loadtest-alert-closure.sh
 - `build/reports/loadtest/gateway-pipeline-loadtest.json`
 - `build/reports/loadtest/gateway-pipeline-loadtest-summary.md`
 
+### 3.1 告警路由启动与检查
+
+在仓库根目录先启动观测栈：
+
+```bash
+tools/monitoring-up.sh
+```
+
+检查 Alertmanager 路由与告警状态：
+
+```bash
+curl -s http://localhost:9093/api/v2/status
+curl -s http://localhost:9093/api/v2/alerts
+```
+
+如需对接真实通知通道（飞书/Slack/PagerDuty/Webhook），先配置：
+
+```bash
+export ALERTMANAGER_DEFAULT_WEBHOOK_URL="https://alerts.example.com/default"
+export ALERTMANAGER_WARNING_WEBHOOK_URL="https://alerts.example.com/warning"
+export ALERTMANAGER_CRITICAL_WEBHOOK_URL="https://alerts.example.com/critical"
+tools/monitoring-up.sh
+```
+
 ## 4. 通过/失败判定
 
 - 必须满足 `successRatio >= 0.999`。
@@ -62,6 +86,12 @@ tools/loadtest-alert-closure.sh
 - 同一告警连续 `> 30m` 未恢复，升级到负责人处理。
 - 同时出现 `GatewayWsErrorRateHigh + KafkaConsumerLagHigh`，按 P1 处理，优先恢复用户体验链路。
 - 若告警和压测结果均退化，优先回滚最近涉及网关/管道的变更。
+
+推荐值班分派（可按团队实际覆盖调整）：
+
+- `severity=warning`：当班开发处理，`15m` 内确认，`30m` 内给出处理结论。
+- `severity=critical`：直接升级到值班 owner，`10m` 内拉起应急通话。
+- `critical` 且影响用户链路：同步通知产品/运营，执行回滚优先。
 
 ## 7. 记录要求
 

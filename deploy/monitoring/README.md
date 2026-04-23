@@ -2,7 +2,8 @@
 
 This directory contains repository-managed observability assets for local validation:
 
-- `docker-compose.yml`: launches Prometheus + Grafana
+- `docker-compose.yml`: launches Alertmanager + Prometheus + Grafana
+- `alertmanager/alertmanager.yml`: baseline notification routing (default / warning / critical)
 - `prometheus/prometheus.yml`: scrape config for all six services
 - `prometheus/alerts/kafka-asr-alerts.yml`: baseline alert rules
 - `grafana/provisioning/*`: auto-provision datasource + dashboards
@@ -24,6 +25,7 @@ tools/monitoring-up.sh
 
 Access:
 
+- Alertmanager: `http://localhost:9093`
 - Prometheus: `http://localhost:9090`
 - Grafana: `http://localhost:3000` (`admin` / `admin`)
 
@@ -48,3 +50,19 @@ Generated artifacts:
 
 Current alert thresholds in `prometheus/alerts/kafka-asr-alerts.yml` are baseline-calibrated from the
 `2026-04-22` in-repo harness run, and must be re-calibrated with pre-production/production traffic data.
+
+## Notification routing configuration
+
+By default, Alertmanager sends webhook notifications to local placeholder endpoints:
+
+- `http://host.docker.internal:19093/alerts/default`
+- `http://host.docker.internal:19093/alerts/warning`
+- `http://host.docker.internal:19093/alerts/critical`
+
+Override per environment before `tools/monitoring-up.sh`:
+
+```bash
+export ALERTMANAGER_DEFAULT_WEBHOOK_URL="https://alerts.example.com/default"
+export ALERTMANAGER_WARNING_WEBHOOK_URL="https://alerts.example.com/warning"
+export ALERTMANAGER_CRITICAL_WEBHOOK_URL="https://alerts.example.com/critical"
+```
