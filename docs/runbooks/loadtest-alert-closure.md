@@ -30,8 +30,10 @@ tools/loadtest-alert-closure.sh
 LOADTEST_SCENARIOS="smoke baseline stress" \
 LOADTEST_BASELINE_SESSIONS=24 \
 LOADTEST_BASELINE_FRAMES_PER_SESSION=180 \
+LOADTEST_BASELINE_MIN_THROUGHPUT_FPS=0 \
 LOADTEST_STRESS_SESSIONS=48 \
 LOADTEST_STRESS_FRAMES_PER_SESSION=240 \
+LOADTEST_CAPACITY_TARGET_SCENARIO=stress \
 tools/loadtest-alert-closure.sh
 ```
 
@@ -47,6 +49,12 @@ tools/loadtest-alert-closure.sh
 - `LOADTEST_<SCENARIO>_FRAMES_PER_SESSION`
 - `LOADTEST_<SCENARIO>_MIN_SUCCESS_RATIO`
 - `LOADTEST_<SCENARIO>_MAX_P95_LATENCY_MS`
+- `LOADTEST_<SCENARIO>_MIN_THROUGHPUT_FPS`
+
+容量证据参数：
+
+- `LOADTEST_CAPACITY_TARGET_SCENARIO`（默认取最后一个场景）
+- 聚合报告会输出 `capacityEvidence.targetScenarioPass` 与 `capacityEvidence.highestPassingScenario`
 
 压测产物：
 
@@ -84,6 +92,9 @@ PREPROD_LOADTEST_COMMAND="bash scripts/preprod/loadtest.sh" \
 PREPROD_FAULT_DRILL_COMMAND="bash scripts/preprod/fault-drill.sh" \
 PREPROD_AUTH_DRILL_COMMAND="tools/control-plane-auth-drill.sh" \
 PREPROD_AUTH_DRILL_REQUIRED=1 \
+PREPROD_LOADTEST_REPORT_PATH="build/reports/loadtest/gateway-pipeline-loadtest-aggregate.json" \
+PREPROD_FAULT_DRILL_REPORT_PATH="build/reports/fault-drill/fault-drill-closure.json" \
+PREPROD_RECOVERY_MAX_SECONDS=900 \
 PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,PipelineErrorRateHigh,KafkaConsumerLagHigh,ControlPlaneAuthDenyRateHigh,ControlPlaneExternalIamUnavailableSpike,ControlPlaneHybridFallbackSpike" \
 tools/preprod-drill-closure.sh
 ```
@@ -159,11 +170,17 @@ tools/monitoring-up.sh
 - 每个 loadtest 场景必须满足其门槛：
   - `successRatio >= minSuccessRatio`
   - `frameLatencyMsP95 <= maxP95LatencyMs`
+  - `throughputFramesPerSecond >= minThroughputFps`（当 `minThroughputFps > 0` 时）
+- `capacityEvidence.targetScenarioPass` 必须为 `true`，且应产出 `highestPassingScenario`。
 - baseline 场景必须满足 `gatewayWsErrorCount == 0` 且 `downlinkErrorCount == 0`（基线阶段要求无错误）。
 - `tools/fault-drill-closure.sh` 聚合报告中 `overallPass` 必须为 `true`。
 - `tools/preprod-drill-closure.sh` 聚合报告中 `overallPass` 必须为 `true`。
 - 若配置 `PREPROD_AUTH_DRILL_COMMAND`，`control-auth` phase 必须为 `PASS`。
 - `tools/preprod-drill-closure.sh` 必须记录 “告警触发后恢复” 采样轨迹（`recovery.samples`）。
+- `tools/preprod-drill-closure.sh` 的 `sloEvidence.pass` 必须为 `true`，且：
+  - `sloEvidence.loadtest.pass=true`（若 `PREPROD_REQUIRE_LOADTEST_EVIDENCE=1`）
+  - `sloEvidence.faultDrill.pass=true`（若 `PREPROD_REQUIRE_FAULT_EVIDENCE=1`）
+  - `sloEvidence.recovery.pass=true`（`durationSeconds <= PREPROD_RECOVERY_MAX_SECONDS`）
 
 若任一条件失败，当前分支不得提审。
 

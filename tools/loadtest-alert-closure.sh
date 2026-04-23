@@ -16,6 +16,7 @@ fi
 legacy_report_path="${LOADTEST_REPORT_PATH:-$report_dir/gateway-pipeline-loadtest.json}"
 aggregate_report_path="${LOADTEST_AGGREGATE_REPORT_PATH:-$report_dir/gateway-pipeline-loadtest-aggregate.json}"
 summary_path="${LOADTEST_SUMMARY_PATH:-$report_dir/gateway-pipeline-loadtest-summary.md}"
+capacity_target_scenario="${LOADTEST_CAPACITY_TARGET_SCENARIO:-}"
 
 mkdir -p "$report_dir"
 mkdir -p "$(dirname "$summary_path")"
@@ -61,6 +62,15 @@ default_max_p95_latency_ms_for() {
   esac
 }
 
+default_min_throughput_fps_for() {
+  case "$1" in
+    smoke) echo "0" ;;
+    baseline) echo "0" ;;
+    stress) echo "0" ;;
+    *) echo "0" ;;
+  esac
+}
+
 resolve_value() {
   local scenario="$1"
   local key="$2"
@@ -95,11 +105,12 @@ for raw_scenario in "${scenarios[@]}"; do
   frames_per_session="$(resolve_value "$scenario" "FRAMES_PER_SESSION" "$(default_frames_for "$scenario")")"
   min_success_ratio="$(resolve_value "$scenario" "MIN_SUCCESS_RATIO" "$(default_min_success_ratio_for "$scenario")")"
   max_p95_latency_ms="$(resolve_value "$scenario" "MAX_P95_LATENCY_MS" "$(default_max_p95_latency_ms_for "$scenario")")"
+  min_throughput_fps="$(resolve_value "$scenario" "MIN_THROUGHPUT_FPS" "$(default_min_throughput_fps_for "$scenario")")"
   report_path="$report_dir/gateway-pipeline-loadtest-${scenario}.json"
   log_path="$report_dir/gateway-pipeline-loadtest-${scenario}.log"
 
   echo ""
-  echo "[$scenario] sessions=$sessions frames_per_session=$frames_per_session min_success_ratio=$min_success_ratio max_p95_latency_ms=$max_p95_latency_ms"
+  echo "[$scenario] sessions=$sessions frames_per_session=$frames_per_session min_success_ratio=$min_success_ratio max_p95_latency_ms=$max_p95_latency_ms min_throughput_fps=$min_throughput_fps"
 
   set +e
   ./gradlew \
@@ -115,20 +126,22 @@ for raw_scenario in "${scenarios[@]}"; do
   exit_code="${PIPESTATUS[0]}"
   set -e
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$scenario" \
     "$sessions" \
     "$frames_per_session" \
     "$min_success_ratio" \
     "$max_p95_latency_ms" \
+    "$min_throughput_fps" \
     "$exit_code" \
     "$report_path" \
     "$log_path" >> "$scenario_records_file"
 done
 
 set +e
-python3 - <<'PY' "$scenario_records_file" "$aggregate_report_path" "$summary_path" "$legacy_report_path"
+python3 - <<'PY' "$scenario_records_file" "$aggregate_report_path" "$summary_path" "$legacy_report_path" "$capacity_target_scenario"
 import json
+import math
 import pathlib
 import shutil
 from datetime import datetime, timezone
@@ -138,13 +151,14 @@ records_path = pathlib.Path(sys.argv[1])
 aggregate_report_path = pathlib.Path(sys.argv[2])
 summary_path = pathlib.Path(sys.argv[3])
 legacy_report_path = pathlib.Path(sys.argv[4])
+capacity_target_scenario = sys.argv[5].strip().lower()
 
 scenarios = []
 for line in records_path.read_text(encoding="utf-8").splitlines():
     parts = line.split("\t")
-    if len(parts) != 8:
+    if len(parts) != 9:
         continue
-    scenario, sessions, frames_per_session, min_success_ratio, max_p95_latency_ms, exit_code, report_path_raw, log_path_raw = parts
+    scenario, sessions, frames_per_session, min_success_ratio, max_p95_latency_ms, min_throughput_fps, exit_code, report_path_raw, log_path_raw = parts
     report_path = pathlib.Path(report_path_raw)
     log_path = pathlib.Path(log_path_raw)
     report_exists = report_path.exists()
@@ -154,8 +168,14 @@ for line in records_path.read_text(encoding="utf-8").splitlines():
     slo_checks = report.get("sloChecks", {}) if isinstance(report, dict) else {}
     success_ratio_pass = bool(slo_checks.get("successRatioPass")) if report else False
     p95_latency_pass = bool(slo_checks.get("p95LatencyPass")) if report else False
+    throughput_fps = report.get("throughputFramesPerSecond") if isinstance(report, dict) else None
+    min_throughput_value = float(min_throughput_fps)
+    if min_throughput_value <= 0:
+        throughput_pass = True
+    else:
+        throughput_pass = isinstance(throughput_fps, (int, float)) and throughput_fps >= min_throughput_value
     gradle_pass = exit_code == "0"
-    scenario_pass = gradle_pass and success_ratio_pass and p95_latency_pass
+    scenario_pass = gradle_pass and success_ratio_pass and p95_latency_pass and throughput_pass
     scenarios.append(
         {
             "scenario": scenario,
@@ -164,6 +184,7 @@ for line in records_path.read_text(encoding="utf-8").splitlines():
                 "framesPerSession": int(float(frames_per_session)),
                 "minSuccessRatio": float(min_success_ratio),
                 "maxP95LatencyMs": float(max_p95_latency_ms),
+                "minThroughputFps": min_throughput_value,
             },
             "artifacts": {
                 "reportPath": str(report_path),
@@ -175,6 +196,7 @@ for line in records_path.read_text(encoding="utf-8").splitlines():
                 "reportPresent": report_exists,
                 "successRatioPass": success_ratio_pass,
                 "p95LatencyPass": p95_latency_pass,
+                "throughputPass": throughput_pass,
                 "pass": scenario_pass,
             },
             "metrics": report or {},
@@ -185,12 +207,43 @@ overall_pass = all(item["result"]["pass"] for item in scenarios) if scenarios el
 passed_count = sum(1 for item in scenarios if item["result"]["pass"])
 failed_count = len(scenarios) - passed_count
 
+highest_passing = None
+for item in scenarios:
+    if item["result"]["pass"]:
+        highest_passing = item
+
+if not capacity_target_scenario and scenarios:
+    capacity_target_scenario = scenarios[-1]["scenario"]
+target_item = next((item for item in scenarios if item["scenario"] == capacity_target_scenario), None)
+capacity_target_pass = bool(target_item and target_item["result"]["pass"])
+
+capacity_ceiling = None
+if highest_passing is not None:
+    ceiling_throughput = highest_passing["metrics"].get("throughputFramesPerSecond")
+    if isinstance(ceiling_throughput, (int, float)):
+        ceiling_throughput = float(ceiling_throughput)
+    else:
+        ceiling_throughput = None
+    capacity_ceiling = {
+        "scenario": highest_passing["scenario"],
+        "sessions": highest_passing["config"]["sessions"],
+        "framesPerSession": highest_passing["config"]["framesPerSession"],
+        "throughputFramesPerSecond": ceiling_throughput,
+        "p95LatencyMs": highest_passing["metrics"].get("frameLatencyMsP95"),
+        "successRatio": highest_passing["metrics"].get("successRatio"),
+    }
+
 aggregate_report = {
     "generatedAt": datetime.now(timezone.utc).isoformat(),
     "scenarioCount": len(scenarios),
     "passedCount": passed_count,
     "failedCount": failed_count,
     "overallPass": overall_pass,
+    "capacityEvidence": {
+        "targetScenario": capacity_target_scenario,
+        "targetScenarioPass": capacity_target_pass,
+        "highestPassingScenario": capacity_ceiling,
+    },
     "scenarios": scenarios,
 }
 aggregate_report_path.write_text(
@@ -225,6 +278,9 @@ lines = [
     f"- passedCount: {aggregate_report['passedCount']}",
     f"- failedCount: {aggregate_report['failedCount']}",
     f"- overallPass: {str(aggregate_report['overallPass']).lower()}",
+    f"- capacityTargetScenario: {aggregate_report['capacityEvidence']['targetScenario'] or 'n/a'}",
+    f"- capacityTargetPass: {str(aggregate_report['capacityEvidence']['targetScenarioPass']).lower()}",
+    f"- highestPassingScenario: {(aggregate_report['capacityEvidence']['highestPassingScenario'] or {}).get('scenario', 'n/a')}",
     f"- aggregateReportPath: {aggregate_report_path}",
 ]
 if legacy_source is not None:
@@ -232,22 +288,26 @@ if legacy_source is not None:
 lines.extend(
     [
         "",
-        "| scenario | sessions | framesPerSession | successRatio | p95(ms) | throughput(fps) | gatePass | gradleExit |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |",
+        "| scenario | sessions | framesPerSession | successRatio | p95(ms) | throughput(fps) | minThroughput(fps) | throughputGate | gatePass | gradleExit |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: |",
     ]
 )
 for item in scenarios:
     metrics = item["metrics"]
     success_ratio = metrics.get("successRatio")
     success_ratio_cell = f"{success_ratio:.6f}" if isinstance(success_ratio, (int, float)) else "n/a"
+    throughput_value = metrics.get("throughputFramesPerSecond")
+    throughput_cell = f"{throughput_value:.6f}" if isinstance(throughput_value, (int, float)) and not math.isnan(throughput_value) else "n/a"
     lines.append(
-        "| {scenario} | {sessions} | {frames} | {success_ratio} | {p95} | {throughput} | {gate_pass} | {exit_code} |".format(
+        "| {scenario} | {sessions} | {frames} | {success_ratio} | {p95} | {throughput} | {min_throughput} | {throughput_gate} | {gate_pass} | {exit_code} |".format(
             scenario=item["scenario"],
             sessions=item["config"]["sessions"],
             frames=item["config"]["framesPerSession"],
             success_ratio=success_ratio_cell,
             p95=metric(item, "frameLatencyMsP95"),
-            throughput=metric(item, "throughputFramesPerSecond"),
+            throughput=throughput_cell,
+            min_throughput=item["config"]["minThroughputFps"],
+            throughput_gate="PASS" if item["result"]["throughputPass"] else "FAIL",
             gate_pass="PASS" if item["result"]["pass"] else "FAIL",
             exit_code=item["result"]["gradleExitCode"],
         )

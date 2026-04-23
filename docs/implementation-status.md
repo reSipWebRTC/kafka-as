@@ -30,9 +30,9 @@
 - `speech-gateway` 下行链路已补充仓库内 E2E 稳定性验证（顺序、终态、重复/异常计数）
 - `deploy/monitoring` 已补齐 Prometheus/Grafana 资产（含 Kafka lag、延迟、错误率看板与告警规则）
 - `deploy/monitoring` 已补齐 Alertmanager 通知路由基线（default/warning/critical）
-- `tools/loadtest-alert-closure.sh` 已升级为多场景（smoke/baseline/stress）压测聚合收口，并产出机器可读报告
+- `tools/loadtest-alert-closure.sh` 已升级为多场景（smoke/baseline/stress）压测聚合收口，支持吞吐门槛与容量上限证据（`capacityEvidence`）输出
 - `tools/fault-drill-closure.sh` 已补齐 ASR/Translation/TTS 故障演练收口，并产出机器可读报告
-- `tools/preprod-drill-closure.sh` 已补齐预发一键收口入口（loadtest/fault-drill/Alertmanager 恢复采样聚合）
+- `tools/preprod-drill-closure.sh` 已补齐预发一键收口入口（loadtest/fault-drill/Alertmanager 恢复采样聚合），并输出统一 `sloEvidence`（loadtest/fault/recovery）
 - `control-plane` 鉴权链路已补齐后端级决策/耗时指标与 hybrid 回退计数（`controlplane.auth.*`）
 - `tools/control-plane-auth-drill.sh` 已补齐控制面鉴权预发演练脚本，并可接入 `tools/preprod-drill-closure.sh` 的 `control-auth` 阶段
 - 已补齐真实 IAM 对接准备层：参数模板（`deploy/env/control-plane-iam.env.template`）、预检脚本（`tools/control-plane-iam-precheck.sh`）与 runbook 清单
