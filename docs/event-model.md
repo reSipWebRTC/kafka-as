@@ -42,13 +42,13 @@
 | Topic | Producer | Consumer | Key | 说明 |
 | --- | --- | --- | --- | --- |
 | `audio.ingress.raw` | `speech-gateway` | `asr-worker` | `sessionId` | 高频音频主链路 |
-| `session.control` | `session-orchestrator` | 暂无仓库内下游 | `sessionId` | 生命周期控制事件 |
+| `session.control` | `session-orchestrator` | `speech-gateway` | `sessionId` | 生命周期控制事件，用于 `session.closed` 下行 |
 | `asr.partial` | `asr-worker` | `speech-gateway` | `sessionId` | 中间识别结果，用于 `subtitle.partial` |
 | `asr.final` | `asr-worker` | `translation-worker` | `sessionId` | 当前翻译入口 |
-| `translation.result` | `translation-worker` | `tts-orchestrator` | `sessionId` | 当前 TTS 入口 |
+| `translation.result` | `translation-worker` | `tts-orchestrator`、`speech-gateway` | `sessionId` | 当前 TTS 入口，同时用于 `subtitle.final` 下行 |
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 编排输出 |
-| `tts.chunk` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 流式音频分片输出 |
-| `tts.ready` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 回放就绪输出 |
+| `tts.chunk` | `tts-orchestrator` | `speech-gateway` | `sessionId` | TTS 流式音频分片输出，用于 `tts.chunk` 下行 |
+| `tts.ready` | `tts-orchestrator` | `speech-gateway` | `sessionId` | TTS 回放就绪输出，用于 `tts.ready` 下行 |
 | `tenant.policy.changed` | `control-plane` | `session-orchestrator`、`asr-worker`、`translation-worker`、`tts-orchestrator` | `tenantId` | 租户策略变更通知，用于动态策略分发 |
 
 说明：

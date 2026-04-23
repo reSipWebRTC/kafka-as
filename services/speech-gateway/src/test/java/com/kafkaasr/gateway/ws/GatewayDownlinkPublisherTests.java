@@ -67,6 +67,55 @@ class GatewayDownlinkPublisherTests {
     }
 
     @Test
+    void publishesTtsChunkPayload() {
+        when(sessionRegistry.emitToSession(eq("sess-1"), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(Mono.empty());
+
+        StepVerifier.create(publisher.publishTtsChunk("sess-1", 12L, "AQID", "audio/wav", 16000, 3, true))
+                .verifyComplete();
+
+        ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+        verify(sessionRegistry).emitToSession(eq("sess-1"), payloadCaptor.capture());
+        String payload = payloadCaptor.getValue();
+        assertTrue(payload.contains("\"type\":\"tts.chunk\""));
+        assertTrue(payload.contains("\"sessionId\":\"sess-1\""));
+        assertTrue(payload.contains("\"seq\":12"));
+        assertTrue(payload.contains("\"audioBase64\":\"AQID\""));
+        assertTrue(payload.contains("\"codec\":\"audio/wav\""));
+        assertTrue(payload.contains("\"sampleRate\":16000"));
+        assertTrue(payload.contains("\"chunkSeq\":3"));
+        assertTrue(payload.contains("\"lastChunk\":true"));
+    }
+
+    @Test
+    void publishesTtsReadyPayload() {
+        when(sessionRegistry.emitToSession(eq("sess-1"), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(Mono.empty());
+
+        StepVerifier.create(publisher.publishTtsReady(
+                        "sess-1",
+                        13L,
+                        "https://cdn.local/tts/abc.wav",
+                        "audio/wav",
+                        16000,
+                        1234L,
+                        "tts_v1_abc"))
+                .verifyComplete();
+
+        ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+        verify(sessionRegistry).emitToSession(eq("sess-1"), payloadCaptor.capture());
+        String payload = payloadCaptor.getValue();
+        assertTrue(payload.contains("\"type\":\"tts.ready\""));
+        assertTrue(payload.contains("\"sessionId\":\"sess-1\""));
+        assertTrue(payload.contains("\"seq\":13"));
+        assertTrue(payload.contains("\"playbackUrl\":\"https://cdn.local/tts/abc.wav\""));
+        assertTrue(payload.contains("\"codec\":\"audio/wav\""));
+        assertTrue(payload.contains("\"sampleRate\":16000"));
+        assertTrue(payload.contains("\"durationMs\":1234"));
+        assertTrue(payload.contains("\"cacheKey\":\"tts_v1_abc\""));
+    }
+
+    @Test
     void ignoresBlankSessionId() {
         StepVerifier.create(publisher.publishSubtitleFinal("", 1L, "ignored"))
                 .verifyComplete();

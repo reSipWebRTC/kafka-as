@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.gateway.ws.protocol.SessionClosedResponse;
 import com.kafkaasr.gateway.ws.protocol.SubtitleFinalResponse;
 import com.kafkaasr.gateway.ws.protocol.SubtitlePartialResponse;
+import com.kafkaasr.gateway.ws.protocol.TtsChunkResponse;
+import com.kafkaasr.gateway.ws.protocol.TtsReadyResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.CloseStatus;
 import reactor.core.publisher.Mono;
@@ -15,6 +17,8 @@ public class GatewayDownlinkPublisher {
     private static final String SUBTITLE_PARTIAL_TYPE = "subtitle.partial";
     private static final String SUBTITLE_FINAL_TYPE = "subtitle.final";
     private static final String SESSION_CLOSED_TYPE = "session.closed";
+    private static final String TTS_CHUNK_TYPE = "tts.chunk";
+    private static final String TTS_READY_TYPE = "tts.ready";
 
     private final ObjectMapper objectMapper;
     private final GatewaySessionRegistry sessionRegistry;
@@ -48,6 +52,44 @@ public class GatewayDownlinkPublisher {
                 sessionId,
                 coalesceText(reason)))
                 .then(sessionRegistry.closeSession(sessionId, CloseStatus.NORMAL));
+    }
+
+    public Mono<Void> publishTtsChunk(
+            String sessionId,
+            long seq,
+            String audioBase64,
+            String codec,
+            int sampleRate,
+            int chunkSeq,
+            boolean lastChunk) {
+        return publishToSession(sessionId, new TtsChunkResponse(
+                TTS_CHUNK_TYPE,
+                sessionId,
+                seq,
+                coalesceText(audioBase64),
+                coalesceText(codec),
+                sampleRate,
+                chunkSeq,
+                lastChunk));
+    }
+
+    public Mono<Void> publishTtsReady(
+            String sessionId,
+            long seq,
+            String playbackUrl,
+            String codec,
+            int sampleRate,
+            long durationMs,
+            String cacheKey) {
+        return publishToSession(sessionId, new TtsReadyResponse(
+                TTS_READY_TYPE,
+                sessionId,
+                seq,
+                coalesceText(playbackUrl),
+                coalesceText(codec),
+                sampleRate,
+                durationMs,
+                coalesceText(cacheKey)));
     }
 
     private Mono<Void> publishToSession(String sessionId, Object payload) {

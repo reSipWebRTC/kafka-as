@@ -61,6 +61,8 @@ gateway:
     asr-partial-topic: ${GATEWAY_DOWNLINK_ASR_PARTIAL_TOPIC:asr.partial}
     translation-result-topic: ${GATEWAY_DOWNLINK_TRANSLATION_RESULT_TOPIC:translation.result}
     session-control-topic: ${GATEWAY_DOWNLINK_SESSION_CONTROL_TOPIC:session.control}
+    tts-chunk-topic: ${GATEWAY_DOWNLINK_TTS_CHUNK_TOPIC:tts.chunk}
+    tts-ready-topic: ${GATEWAY_DOWNLINK_TTS_READY_TOPIC:tts.ready}
     retry-max-attempts: ${GATEWAY_DOWNLINK_RETRY_MAX_ATTEMPTS:3}
     retry-backoff-ms: ${GATEWAY_DOWNLINK_RETRY_BACKOFF_MS:200}
     dlq-topic-suffix: ${GATEWAY_DOWNLINK_DLQ_TOPIC_SUFFIX:.dlq}
