@@ -5,19 +5,31 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 
+import com.kafkaasr.control.auth.ControlPlaneAuthProperties;
+import com.kafkaasr.control.auth.ControlPlaneAuthWebFilter;
 import com.kafkaasr.control.service.ControlPlaneException;
 import com.kafkaasr.control.service.TenantPolicyService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
-@WebFluxTest(controllers = TenantPolicyController.class)
-@Import(ControlPlaneExceptionHandler.class)
+@WebFluxTest(
+        controllers = TenantPolicyController.class,
+        properties = {
+                "control.auth.enabled=true",
+                "control.auth.tokens=test-control-token"
+        })
+@Import({ControlPlaneExceptionHandler.class, ControlPlaneAuthWebFilter.class})
+@EnableConfigurationProperties(ControlPlaneAuthProperties.class)
 class TenantPolicyControllerTests {
+
+    private static final String AUTHORIZATION = "Bearer test-control-token";
 
     @Autowired
     private WebTestClient webTestClient;
@@ -75,6 +87,7 @@ class TenantPolicyControllerTests {
 
         webTestClient.put()
                 .uri("/api/v1/tenants/tenant-api-a/policy")
+                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
                 .contentType(APPLICATION_JSON)
                 .bodyValue("""
                         {
@@ -105,6 +118,7 @@ class TenantPolicyControllerTests {
 
         webTestClient.get()
                 .uri("/api/v1/tenants/tenant-api-a/policy")
+                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
@@ -122,6 +136,7 @@ class TenantPolicyControllerTests {
 
         webTestClient.get()
                 .uri("/api/v1/tenants/missing/policy")
+                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
                 .exchange()
                 .expectStatus().isNotFound()
                 .expectBody()
@@ -133,6 +148,7 @@ class TenantPolicyControllerTests {
     void upsertInvalidBodyReturnsBadRequest() {
         webTestClient.put()
                 .uri("/api/v1/tenants/tenant-api-b/policy")
+                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
                 .contentType(APPLICATION_JSON)
                 .bodyValue("""
                         {
@@ -150,5 +166,15 @@ class TenantPolicyControllerTests {
                 .expectStatus().isBadRequest()
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("INVALID_MESSAGE");
+    }
+
+    @Test
+    void getWithoutAuthHeaderReturnsUnauthorized() {
+        webTestClient.get()
+                .uri("/api/v1/tenants/tenant-api-a/policy")
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("AUTH_INVALID_TOKEN");
     }
 }

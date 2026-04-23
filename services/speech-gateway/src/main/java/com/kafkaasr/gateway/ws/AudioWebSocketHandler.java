@@ -2,6 +2,7 @@ package com.kafkaasr.gateway.ws;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kafkaasr.gateway.auth.GatewayTokenAuthenticator;
 import com.kafkaasr.gateway.session.SessionControlClientException;
 import com.kafkaasr.gateway.ws.protocol.GatewayMessageRouter;
 import com.kafkaasr.gateway.ws.protocol.MessageValidationException;
@@ -16,15 +17,19 @@ import reactor.core.publisher.Mono;
 public class AudioWebSocketHandler implements WebSocketHandler {
 
     private static final String SESSION_ERROR_TYPE = "session.error";
+    private static final String AUTH_INVALID_TOKEN_CODE = "AUTH_INVALID_TOKEN";
     private static final String INTERNAL_ERROR_CODE = "INTERNAL_ERROR";
+    private final GatewayTokenAuthenticator tokenAuthenticator;
     private final GatewayMessageRouter gatewayMessageRouter;
     private final GatewaySessionRegistry sessionRegistry;
     private final ObjectMapper objectMapper;
 
     public AudioWebSocketHandler(
+            GatewayTokenAuthenticator tokenAuthenticator,
             GatewayMessageRouter gatewayMessageRouter,
             GatewaySessionRegistry sessionRegistry,
             ObjectMapper objectMapper) {
+        this.tokenAuthenticator = tokenAuthenticator;
         this.gatewayMessageRouter = gatewayMessageRouter;
         this.sessionRegistry = sessionRegistry;
         this.objectMapper = objectMapper;
@@ -32,6 +37,14 @@ public class AudioWebSocketHandler implements WebSocketHandler {
 
     @Override
     public Mono<Void> handle(WebSocketSession session) {
+        if (!tokenAuthenticator.isAuthorized(session.getHandshakeInfo())) {
+            return session.send(Mono.just(session.textMessage(toErrorPayload(
+                                    AUTH_INVALID_TOKEN_CODE,
+                                    "Invalid or missing access token",
+                                    ""))))
+                    .then(session.close(CloseStatus.POLICY_VIOLATION));
+        }
+
         GatewaySessionRegistry.ConnectionContext connection = sessionRegistry.openConnection(session);
 
         Mono<Void> outbound = session.send(connection.outbound().map(session::textMessage));

@@ -41,6 +41,7 @@
 当前已经实现：
 
 - `/ws/audio`
+- 可配置 WS token 鉴权（`Authorization: Bearer <token>` 或 query `access_token`）
 - `session.start` / `session.ping` / `audio.frame` / `session.stop`
 - `audio.ingress.raw` 发布
 - `audio.frame` 会话级限流与背压保护
@@ -52,7 +53,7 @@
 
 当前未实现：
 
-- 真正的鉴权
+- 外部 IAM/RBAC 集成与租户级凭据治理
 - 更完整的结果聚合和多路下行策略
 
 ### session-orchestrator
@@ -161,6 +162,7 @@
 当前已经实现：
 
 - 租户策略的 GET / PUT API
+- `/api/v1/tenants/**` 的 Bearer Token 鉴权
 - Redis 持久化抽象
 - 版本化更新语义
 - 灰度与控制面回退策略字段（canary percent / fail-open / cache ttl）
@@ -168,7 +170,7 @@
 
 当前未实现：
 
-- 认证鉴权
+- 外部 IAM/RBAC 集成
 - 数据库持久化
 - 跨服务动态策略分发
 

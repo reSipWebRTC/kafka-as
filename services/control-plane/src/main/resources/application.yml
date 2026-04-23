@@ -34,6 +34,9 @@ logging:
     level: "%5p [service=${spring.application.name:-unknown},traceId=%X{traceId:-},spanId=%X{spanId:-}]"
 
 control:
+  auth:
+    enabled: ${CONTROL_AUTH_ENABLED:false}
+    tokens: ${CONTROL_AUTH_TOKENS:}
   policy-store:
     key-prefix: ${CONTROL_POLICY_STORE_KEY_PREFIX:control:tenant-policy:}
     ttl: ${CONTROL_POLICY_STORE_TTL:12h}
