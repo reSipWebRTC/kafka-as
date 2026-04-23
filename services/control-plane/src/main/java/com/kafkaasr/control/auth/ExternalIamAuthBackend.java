@@ -18,47 +18,73 @@ public class ExternalIamAuthBackend implements AuthBackend {
 
     private final ControlPlaneAuthProperties authProperties;
     private final ExternalIamTokenDecoder tokenDecoder;
+    private final AuthMetricsRecorder metricsRecorder;
 
     @Autowired
-    public ExternalIamAuthBackend(ControlPlaneAuthProperties authProperties) {
-        this(authProperties, new JwksExternalIamTokenDecoder(authProperties.getExternal()));
+    public ExternalIamAuthBackend(ControlPlaneAuthProperties authProperties, AuthMetricsRecorder metricsRecorder) {
+        this(authProperties, new JwksExternalIamTokenDecoder(authProperties.getExternal()), metricsRecorder);
     }
 
     ExternalIamAuthBackend(ControlPlaneAuthProperties authProperties, ExternalIamTokenDecoder tokenDecoder) {
+        this(authProperties, tokenDecoder, AuthMetricsRecorder.noop());
+    }
+
+    ExternalIamAuthBackend(
+            ControlPlaneAuthProperties authProperties,
+            ExternalIamTokenDecoder tokenDecoder,
+            AuthMetricsRecorder metricsRecorder) {
         this.authProperties = authProperties;
         this.tokenDecoder = tokenDecoder;
+        this.metricsRecorder = metricsRecorder;
     }
 
     @Override
     public AuthDecision authorize(AuthRequest request) {
-        if (!authProperties.isEnabled()) {
-            return AuthDecision.allow(request.tenantId());
-        }
-
-        String token = extractBearerToken(request.authorizationHeader());
-        if (token == null) {
-            return AuthDecision.unauthorized(request.tenantId(), "MISSING_OR_INVALID_TOKEN");
-        }
-
-        Map<String, Object> claims;
+        long startedAtNanos = System.nanoTime();
+        AuthDecision decision = AuthDecision.unauthorized(request.tenantId(), "INTERNAL_ERROR");
         try {
-            claims = tokenDecoder.decode(token);
-        } catch (ExternalIamTokenDecoderException exception) {
-            if (exception.category() == ExternalIamTokenDecoderException.Category.UNAVAILABLE) {
-                return AuthDecision.unauthorized(request.tenantId(), "EXTERNAL_UNAVAILABLE");
+            if (!authProperties.isEnabled()) {
+                decision = AuthDecision.allow(request.tenantId());
+                return decision;
             }
-            return AuthDecision.unauthorized(request.tenantId(), "EXTERNAL_TOKEN_INVALID");
-        }
 
-        if (!hasPermissionForMethod(claims, request.method())) {
-            return AuthDecision.forbidden(request.tenantId(), "OPERATION_DENIED");
-        }
+            String token = extractBearerToken(request.authorizationHeader());
+            if (token == null) {
+                decision = AuthDecision.unauthorized(request.tenantId(), "MISSING_OR_INVALID_TOKEN");
+                return decision;
+            }
 
-        if (!allowsTenant(claims, request.tenantId())) {
-            return AuthDecision.forbidden(request.tenantId(), "TENANT_SCOPE_DENIED");
-        }
+            Map<String, Object> claims;
+            try {
+                claims = tokenDecoder.decode(token);
+            } catch (ExternalIamTokenDecoderException exception) {
+                if (exception.category() == ExternalIamTokenDecoderException.Category.UNAVAILABLE) {
+                    decision = AuthDecision.unauthorized(request.tenantId(), "EXTERNAL_UNAVAILABLE");
+                    return decision;
+                }
+                decision = AuthDecision.unauthorized(request.tenantId(), "EXTERNAL_TOKEN_INVALID");
+                return decision;
+            }
 
-        return AuthDecision.allow(request.tenantId());
+            if (!hasPermissionForMethod(claims, request.method())) {
+                decision = AuthDecision.forbidden(request.tenantId(), "OPERATION_DENIED");
+                return decision;
+            }
+
+            if (!allowsTenant(claims, request.tenantId())) {
+                decision = AuthDecision.forbidden(request.tenantId(), "TENANT_SCOPE_DENIED");
+                return decision;
+            }
+
+            decision = AuthDecision.allow(request.tenantId());
+            return decision;
+        } finally {
+            metricsRecorder.recordDecision(
+                    "external-iam",
+                    authProperties.getMode(),
+                    decision,
+                    System.nanoTime() - startedAtNanos);
+        }
     }
 
     private String extractBearerToken(String authorizationHeader) {

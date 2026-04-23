@@ -22,8 +22,8 @@ Integrate external IAM/RBAC for `control-plane` while keeping current static tok
 ### Stage 3 (next): Mode switch and rollout
 
 - [x] Add `control.auth.mode` (`static` default, `external-iam`, `hybrid`)
-- [ ] Add backend-level metrics and deny reason counters
-- [ ] Add rollout runbook and preprod drill evidence
+- [x] Add backend-level metrics and deny reason counters
+- [x] Add rollout runbook and preprod drill evidence
 
 ## Verification
 

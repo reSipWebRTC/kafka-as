@@ -11,12 +11,19 @@ summary_path="${PREPROD_SUMMARY_PATH:-$report_dir/preprod-drill-closure-summary.
 
 loadtest_command="${PREPROD_LOADTEST_COMMAND:-tools/loadtest-alert-closure.sh}"
 fault_drill_command="${PREPROD_FAULT_DRILL_COMMAND:-tools/fault-drill-closure.sh}"
+auth_drill_command="${PREPROD_AUTH_DRILL_COMMAND:-}"
+auth_drill_required="${PREPROD_AUTH_DRILL_REQUIRED:-0}"
 alertmanager_url="${PREPROD_ALERTMANAGER_URL:-http://localhost:9093}"
-watch_alerts_raw="${PREPROD_WATCH_ALERTS:-GatewayWsErrorRateHigh,DownlinkErrorRateHigh,PipelineErrorRateHigh,AsrPipelineP95LatencyHigh,TranslationPipelineP95LatencyHigh,TtsPipelineP95LatencyHigh,KafkaConsumerLagHigh}"
+watch_alerts_raw="${PREPROD_WATCH_ALERTS:-GatewayWsErrorRateHigh,DownlinkErrorRateHigh,PipelineErrorRateHigh,AsrPipelineP95LatencyHigh,TranslationPipelineP95LatencyHigh,TtsPipelineP95LatencyHigh,KafkaConsumerLagHigh,ControlPlaneAuthDenyRateHigh,ControlPlaneExternalIamUnavailableSpike,ControlPlaneHybridFallbackSpike}"
 recovery_timeout_seconds="${PREPROD_RECOVERY_TIMEOUT_SECONDS:-900}"
 recovery_poll_seconds="${PREPROD_RECOVERY_POLL_SECONDS:-30}"
 dry_run="${PREPROD_DRY_RUN:-0}"
 skip_alert_capture="${PREPROD_SKIP_ALERT_CAPTURE:-0}"
+
+if [[ "$auth_drill_required" == "1" && -z "$auth_drill_command" ]]; then
+  echo "PREPROD_AUTH_DRILL_REQUIRED=1 but PREPROD_AUTH_DRILL_COMMAND is empty." >&2
+  exit 1
+fi
 
 mkdir -p "$report_dir"
 mkdir -p "$(dirname "$report_path")"
@@ -189,6 +196,17 @@ fault_drill_exit="$?"
 set -e
 capture_alert_snapshot "after-fault-drill"
 
+auth_drill_executed=0
+if [[ -n "$auth_drill_command" ]]; then
+  auth_drill_executed=1
+  auth_drill_exit=0
+  set +e
+  run_phase "control-auth" "$auth_drill_command"
+  auth_drill_exit="$?"
+  set -e
+  capture_alert_snapshot "after-control-auth"
+fi
+
 recovery_pass=0
 recovery_reason="timeout"
 set +e
@@ -218,6 +236,9 @@ python3 - <<'PY' \
   "$recovery_poll_seconds" \
   "$dry_run" \
   "$skip_alert_capture" \
+  "$auth_drill_command" \
+  "$auth_drill_required" \
+  "$auth_drill_executed" \
   "$recovery_pass" \
   "$recovery_reason"
 import json
@@ -238,6 +259,9 @@ import sys
     recovery_poll_seconds,
     dry_run_raw,
     skip_alert_capture_raw,
+    auth_drill_command,
+    auth_drill_required_raw,
+    auth_drill_executed_raw,
     recovery_pass_raw,
     recovery_reason,
 ) = sys.argv[1:]
@@ -250,6 +274,8 @@ recovery_records_path = pathlib.Path(recovery_records_raw)
 
 dry_run = dry_run_raw == "1"
 skip_alert_capture = skip_alert_capture_raw == "1"
+auth_drill_required = auth_drill_required_raw == "1"
+auth_drill_executed = auth_drill_executed_raw == "1"
 recovery_pass = recovery_pass_raw == "1"
 watch_alerts = [entry.strip() for entry in watch_alerts_raw.split(",") if entry.strip()]
 
@@ -300,6 +326,9 @@ capture_pass = all(item["captureOk"] for item in snapshots) if snapshots else Fa
 if dry_run or skip_alert_capture:
     capture_pass = True
 
+auth_drill_phase = next((item for item in phases if item["phase"] == "control-auth"), None)
+auth_drill_pass = auth_drill_phase["result"]["pass"] if auth_drill_phase else not auth_drill_required
+
 if dry_run or skip_alert_capture:
     recovery = {
         "pass": True,
@@ -313,7 +342,7 @@ else:
         "samples": recovery_samples,
     }
 
-overall_pass = phases_pass and capture_pass and recovery["pass"]
+overall_pass = phases_pass and capture_pass and recovery["pass"] and auth_drill_pass
 
 report = {
     "generatedAt": datetime.now(timezone.utc).isoformat(),
@@ -325,6 +354,11 @@ report = {
         "recoveryPollSeconds": int(recovery_poll_seconds),
         "dryRun": dry_run,
         "skipAlertCapture": skip_alert_capture,
+        "authDrill": {
+            "command": auth_drill_command,
+            "required": auth_drill_required,
+            "executed": auth_drill_executed,
+        },
     },
     "phases": phases,
     "snapshots": snapshots,
@@ -333,6 +367,7 @@ report = {
         "phasesPass": phases_pass,
         "alertCapturePass": capture_pass,
         "recoveryPass": recovery["pass"],
+        "authDrillPass": auth_drill_pass,
     },
     "overallPass": overall_pass,
 }
@@ -348,6 +383,9 @@ lines = [
     f"- phasesPass: {str(phases_pass).lower()}",
     f"- alertCapturePass: {str(capture_pass).lower()}",
     f"- recoveryPass: {str(recovery['pass']).lower()} ({recovery['reason']})",
+    f"- authDrillConfigured: {str(bool(auth_drill_command)).lower()}",
+    f"- authDrillExecuted: {str(auth_drill_executed).lower()}",
+    f"- authDrillPass: {str(auth_drill_pass).lower()}",
     f"- reportPath: {report_path}",
     "",
     "| phase | pass | exitCode | command | logPath |",

@@ -93,6 +93,13 @@
 - 对象存储写入延迟
 - CDN 回源率
 
+### 4.6 Control-Plane Auth
+
+- 鉴权决策总量（allow/unauthorized/forbidden）
+- 拒绝原因分布（token 缺失、租户越权、权限不足、外部 IAM 不可用）
+- hybrid 模式回退触发次数（external -> static）
+- 鉴权延迟
+
 ## 5. Trace 与日志要求
 
 ### Trace
@@ -206,12 +213,14 @@
 - `tts.pipeline.messages.total` / `tts.pipeline.duration`
 - `controlplane.tenant.policy.upsert.total` / `controlplane.tenant.policy.upsert.duration`
 - `controlplane.tenant.policy.get.total` / `controlplane.tenant.policy.get.duration`
+- `controlplane.auth.decision.total` / `controlplane.auth.decision.duration`
+- `controlplane.auth.hybrid.fallback.total`
 
 ### 已落地监控资产（2026-04-22）
 
 - `deploy/monitoring/docker-compose.yml`：本地 Prometheus + Grafana 启停
 - `deploy/monitoring/prometheus/prometheus.yml`：六服务 `/actuator/prometheus` 抓取
-- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`：错误率、P95 延迟、Kafka lag 与控制面回退告警
+- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`：错误率、P95 延迟、Kafka lag、控制面回退与鉴权告警
 - `deploy/monitoring/grafana/dashboards/kafka-asr-overview.json`：主链路吞吐/错误/延迟 + downlink + lag 看板
 - `tools/monitoring-up.sh` / `tools/monitoring-down.sh`：一键启停入口
 

@@ -82,7 +82,9 @@ PREPROD_TARGET=preprod-cn-a \
 PREPROD_ALERTMANAGER_URL="https://alertmanager.preprod.example.com" \
 PREPROD_LOADTEST_COMMAND="bash scripts/preprod/loadtest.sh" \
 PREPROD_FAULT_DRILL_COMMAND="bash scripts/preprod/fault-drill.sh" \
-PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,PipelineErrorRateHigh,KafkaConsumerLagHigh" \
+PREPROD_AUTH_DRILL_COMMAND="tools/control-plane-auth-drill.sh" \
+PREPROD_AUTH_DRILL_REQUIRED=1 \
+PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,PipelineErrorRateHigh,KafkaConsumerLagHigh,ControlPlaneAuthDenyRateHigh,ControlPlaneExternalIamUnavailableSpike,ControlPlaneHybridFallbackSpike" \
 tools/preprod-drill-closure.sh
 ```
 
@@ -92,7 +94,34 @@ tools/preprod-drill-closure.sh
 - `build/reports/preprod-drill/preprod-drill-closure-summary.md`
 - `build/reports/preprod-drill/preprod-loadtest.log`
 - `build/reports/preprod-drill/preprod-fault-drill.log`
+- `build/reports/preprod-drill/preprod-control-auth.log`（配置 `PREPROD_AUTH_DRILL_COMMAND` 时）
 - `build/reports/preprod-drill/alertmanager-*.json`
+
+控制面鉴权演练脚本（外部 IAM/RBAC）：
+
+```bash
+CONTROL_AUTH_DRILL_BASE_URL="https://control-plane.preprod.example.com" \
+CONTROL_AUTH_DRILL_TENANT_ID="tenant-a" \
+CONTROL_AUTH_DRILL_READ_TOKEN="..." \
+CONTROL_AUTH_DRILL_WRITE_TOKEN="..." \
+CONTROL_AUTH_DRILL_ENABLE_CROSS_TENANT_CHECK=1 \
+CONTROL_AUTH_DRILL_CROSS_TENANT_ID="tenant-b" \
+tools/control-plane-auth-drill.sh
+```
+
+鉴权演练产物：
+
+- `build/reports/preprod-drill/control-plane-auth-drill.json`
+- `build/reports/preprod-drill/control-plane-auth-drill-summary.md`
+- `build/reports/preprod-drill/control-plane-auth-*.body.json`
+
+可选校验参数（用于适配不同 IAM 策略）：
+
+- `CONTROL_AUTH_DRILL_EXPECT_MISSING_TOKEN_STATUS`（默认 `401`）
+- `CONTROL_AUTH_DRILL_EXPECT_WRITE_STATUS`（默认 `200`）
+- `CONTROL_AUTH_DRILL_EXPECT_READ_STATUS`（默认 `200`）
+- `CONTROL_AUTH_DRILL_EXPECT_READ_PUT_STATUS`（默认 `403`）
+- `CONTROL_AUTH_DRILL_EXPECT_CROSS_TENANT_STATUS`（默认 `403`）
 
 调试模式（仅验证脚本流程，不访问预发服务）：
 
@@ -133,6 +162,7 @@ tools/monitoring-up.sh
 - baseline 场景必须满足 `gatewayWsErrorCount == 0` 且 `downlinkErrorCount == 0`（基线阶段要求无错误）。
 - `tools/fault-drill-closure.sh` 聚合报告中 `overallPass` 必须为 `true`。
 - `tools/preprod-drill-closure.sh` 聚合报告中 `overallPass` 必须为 `true`。
+- 若配置 `PREPROD_AUTH_DRILL_COMMAND`，`control-auth` phase 必须为 `PASS`。
 - `tools/preprod-drill-closure.sh` 必须记录 “告警触发后恢复” 采样轨迹（`recovery.samples`）。
 
 若任一条件失败，当前分支不得提审。
@@ -148,6 +178,9 @@ tools/monitoring-up.sh
 | `PipelineErrorRateHigh` | `*_pipeline_messages_total{result="error"}` | 定位异常服务并切换到稳定 provider/策略 |
 | `*PipelineP95LatencyHigh` | `*_pipeline_duration_seconds_bucket` | 检查外部引擎超时和积压，必要时限流或降级 |
 | `KafkaConsumerLagHigh` | `kafka_consumer_records_lag_max` | 增加 consumer 并发或排查 broker 抖动 |
+| `ControlPlaneAuthDenyRateHigh` | `controlplane_auth_decision_total`（mode=`external_iam|hybrid`） | 检查 IAM 权限变更、token audience/claim 映射与租户范围策略 |
+| `ControlPlaneExternalIamUnavailableSpike` | `controlplane_auth_decision_total{reason="external_unavailable"}` | 检查 JWKS/issuer 连通性，必要时切到 `hybrid` 保障可用性 |
+| `ControlPlaneHybridFallbackSpike` | `controlplane_auth_hybrid_fallback_total` | 检查 external IAM 稳定性与 fallback 比例，避免长期退化为 static |
 
 ## 6. 升级策略
 

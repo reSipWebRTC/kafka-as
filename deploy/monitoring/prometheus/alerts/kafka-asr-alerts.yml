@@ -128,3 +128,66 @@ groups:
         annotations:
           summary: "Session orchestrator control-plane fallback is active"
           description: "orchestrator.controlplane.policy.fallback.total > 0.2/s for 10m"
+
+      - alert: ControlPlaneAuthDenyRateHigh
+        expr: |
+          (
+            sum(
+              rate(controlplane_auth_decision_total{
+                backend="mode-switch",
+                mode=~"external_iam|hybrid",
+                outcome=~"unauthorized|forbidden"
+              }[5m])
+            )
+            /
+            clamp_min(
+              sum(
+                rate(controlplane_auth_decision_total{
+                  backend="mode-switch",
+                  mode=~"external_iam|hybrid"
+                }[5m])
+              ),
+              1e-6
+            )
+          ) > 0.20
+          and
+          sum(
+            rate(controlplane_auth_decision_total{
+              backend="mode-switch",
+              mode=~"external_iam|hybrid"
+            }[5m])
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          area: control-plane
+        annotations:
+          summary: "Control-plane auth deny ratio is high"
+          description: "controlplane.auth.decision.total deny ratio > 20% for mode in {external_iam, hybrid}"
+
+      - alert: ControlPlaneExternalIamUnavailableSpike
+        expr: |
+          sum(
+            rate(controlplane_auth_decision_total{
+              backend="external-iam",
+              reason="external_unavailable"
+            }[5m])
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+          area: control-plane
+        annotations:
+          summary: "Control-plane external IAM unavailable spike"
+          description: "controlplane.auth.decision.total{backend=external-iam,reason=external_unavailable} > 0.05/s for 10m"
+
+      - alert: ControlPlaneHybridFallbackSpike
+        expr: |
+          sum(rate(controlplane_auth_hybrid_fallback_total[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          area: control-plane
+        annotations:
+          summary: "Control-plane hybrid auth fallback is active"
+          description: "controlplane.auth.hybrid.fallback.total > 0.05/s for 10m"
