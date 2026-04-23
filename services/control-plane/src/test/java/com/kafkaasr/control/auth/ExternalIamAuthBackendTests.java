@@ -40,6 +40,35 @@ class ExternalIamAuthBackendTests {
     }
 
     @Test
+    void deniesReadWhenOnlyWritePermissionPresent() {
+        ControlPlaneAuthProperties properties = configuredProperties();
+        ExternalIamAuthBackend backend = new ExternalIamAuthBackend(
+                properties,
+                token -> Map.of(
+                        "scp", "control.policy.write",
+                        "tenant_ids", List.of("tenant-a")));
+
+        AuthDecision decision = backend.authorize(new AuthRequest("Bearer external-jwt", HttpMethod.GET, "tenant-a"));
+
+        assertEquals(AuthOutcome.FORBIDDEN, decision.outcome());
+        assertEquals("OPERATION_DENIED", decision.reason());
+    }
+
+    @Test
+    void allowsHeadWithReadPermission() {
+        ControlPlaneAuthProperties properties = configuredProperties();
+        ExternalIamAuthBackend backend = new ExternalIamAuthBackend(
+                properties,
+                token -> Map.of(
+                        "scp", "control.policy.read",
+                        "tenant_ids", List.of("tenant-a")));
+
+        AuthDecision decision = backend.authorize(new AuthRequest("Bearer external-jwt", HttpMethod.HEAD, "tenant-a"));
+
+        assertEquals(AuthOutcome.ALLOW, decision.outcome());
+    }
+
+    @Test
     void deniesWhenTenantScopeMissing() {
         ControlPlaneAuthProperties properties = configuredProperties();
         ExternalIamAuthBackend backend = new ExternalIamAuthBackend(
@@ -66,6 +95,80 @@ class ExternalIamAuthBackendTests {
         AuthDecision decision = backend.authorize(new AuthRequest("Bearer external-jwt", HttpMethod.GET, "tenant-a"));
 
         assertEquals(AuthOutcome.ALLOW, decision.outcome());
+    }
+
+    @Test
+    void supportsCommaSeparatedPermissions() {
+        ControlPlaneAuthProperties properties = configuredProperties();
+        ExternalIamAuthBackend backend = new ExternalIamAuthBackend(
+                properties,
+                token -> Map.of(
+                        "scp", "control.policy.read,control.policy.write",
+                        "tenant_ids", List.of("tenant-a")));
+
+        AuthDecision decision = backend.authorize(new AuthRequest("Bearer external-jwt", HttpMethod.PUT, "tenant-a"));
+
+        assertEquals(AuthOutcome.ALLOW, decision.outcome());
+    }
+
+    @Test
+    void supportsSpaceSeparatedTenantScopeInStringClaim() {
+        ControlPlaneAuthProperties properties = configuredProperties();
+        ExternalIamAuthBackend backend = new ExternalIamAuthBackend(
+                properties,
+                token -> Map.of(
+                        "scp", "control.policy.read",
+                        "tenant_ids", "tenant-b tenant-a"));
+
+        AuthDecision decision = backend.authorize(new AuthRequest("Bearer external-jwt", HttpMethod.GET, "tenant-a"));
+
+        assertEquals(AuthOutcome.ALLOW, decision.outcome());
+    }
+
+    @Test
+    void supportsCustomClaimMappingAndPermissionNames() {
+        ControlPlaneAuthProperties properties = configuredProperties();
+        ControlPlaneAuthProperties.External external = properties.getExternal();
+        external.setPermissionClaim("permissions");
+        external.setTenantClaim("tenants");
+        external.setReadPermission("policy:read");
+        external.setWritePermission("policy:write");
+
+        ExternalIamAuthBackend backend = new ExternalIamAuthBackend(
+                properties,
+                token -> Map.of(
+                        "permissions", List.of("policy:read", "policy:write"),
+                        "tenants", List.of("tenant-*")));
+
+        AuthDecision decision = backend.authorize(new AuthRequest("Bearer external-jwt", HttpMethod.PUT, "tenant-a"));
+
+        assertEquals(AuthOutcome.ALLOW, decision.outcome());
+    }
+
+    @Test
+    void deniesWhenPermissionClaimMissing() {
+        ControlPlaneAuthProperties properties = configuredProperties();
+        ExternalIamAuthBackend backend = new ExternalIamAuthBackend(
+                properties,
+                token -> Map.of("tenant_ids", List.of("tenant-a")));
+
+        AuthDecision decision = backend.authorize(new AuthRequest("Bearer external-jwt", HttpMethod.GET, "tenant-a"));
+
+        assertEquals(AuthOutcome.FORBIDDEN, decision.outcome());
+        assertEquals("OPERATION_DENIED", decision.reason());
+    }
+
+    @Test
+    void deniesWhenTenantClaimMissing() {
+        ControlPlaneAuthProperties properties = configuredProperties();
+        ExternalIamAuthBackend backend = new ExternalIamAuthBackend(
+                properties,
+                token -> Map.of("scp", "control.policy.read control.policy.write"));
+
+        AuthDecision decision = backend.authorize(new AuthRequest("Bearer external-jwt", HttpMethod.GET, "tenant-a"));
+
+        assertEquals(AuthOutcome.FORBIDDEN, decision.outcome());
+        assertEquals("TENANT_SCOPE_DENIED", decision.reason());
     }
 
     @Test
@@ -114,6 +217,21 @@ class ExternalIamAuthBackendTests {
                 });
 
         AuthDecision decision = backend.authorize(new AuthRequest(null, HttpMethod.GET, "tenant-a"));
+
+        assertEquals(AuthOutcome.UNAUTHORIZED, decision.outcome());
+        assertEquals("MISSING_OR_INVALID_TOKEN", decision.reason());
+    }
+
+    @Test
+    void unauthorizedWhenAuthorizationHeaderIsNotBearer() {
+        ControlPlaneAuthProperties properties = configuredProperties();
+        ExternalIamAuthBackend backend = new ExternalIamAuthBackend(
+                properties,
+                token -> {
+                    throw new IllegalStateException("should not be called");
+                });
+
+        AuthDecision decision = backend.authorize(new AuthRequest("Token external-jwt", HttpMethod.GET, "tenant-a"));
 
         assertEquals(AuthOutcome.UNAUTHORIZED, decision.outcome());
         assertEquals("MISSING_OR_INVALID_TOKEN", decision.reason());

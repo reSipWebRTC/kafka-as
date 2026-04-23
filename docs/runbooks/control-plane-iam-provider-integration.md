@@ -52,6 +52,21 @@ tools/control-plane-iam-precheck.sh \
 - `build/reports/control-plane-iam-precheck/control-plane-iam-precheck.json`
 - `build/reports/control-plane-iam-precheck/control-plane-iam-precheck-summary.md`
 
+### 3.1 Claim 映射与授权矩阵回归（simulated）
+
+在接入真实 IAM 前，先用仓库内单测验证 claim 映射和授权矩阵行为：
+
+```bash
+./gradlew :services:control-plane:test --no-daemon --tests "*ExternalIamAuthBackendTests"
+```
+
+重点检查：
+
+1. claim 名映射：默认 `scp`/`tenant_ids` 与自定义 claim 名都可生效。
+2. 读写矩阵：GET/HEAD 需要读权限，PUT 需要写权限。
+3. 租户范围：跨租户访问被拒绝。
+4. 拒绝原因：`OPERATION_DENIED`、`TENANT_SCOPE_DENIED`、`MISSING_OR_INVALID_TOKEN`。
+
 ## 4. 切换策略
 
 推荐顺序：
