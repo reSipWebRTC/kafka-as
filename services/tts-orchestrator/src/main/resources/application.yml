@@ -91,3 +91,9 @@ tts:
     key-prefix: ${TTS_STORAGE_KEY_PREFIX:tts}
     public-base-url: ${TTS_STORAGE_PUBLIC_BASE_URL:}
     object-suffix: ${TTS_STORAGE_OBJECT_SUFFIX:wav}
+    cache-control: "${TTS_STORAGE_CACHE_CONTROL:public, max-age=31536000, immutable}"
+    cdn-signing-enabled: ${TTS_STORAGE_CDN_SIGNING_ENABLED:false}
+    cdn-signing-key: ${TTS_STORAGE_CDN_SIGNING_KEY:}
+    cdn-signing-ttl-seconds: ${TTS_STORAGE_CDN_SIGNING_TTL_SECONDS:600}
+    cdn-signing-expires-param: ${TTS_STORAGE_CDN_SIGNING_EXPIRES_PARAM:expires}
+    cdn-signing-signature-param: ${TTS_STORAGE_CDN_SIGNING_SIGNATURE_PARAM:sig}

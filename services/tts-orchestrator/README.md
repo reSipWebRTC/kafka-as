@@ -9,8 +9,9 @@ Current scope:
 - Placeholder voice/cache pipeline with contract-aligned event mapping
 - Configurable synthesis modes: `placeholder` / `http`
 - Configurable object storage upload for `tts.ready` playback URL (`tts.storage`: `none` / `s3`, MinIO-compatible endpoint/path-style)
+- Configurable CDN delivery policy for uploaded playback URLs (`cache-control`, `expires/sig` signing)
 
 Out of scope in this phase:
 
 - Production TTS runtime validation and model-side scaling controls
-- CDN cache strategy, signed URL policy, and large-scale playback distribution governance
+- Large-scale playback distribution governance (advanced CDN routing, watermarking, regional fallback)
