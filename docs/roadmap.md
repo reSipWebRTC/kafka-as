@@ -148,6 +148,7 @@
 
 - `control-plane` 模块已存在
 - 当前已覆盖租户策略 GET / PUT / rollback（`/policy:rollback`）、版本化 upsert/rollback、策略历史快照栈、`/api/v1/tenants/**` Bearer Token 鉴权/授权基线、`control.auth.mode=static/external-iam/hybrid` 鉴权后端切换与 JWKS 校验后端骨架、`tenant.policy.changed` 发布基线以及灰度/回退策略字段
+- 已补齐指定版本回滚与分发意图发布：`policy:rollback` 支持可选 `targetVersion` / `distributionRegions`，`tenant.policy.changed` 已携带编排元数据扩展（`sourcePolicyVersion` / `targetPolicyVersion` / `distributionRegions`）
 - 下一步是补齐外部 IAM/RBAC 提供方联调与生产级运行保障（真实参数、失败策略、监控证据），并推进跨区域分发、策略版本编排与回滚治理能力
 
 ## 7. Phase 5：容量、压测与弹性

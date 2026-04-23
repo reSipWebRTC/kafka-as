@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -201,6 +202,57 @@ class RedisTenantPolicyRepositoryTests {
 
         assertEquals("tenant-a", loaded.tenantId());
         assertEquals(1L, loaded.version());
+    }
+
+    @Test
+    void findHistoryByVersionScansHistoryList() throws Exception {
+        TenantPolicyState first = new TenantPolicyState(
+                "tenant-a",
+                "zh-CN",
+                "en-US",
+                "funasr-v1",
+                "mt-v1",
+                "en-US-neural-a",
+                200,
+                2000,
+                true,
+                false,
+                0,
+                false,
+                30000L,
+                3,
+                200L,
+                ".dlq",
+                1L,
+                1713744000000L);
+        TenantPolicyState second = new TenantPolicyState(
+                "tenant-a",
+                "zh-CN",
+                "ja-JP",
+                "funasr-v2",
+                "mt-v2",
+                "ja-JP-neural-a",
+                100,
+                1000,
+                true,
+                false,
+                0,
+                false,
+                30000L,
+                3,
+                200L,
+                ".dlq",
+                2L,
+                1713744001000L);
+        when(listOperations.range("control:tenant-policy:history:tenant-a", 0, -1))
+                .thenReturn(List.of(
+                        objectMapper.writeValueAsString(first),
+                        objectMapper.writeValueAsString(second)));
+
+        TenantPolicyState loaded = repository.findHistoryByVersion("tenant-a", 2L);
+
+        assertEquals("tenant-a", loaded.tenantId());
+        assertEquals(2L, loaded.version());
     }
 
     @Test

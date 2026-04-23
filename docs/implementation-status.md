@@ -2,7 +2,7 @@
 
 ## 1. 当前基线
 
-截至 `2026-04-23`，仓库已经从“纯资料收敛”演进为“文档 + 契约 + 服务骨架并存”的工程仓库。
+截至 `2026-04-24`，仓库已经从“纯资料收敛”演进为“文档 + 契约 + 服务骨架并存”的工程仓库。
 
 当前已实现的主链路是：
 
@@ -24,6 +24,7 @@
 - `session-orchestrator` 查询 `control-plane` 已落地第一版熔断 + 缓存回退（fail-open/fail-closed）
 - `control-plane` 已在租户策略 upsert/rollback 后发布 `tenant.policy.changed`，运行时服务（`session-orchestrator` / `asr-worker` / `translation-worker` / `tts-orchestrator`）已消费并刷新本地策略缓存
 - `control-plane` 已支持租户策略上一版本回滚（`POST /api/v1/tenants/{tenantId}/policy:rollback`）与历史快照栈
+- `control-plane` 已支持指定版本回滚与分发意图发布：`policy:rollback` 可选 `targetVersion` / `distributionRegions`，`tenant.policy.changed` 已附带编排元数据（`sourcePolicyVersion` / `targetPolicyVersion` / `distributionRegions`）
 - `asr-worker` 已补齐会话级 VAD 静音切段基线（命中阈值时发布 `asr.final`）
 - `asr-worker` FunASR 适配已补齐生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
 - `translation-worker` OpenAI 适配已补齐生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
@@ -55,7 +56,7 @@
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配（含 FunASR v2 响应兼容、health 探测、并发保护、错误语义映射）、按稳定度 + VAD 静音切段分流发布 `asr.partial` / `asr.final`、按租户策略驱动重试/DLQ（含控制面失败回退） | FunASR 真机容量/故障演练、高级上下文与切段策略 |
 | `translation-worker` | `8083` | 消费 `asr.final`、默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容、health 探测、并发保护、错误语义映射）、发布 `translation.result`、按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 真机容量/故障演练、术语治理、上下文增强 |
 | `tts-orchestrator` | `8084` | 消费 `translation.result`、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容、health 探测、并发保护、错误语义映射）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、`tts.ready` 支持可配置 S3/MinIO 上传并回填真实 `playbackUrl`、支持 `cache-control` 与 `expires/sig` URL 签名策略、支持区域 CDN 路由/回源回退与可配置 cache scope/shard 策略、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS 真机容量/故障演练、对象存储高可用治理、CDN 区域路由与高级缓存治理 |
-| `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、`POST /api/v1/tenants/{tenantId}/policy:rollback`、Redis 策略存储、版本化 upsert/rollback、历史快照栈、灰度/回退/可靠性策略字段、可配置 Bearer Token 鉴权与授权（读/写权限 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 切换与 JWKS 外部 IAM 校验后端骨架、鉴权决策/耗时/回退指标（`controlplane.auth.*`）、真实 IAM 对接参数模板与预检工具、external-iam claim 映射与授权矩阵单测、鉴权失败策略 simulated 演练脚本、本地 JWKS + JWT 全链路 simulated 演练脚本、`tenant.policy.changed` 发布 | 外部 IAM/RBAC 提供方联调与生产级运行保障（真实参数、阈值与告警闭环）、持久化数据库、跨区域分发与高级版本编排治理 |
+| `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、`POST /api/v1/tenants/{tenantId}/policy:rollback`（支持可选 `targetVersion` / `distributionRegions`）、Redis 策略存储、版本化 upsert/rollback、历史快照栈、灰度/回退/可靠性策略字段、可配置 Bearer Token 鉴权与授权（读/写权限 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 切换与 JWKS 外部 IAM 校验后端骨架、鉴权决策/耗时/回退指标（`controlplane.auth.*`）、真实 IAM 对接参数模板与预检工具、external-iam claim 映射与授权矩阵单测、鉴权失败策略 simulated 演练脚本、本地 JWKS + JWT 全链路 simulated 演练脚本、`tenant.policy.changed` 发布（含 `sourcePolicyVersion` / `targetPolicyVersion` / `distributionRegions`） | 外部 IAM/RBAC 提供方联调与生产级运行保障（真实参数、阈值与告警闭环）、持久化数据库、跨区域分发与高级版本编排治理、跨区域分发实际执行链路 |
 
 ## 3. 当前协议与接口面
 
@@ -91,7 +92,7 @@
 | `session-orchestrator` | `POST /api/v1/sessions/{sessionId}:stop` | 关闭或幂等返回会话 |
 | `control-plane` | `PUT /api/v1/tenants/{tenantId}/policy` | 创建/更新租户策略（当 `control.auth.enabled=true` 时需 Bearer Token 且具备写权限） |
 | `control-plane` | `GET /api/v1/tenants/{tenantId}/policy` | 查询租户策略（当 `control.auth.enabled=true` 时需 Bearer Token 且具备读权限） |
-| `control-plane` | `POST /api/v1/tenants/{tenantId}/policy:rollback` | 回滚到上一版本策略并生成新版本（当 `control.auth.enabled=true` 时需 Bearer Token 且具备写权限） |
+| `control-plane` | `POST /api/v1/tenants/{tenantId}/policy:rollback` | 支持回滚上一版本或指定 `targetVersion` 并生成新版本；可选携带 `distributionRegions` 分发意图（当 `control.auth.enabled=true` 时需 Bearer Token 且具备写权限） |
 
 补充说明：
 
@@ -112,7 +113,7 @@
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | TTS 编排输出，等待真实引擎接入 |
 | `tts.chunk` | `tts-orchestrator` | `speech-gateway` | TTS 分片输出，当前回推到 WebSocket 下行 |
 | `tts.ready` | `tts-orchestrator` | `speech-gateway` | TTS 回放就绪输出，当前回推到 WebSocket 下行 |
-| `tenant.policy.changed` | `control-plane` | `session-orchestrator`、`asr-worker`、`translation-worker`、`tts-orchestrator` | 租户策略变更通知（upsert/rollback 发布，运行时消费刷新已落地） |
+| `tenant.policy.changed` | `control-plane` | `session-orchestrator`、`asr-worker`、`translation-worker`、`tts-orchestrator` | 租户策略变更通知（upsert/rollback 发布，运行时消费刷新已落地；支持 `sourcePolicyVersion` / `targetPolicyVersion` / `distributionRegions` 元数据） |
 
 同时，`speech-gateway` 当前也消费以下下行 Topic 并回推 WebSocket：
 

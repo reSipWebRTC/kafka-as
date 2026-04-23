@@ -2,6 +2,7 @@ package com.kafkaasr.control.api;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 
@@ -167,7 +168,7 @@ class TenantPolicyControllerTests {
                 3L,
                 1713744100000L,
                 false);
-        when(tenantPolicyService.rollbackTenantPolicy("tenant-api-a"))
+        when(tenantPolicyService.rollbackTenantPolicy(eq("tenant-api-a"), isNull()))
                 .thenReturn(Mono.just(rollbackResponse));
 
         webTestClient.post()
@@ -184,7 +185,7 @@ class TenantPolicyControllerTests {
 
     @Test
     void rollbackWithoutPreviousVersionReturnsConflict() {
-        when(tenantPolicyService.rollbackTenantPolicy("tenant-no-history"))
+        when(tenantPolicyService.rollbackTenantPolicy(eq("tenant-no-history"), isNull()))
                 .thenReturn(Mono.error(ControlPlaneException.tenantPolicyRollbackNotAvailable("tenant-no-history")));
 
         webTestClient.post()
@@ -195,6 +196,66 @@ class TenantPolicyControllerTests {
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("TENANT_POLICY_ROLLBACK_NOT_AVAILABLE")
                 .jsonPath("$.tenantId").isEqualTo("tenant-no-history");
+    }
+
+    @Test
+    void rollbackPolicyWithBodyReturnsRolledBackToSpecifiedVersion() {
+        TenantPolicyResponse rollbackResponse = new TenantPolicyResponse(
+                "tenant-api-a",
+                "zh-CN",
+                "en-US",
+                "funasr-v1",
+                "mt-v1",
+                "en-US-neural-a",
+                200,
+                2000,
+                true,
+                false,
+                0,
+                false,
+                30000L,
+                3,
+                200L,
+                ".dlq",
+                9L,
+                1713744200000L,
+                false);
+        when(tenantPolicyService.rollbackTenantPolicy(eq("tenant-api-a"), any(TenantPolicyRollbackRequest.class)))
+                .thenReturn(Mono.just(rollbackResponse));
+
+        webTestClient.post()
+                .uri("/api/v1/tenants/tenant-api-a/policy:rollback")
+                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+                .contentType(APPLICATION_JSON)
+                .bodyValue("""
+                        {
+                          "targetVersion": 3,
+                          "distributionRegions": ["cn-east-1", "ap-southeast-1"]
+                        }
+                        """)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.tenantId").isEqualTo("tenant-api-a")
+                .jsonPath("$.version").isEqualTo(9);
+    }
+
+    @Test
+    void rollbackInvalidBodyReturnsBadRequest() {
+        webTestClient.post()
+                .uri("/api/v1/tenants/tenant-api-a/policy:rollback")
+                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+                .contentType(APPLICATION_JSON)
+                .bodyValue("""
+                        {
+                          "targetVersion": 0,
+                          "distributionRegions": ["cn-east-1"]
+                        }
+                        """)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("INVALID_MESSAGE");
     }
 
     @Test

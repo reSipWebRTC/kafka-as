@@ -61,6 +61,9 @@ class KafkaTenantPolicyChangedPublisherTests {
                         3L,
                         1713744000000L,
                         "UPDATED",
+                        null,
+                        null,
+                        null,
                         null));
 
         StepVerifier.create(publisher.publish(event)).verifyComplete();

@@ -37,7 +37,14 @@
         "updatedAtMs": { "type": "integer", "minimum": 0 },
         "operation": {
           "type": "string",
-          "enum": ["CREATED", "UPDATED", "ROLLED_BACK"]
+          "enum": ["CREATED", "UPDATED", "ROLLED_BACK", "ROLLED_BACK_TO_VERSION"]
+        },
+        "sourcePolicyVersion": { "type": "integer", "minimum": 1 },
+        "targetPolicyVersion": { "type": "integer", "minimum": 1 },
+        "distributionRegions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
         },
         "changedFields": {
           "type": "array",
@@ -45,6 +52,19 @@
           "uniqueItems": true
         }
       },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation": { "const": "ROLLED_BACK_TO_VERSION" }
+            },
+            "required": ["operation"]
+          },
+          "then": {
+            "required": ["sourcePolicyVersion", "targetPolicyVersion"]
+          }
+        }
+      ],
       "additionalProperties": false
     }
   },

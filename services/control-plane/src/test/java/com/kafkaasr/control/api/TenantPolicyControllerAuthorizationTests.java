@@ -117,12 +117,38 @@ class TenantPolicyControllerAuthorizationTests {
     @Test
     void scopedWriterCanRollbackInTenantScope() {
         TenantPolicyResponse response = tenantPolicyResponse("tenant-b-main");
-        org.mockito.Mockito.when(tenantPolicyService.rollbackTenantPolicy("tenant-b-main"))
+        org.mockito.Mockito.when(tenantPolicyService.rollbackTenantPolicy(
+                        org.mockito.ArgumentMatchers.eq("tenant-b-main"),
+                        org.mockito.ArgumentMatchers.isNull()))
                 .thenReturn(Mono.just(response));
 
         webTestClient.post()
                 .uri("/api/v1/tenants/tenant-b-main/policy:rollback")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer writer-tenant-b")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.tenantId").isEqualTo("tenant-b-main");
+    }
+
+    @Test
+    void scopedWriterCanRollbackWithTargetVersionInTenantScope() {
+        TenantPolicyResponse response = tenantPolicyResponse("tenant-b-main");
+        org.mockito.Mockito.when(tenantPolicyService.rollbackTenantPolicy(
+                        org.mockito.ArgumentMatchers.eq("tenant-b-main"),
+                        org.mockito.ArgumentMatchers.any(TenantPolicyRollbackRequest.class)))
+                .thenReturn(Mono.just(response));
+
+        webTestClient.post()
+                .uri("/api/v1/tenants/tenant-b-main/policy:rollback")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer writer-tenant-b")
+                .contentType(APPLICATION_JSON)
+                .bodyValue("""
+                        {
+                          "targetVersion": 2,
+                          "distributionRegions": ["cn-east-1"]
+                        }
+                        """)
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()

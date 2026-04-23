@@ -11,7 +11,7 @@
 - 第一批核心事件类型与字段
 - 错误码与版本演进规则
 
-## 1.1 当前实现注记（2026-04-23）
+## 1.1 当前实现注记（2026-04-24）
 
 本文件仍然是外部行为的权威定义，但当前仓库只实现了其中一部分。
 
@@ -41,6 +41,8 @@
 - `tts-orchestrator` 已实现 `translation.result` 同步产出 `tts.request`、`tts.chunk`、`tts.ready` 三类事件
 - `tts.ready.payload.playbackUrl` 已支持按租户映射的区域 CDN 路由，并可在区域路由缺失时回退到 origin URL
 - `control-plane` 已实现 `tenant.policy.changed` 事件发布（upsert/rollback），`session-orchestrator` / `asr-worker` / `translation-worker` / `tts-orchestrator` 已消费该事件用于策略缓存刷新
+- `control-plane` 已实现并冻结回滚编排契约：`POST /api/v1/tenants/{tenantId}/policy:rollback` 支持可选请求体 `targetVersion`、`distributionRegions`；请求体缺失时语义保持为“回滚上一版本”
+- `tenant.policy.changed` 已实现并冻结编排元数据扩展：`sourcePolicyVersion`、`targetPolicyVersion`、`distributionRegions`（均为可选字段，向后兼容）
 
 ## 2. 主数据路径（冻结）
 
@@ -99,7 +101,8 @@
 - 非稳定识别结果发布为 `asr.partial`
 - 稳定结果、`endOfStream=true`，或命中 VAD 静音切段阈值的结果发布为 `asr.final`
 - 治理事件 `tenant.policy.changed` 没有真实会话上下文时，`sessionId` 使用合成值（建议 `tenant-policy::<tenantId>`）
-- 治理事件 `tenant.policy.changed.payload.operation` 当前取值：`CREATED`、`UPDATED`、`ROLLED_BACK`
+- 治理事件 `tenant.policy.changed.payload.operation` 当前取值：`CREATED`、`UPDATED`、`ROLLED_BACK`、`ROLLED_BACK_TO_VERSION`
+- 当 `operation=ROLLED_BACK_TO_VERSION` 时，`sourcePolicyVersion` 与 `targetPolicyVersion` 必填
 
 完整 JSON Schema 与 Protobuf 见第 8 节。
 
@@ -136,6 +139,32 @@
 - `session.error` 已由 `speech-gateway` 落地，用于协议校验和控制面错误
 - `subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`session.closed` 已通过 Kafka 下游事件回推到 WebSocket 客户端
 
+### 5.3 Control-Plane 回滚编排 API（v1）
+
+路径：
+
+- `POST /api/v1/tenants/{tenantId}/policy:rollback`
+
+请求体（可选）：
+
+```json
+{
+  "targetVersion": 3,
+  "distributionRegions": ["cn-east-1", "ap-southeast-1"]
+}
+```
+
+字段约束：
+
+- `targetVersion`：可选，`>=1`；缺失时语义为“回滚上一版本”
+- `distributionRegions`：可选，非空字符串数组，去重后用于表达跨区域分发意图
+
+响应语义：
+
+- 成功时返回 `TenantPolicyResponse`，`version` 为新生效版本（递增）
+- 若指定 `targetVersion` 不存在，返回 `TENANT_POLICY_VERSION_NOT_FOUND`
+- 若指定 `targetVersion` 非法（如 `>=` 当前版本），返回 `TENANT_POLICY_ROLLBACK_VERSION_INVALID`
+
 ## 6. 错误码（v1）
 
 | 错误码 | 含义 |
@@ -149,6 +178,8 @@
 | `BACKPRESSURE_DROP` | 背压触发丢弃 |
 | `ASR_TIMEOUT` | ASR 处理超时 |
 | `TRANSLATION_TIMEOUT` | 翻译处理超时 |
+| `TENANT_POLICY_VERSION_NOT_FOUND` | 控制面指定回滚版本不存在 |
+| `TENANT_POLICY_ROLLBACK_VERSION_INVALID` | 控制面指定回滚版本非法（超前、等于当前或不允许） |
 | `INTERNAL_ERROR` | 服务内部异常 |
 
 ## 7. 版本演进规则

@@ -37,7 +37,9 @@ public class TenantPolicyController {
     }
 
     @PostMapping("/{tenantId}/policy:rollback")
-    public Mono<TenantPolicyResponse> rollbackPolicy(@PathVariable @NotBlank String tenantId) {
-        return tenantPolicyService.rollbackTenantPolicy(tenantId);
+    public Mono<TenantPolicyResponse> rollbackPolicy(
+            @PathVariable @NotBlank String tenantId,
+            @Valid @RequestBody(required = false) TenantPolicyRollbackRequest request) {
+        return tenantPolicyService.rollbackTenantPolicy(tenantId, request);
     }
 }

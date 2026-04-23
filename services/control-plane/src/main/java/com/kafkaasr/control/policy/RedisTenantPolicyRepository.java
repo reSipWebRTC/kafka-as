@@ -2,6 +2,7 @@ package com.kafkaasr.control.policy;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -58,6 +59,22 @@ public class RedisTenantPolicyRepository implements TenantPolicyRepository {
     public TenantPolicyState findLatestHistory(String tenantId) {
         String payload = redisTemplate.opsForList().index(historyKey(tenantId), -1);
         return deserialize(payload, tenantId);
+    }
+
+    @Override
+    public TenantPolicyState findHistoryByVersion(String tenantId, long version) {
+        List<String> payloads = redisTemplate.opsForList().range(historyKey(tenantId), 0, -1);
+        if (payloads == null || payloads.isEmpty()) {
+            return null;
+        }
+
+        for (int index = payloads.size() - 1; index >= 0; index--) {
+            TenantPolicyState state = deserialize(payloads.get(index), tenantId);
+            if (state != null && state.version() == version) {
+                return state;
+            }
+        }
+        return null;
     }
 
     @Override
