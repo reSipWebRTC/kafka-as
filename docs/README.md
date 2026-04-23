@@ -111,5 +111,5 @@ flowchart LR
 - 用 `tools/downlink-e2e-smoke.sh` 固定回归检查下行链路顺序、终态和重复消息语义
 - 在现有重试、DLQ、背压与限流 + 第一版幂等/补偿/熔断/灰度基础上升级为自适应治理
 - 完成 ASR FunASR、Translation OpenAI 与 TTS synthesis 生产联调
-- 补齐 TTS 的对象存储、CDN 与回放分发能力
+- 在已接入对象存储上传基线的前提下补齐 CDN 与回放分发治理能力
 - 完成告警阈值标定与通知路由，补齐压测与故障演练基线

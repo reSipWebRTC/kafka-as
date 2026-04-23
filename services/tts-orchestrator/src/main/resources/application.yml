@@ -79,3 +79,15 @@ tts:
       path: ${TTS_SYNTHESIS_HTTP_PATH:/v1/tts/synthesize}
       timeout-ms: ${TTS_SYNTHESIS_HTTP_TIMEOUT_MS:2000}
       auth-token: ${TTS_SYNTHESIS_HTTP_AUTH_TOKEN:}
+  storage:
+    enabled: ${TTS_STORAGE_ENABLED:false}
+    provider: ${TTS_STORAGE_PROVIDER:none}
+    bucket: ${TTS_STORAGE_BUCKET:}
+    region: ${TTS_STORAGE_REGION:us-east-1}
+    endpoint: ${TTS_STORAGE_ENDPOINT:}
+    access-key: ${TTS_STORAGE_ACCESS_KEY:}
+    secret-key: ${TTS_STORAGE_SECRET_KEY:}
+    path-style-access: ${TTS_STORAGE_PATH_STYLE_ACCESS:true}
+    key-prefix: ${TTS_STORAGE_KEY_PREFIX:tts}
+    public-base-url: ${TTS_STORAGE_PUBLIC_BASE_URL:}
+    object-suffix: ${TTS_STORAGE_OBJECT_SUFFIX:wav}

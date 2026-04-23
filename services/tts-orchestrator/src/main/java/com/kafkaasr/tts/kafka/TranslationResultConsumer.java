@@ -3,12 +3,16 @@ package com.kafkaasr.tts.kafka;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.tts.events.TtsKafkaProperties;
+import com.kafkaasr.tts.events.TtsReadyEvent;
+import com.kafkaasr.tts.events.TtsReadyPayload;
 import com.kafkaasr.tts.events.TranslationResultEvent;
 import com.kafkaasr.tts.pipeline.TtsRequestPipelineService;
 import com.kafkaasr.tts.policy.TenantReliabilityPolicy;
 import com.kafkaasr.tts.policy.TenantReliabilityPolicyResolver;
+import com.kafkaasr.tts.storage.TtsObjectStorageUploader;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.util.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -26,6 +30,7 @@ public class TranslationResultConsumer {
     private final TtsRequestPublisher ttsRequestPublisher;
     private final TtsChunkPublisher ttsChunkPublisher;
     private final TtsReadyPublisher ttsReadyPublisher;
+    private final TtsObjectStorageUploader storageUploader;
     private final TtsCompensationPublisher compensationPublisher;
     private final TtsKafkaProperties kafkaProperties;
     private final TenantReliabilityPolicyResolver reliabilityPolicyResolver;
@@ -38,6 +43,7 @@ public class TranslationResultConsumer {
             TtsRequestPublisher ttsRequestPublisher,
             TtsChunkPublisher ttsChunkPublisher,
             TtsReadyPublisher ttsReadyPublisher,
+            TtsObjectStorageUploader storageUploader,
             TtsCompensationPublisher compensationPublisher,
             TtsKafkaProperties kafkaProperties,
             TenantReliabilityPolicyResolver reliabilityPolicyResolver,
@@ -47,6 +53,7 @@ public class TranslationResultConsumer {
         this.ttsRequestPublisher = ttsRequestPublisher;
         this.ttsChunkPublisher = ttsChunkPublisher;
         this.ttsReadyPublisher = ttsReadyPublisher;
+        this.storageUploader = storageUploader;
         this.compensationPublisher = compensationPublisher;
         this.kafkaProperties = kafkaProperties;
         this.reliabilityPolicyResolver = reliabilityPolicyResolver;
@@ -121,9 +128,10 @@ public class TranslationResultConsumer {
 
     private void processOnce(TranslationResultEvent translationResultEvent) {
         TtsRequestPipelineService.PipelineOutput pipelineOutput = pipelineService.toPipelineEvents(translationResultEvent);
+        TtsReadyEvent readyEvent = enrichReadyEventWithStoragePlaybackUrl(pipelineOutput, translationResultEvent);
         ttsRequestPublisher.publish(pipelineOutput.requestEvent()).block();
         ttsChunkPublisher.publish(pipelineOutput.chunkEvent()).block();
-        ttsReadyPublisher.publish(pipelineOutput.readyEvent()).block();
+        ttsReadyPublisher.publish(readyEvent).block();
         idempotencyGuard.markProcessed(translationResultEvent.idempotencyKey());
         meterRegistry.counter(
                         "tts.pipeline.messages.total",
@@ -136,6 +144,46 @@ public class TranslationResultConsumer {
                 "Published tts.request/tts.chunk/tts.ready events sessionId={} seq={}",
                 pipelineOutput.requestEvent().sessionId(),
                 pipelineOutput.requestEvent().seq());
+    }
+
+    private TtsReadyEvent enrichReadyEventWithStoragePlaybackUrl(
+            TtsRequestPipelineService.PipelineOutput pipelineOutput,
+            TranslationResultEvent translationResultEvent) {
+        byte[] audioBytes;
+        try {
+            audioBytes = Base64.getDecoder().decode(pipelineOutput.chunkEvent().payload().audioBase64());
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("Invalid base64 audio payload for tts.chunk upload", exception);
+        }
+
+        TtsObjectStorageUploader.UploadResult uploadResult = storageUploader.upload(
+                new TtsObjectStorageUploader.UploadRequest(
+                        translationResultEvent.tenantId(),
+                        translationResultEvent.sessionId(),
+                        translationResultEvent.seq(),
+                        pipelineOutput.readyEvent().payload().cacheKey(),
+                        pipelineOutput.chunkEvent().payload().codec(),
+                        audioBytes,
+                        pipelineOutput.readyEvent().payload().playbackUrl()));
+
+        return new TtsReadyEvent(
+                pipelineOutput.readyEvent().eventId(),
+                pipelineOutput.readyEvent().eventType(),
+                pipelineOutput.readyEvent().eventVersion(),
+                pipelineOutput.readyEvent().traceId(),
+                pipelineOutput.readyEvent().sessionId(),
+                pipelineOutput.readyEvent().tenantId(),
+                pipelineOutput.readyEvent().roomId(),
+                pipelineOutput.readyEvent().producer(),
+                pipelineOutput.readyEvent().seq(),
+                pipelineOutput.readyEvent().ts(),
+                pipelineOutput.readyEvent().idempotencyKey(),
+                new TtsReadyPayload(
+                        uploadResult.playbackUrl(),
+                        pipelineOutput.readyEvent().payload().codec(),
+                        pipelineOutput.readyEvent().payload().sampleRate(),
+                        pipelineOutput.readyEvent().payload().durationMs(),
+                        pipelineOutput.readyEvent().payload().cacheKey()));
     }
 
     private TranslationResultEvent parse(String payload) {

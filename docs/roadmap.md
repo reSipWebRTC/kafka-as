@@ -124,7 +124,8 @@
 
 - `tts-orchestrator` 模块已存在
 - 已具备 `translation.result -> tts.request / tts.chunk / tts.ready` 编排与 HTTP synthesis 适配入口
-- 下一步是完成 TTS 引擎生产联调与对象存储/CDN 回放分发闭环
+- 已补齐 `tts.ready` 的可配置 S3/MinIO 上传与真实 `playbackUrl` 回填基线
+- 下一步是完成 TTS 引擎生产联调与 CDN 回放分发闭环（签名 URL、缓存策略、回源治理）
 
 ## 6. Phase 4：控制面与多租户
 
