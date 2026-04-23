@@ -91,12 +91,13 @@
 - 默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配入口
 - FunASR 响应兼容与错误语义加固（`sentences` / 字符串数值 / 0-1 final 标记 / provider code 校验）
 - 按稳定度 + VAD 切段分流发布 `asr.partial` / `asr.final`（非稳定结果发 partial，稳定/终态/VAD 命中结果发 final）
+- FunASR 生产联调基线（可配置 health 探测、并发上限保护、错误码语义映射、引擎级指标）
 - 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
 - `idempotencyKey` 判重与重复失败补偿信号基线
 
 当前未实现：
 
-- FunASR 生产联调与模型侧运行保障（真实集群联调、容量与故障演练）
+- FunASR 真实集群联调与模型侧运行保障（容量压测、故障演练、弹性回收）
 - 高级上下文窗口管理与多语种细粒度切段策略
 
 ### translation-worker

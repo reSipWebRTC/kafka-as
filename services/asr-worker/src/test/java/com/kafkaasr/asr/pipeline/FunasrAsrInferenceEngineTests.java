@@ -8,6 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.asr.events.AudioIngressRawEvent;
 import com.kafkaasr.asr.events.AudioIngressRawPayload;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -35,7 +39,8 @@ class FunasrAsrInferenceEngineTests {
         FunasrAsrInferenceEngine engine = new FunasrAsrInferenceEngine(
                 funasrProperties("token-funasr"),
                 WebClient.builder().exchangeFunction(exchangeFunction),
-                new ObjectMapper());
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
 
         AsrInferenceEngine.AsrInferenceResult result = engine.infer(sampleIngressEvent(false));
 
@@ -58,7 +63,8 @@ class FunasrAsrInferenceEngineTests {
         FunasrAsrInferenceEngine engine = new FunasrAsrInferenceEngine(
                 funasrProperties(""),
                 WebClient.builder().exchangeFunction(exchangeFunction),
-                new ObjectMapper());
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
 
         AsrInferenceEngine.AsrInferenceResult result = engine.infer(sampleIngressEvent(false));
 
@@ -78,11 +84,13 @@ class FunasrAsrInferenceEngineTests {
         FunasrAsrInferenceEngine engine = new FunasrAsrInferenceEngine(
                 funasrProperties(""),
                 WebClient.builder().exchangeFunction(exchangeFunction),
-                new ObjectMapper());
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
 
-        IllegalStateException exception = assertThrows(
-                IllegalStateException.class,
+        AsrEngineException exception = assertThrows(
+                AsrEngineException.class,
                 () -> engine.infer(sampleIngressEvent(true)));
+        assertEquals("ASR_PROVIDER_EMPTY_TRANSCRIPT", exception.errorCode());
         assertTrue(exception.getMessage().contains("Empty FunASR transcript"));
     }
 
@@ -96,13 +104,14 @@ class FunasrAsrInferenceEngineTests {
         FunasrAsrInferenceEngine engine = new FunasrAsrInferenceEngine(
                 funasrProperties(""),
                 WebClient.builder().exchangeFunction(exchangeFunction),
-                new ObjectMapper());
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
 
-        IllegalStateException exception = assertThrows(
-                IllegalStateException.class,
+        AsrEngineException exception = assertThrows(
+                AsrEngineException.class,
                 () -> engine.infer(sampleIngressEvent(false)));
-        assertTrue(exception.getMessage().contains("provider error"));
-        assertTrue(exception.getMessage().contains("code=500"));
+        assertEquals("ASR_PROVIDER_FAILURE", exception.errorCode());
+        assertTrue(exception.retryable());
     }
 
     @Test
@@ -115,7 +124,8 @@ class FunasrAsrInferenceEngineTests {
         FunasrAsrInferenceEngine engine = new FunasrAsrInferenceEngine(
                 funasrProperties(""),
                 WebClient.builder().exchangeFunction(exchangeFunction),
-                new ObjectMapper());
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
 
         AsrInferenceEngine.AsrInferenceResult result = engine.infer(sampleIngressEvent(false));
 
@@ -123,6 +133,102 @@ class FunasrAsrInferenceEngineTests {
         assertEquals("en-US", result.language());
         assertEquals(0.82d, result.confidence());
         assertTrue(result.stable());
+    }
+
+    @Test
+    void inferFailsFastWhenHealthCheckIsDown() {
+        AsrInferenceProperties properties = funasrProperties("");
+        properties.getFunasr().getHealth().setEnabled(true);
+        properties.getFunasr().getHealth().setFailOpenOnError(false);
+        properties.getFunasr().getHealth().setPath("/health");
+
+        ExchangeFunction exchangeFunction = request -> {
+            if ("/health".equals(request.url().getPath())) {
+                return Mono.just(ClientResponse.create(HttpStatus.SERVICE_UNAVAILABLE)
+                        .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                        .body("{\"status\":\"DOWN\"}")
+                        .build());
+            }
+            return Mono.just(ClientResponse.create(HttpStatus.OK)
+                    .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .body("{\"result\":[{\"text\":\"hello\"}],\"is_final\":true}")
+                    .build());
+        };
+
+        FunasrAsrInferenceEngine engine = new FunasrAsrInferenceEngine(
+                properties,
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
+
+        AsrEngineException exception = assertThrows(
+                AsrEngineException.class,
+                () -> engine.infer(sampleIngressEvent(false)));
+        assertEquals("ASR_PROVIDER_UNHEALTHY", exception.errorCode());
+    }
+
+    @Test
+    void inferMapsTimeoutAsAsrTimeout() {
+        AsrInferenceProperties properties = funasrProperties("");
+        properties.getFunasr().setTimeoutMs(50L);
+
+        ExchangeFunction exchangeFunction = request -> Mono.never();
+
+        FunasrAsrInferenceEngine engine = new FunasrAsrInferenceEngine(
+                properties,
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
+
+        AsrEngineException exception = assertThrows(
+                AsrEngineException.class,
+                () -> engine.infer(sampleIngressEvent(false)));
+        assertEquals("ASR_TIMEOUT", exception.errorCode());
+        assertTrue(exception.retryable());
+    }
+
+    @Test
+    void inferRejectsWhenConcurrencyLimitReached() throws Exception {
+        AsrInferenceProperties properties = funasrProperties("");
+        properties.getFunasr().setMaxConcurrentRequests(1);
+        CountDownLatch firstRequestStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirstRequest = new CountDownLatch(1);
+
+        ExchangeFunction exchangeFunction = request -> Mono.create(sink -> {
+            firstRequestStarted.countDown();
+            try {
+                if (!releaseFirstRequest.await(2, TimeUnit.SECONDS)) {
+                    sink.error(new IllegalStateException("timed out waiting test release"));
+                    return;
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                sink.error(exception);
+                return;
+            }
+            sink.success(ClientResponse.create(HttpStatus.OK)
+                    .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .body("{\"result\":[{\"text\":\"hello\"}],\"is_final\":true}")
+                    .build());
+        });
+
+        FunasrAsrInferenceEngine engine = new FunasrAsrInferenceEngine(
+                properties,
+                WebClient.builder().exchangeFunction(exchangeFunction),
+                new ObjectMapper(),
+                new SimpleMeterRegistry());
+
+        CompletableFuture<Void> firstCall = CompletableFuture.runAsync(() -> engine.infer(sampleIngressEvent(false)));
+        assertTrue(firstRequestStarted.await(1, TimeUnit.SECONDS));
+
+        AsrEngineException exception = assertThrows(
+                AsrEngineException.class,
+                () -> engine.infer(sampleIngressEvent(false)));
+        assertEquals("ASR_PROVIDER_BUSY", exception.errorCode());
+        assertTrue(exception.retryable());
+
+        releaseFirstRequest.countDown();
+        firstCall.get(2, TimeUnit.SECONDS);
     }
 
     private static AsrInferenceProperties funasrProperties(String authToken) {
@@ -138,6 +244,7 @@ class FunasrAsrInferenceEngineTests {
         funasr.setAudioFormat("pcm");
         funasr.setDefaultSampleRate(16000);
         funasr.setEnableInverseTextNormalization(true);
+        funasr.setMaxConcurrentRequests(16);
         return properties;
     }
 

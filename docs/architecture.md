@@ -184,7 +184,8 @@ flowchart TB
 
 - 已实现默认 placeholder + 可切换 HTTP/FunASR 适配的 `audio.ingress.raw -> asr.partial / asr.final`
 - 已实现会话级 VAD 静音切段触发 `asr.final`
-- 未实现 FunASR 生产联调与高级上下文管理
+- 已补齐 FunASR 联调基线（health 探测、并发保护、错误语义映射、引擎级指标）
+- 未实现 FunASR 真机容量/故障演练与高级上下文管理
 
 ### Translation Worker
 

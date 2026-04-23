@@ -5,15 +5,23 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.asr.events.AudioIngressRawEvent;
 import com.kafkaasr.asr.events.AudioIngressRawPayload;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 @Primary
 @Component
@@ -27,46 +35,102 @@ public class FunasrAsrInferenceEngine implements AsrInferenceEngine {
     private final AsrInferenceProperties properties;
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
+    private final MeterRegistry meterRegistry;
+    private final Semaphore concurrentGuard;
+    private final AtomicInteger inFlightRequests = new AtomicInteger(0);
+    private final AtomicReference<HealthSnapshot> healthSnapshot =
+            new AtomicReference<>(new HealthSnapshot(true, 0L));
+    private final Object healthRefreshLock = new Object();
 
     public FunasrAsrInferenceEngine(
             AsrInferenceProperties properties,
             WebClient.Builder webClientBuilder,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            MeterRegistry meterRegistry) {
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.meterRegistry = meterRegistry;
 
         String endpoint = properties.getFunasr().getEndpoint();
         if (endpoint == null || endpoint.isBlank()) {
             throw new IllegalStateException("asr.inference.funasr.endpoint must be set when asr.inference.mode=funasr");
         }
         this.webClient = webClientBuilder.baseUrl(endpoint).build();
+        this.concurrentGuard = new Semaphore(properties.getFunasr().getMaxConcurrentRequests(), true);
+        meterRegistry.gauge("asr.funasr.inflight", inFlightRequests);
     }
 
     @Override
     public AsrInferenceResult infer(AudioIngressRawEvent ingressEvent) {
-        AudioIngressRawPayload payload = ingressEvent.payload();
-        if (payload == null) {
-            throw new IllegalArgumentException("Missing audio payload for session " + ingressEvent.sessionId());
+        String sessionId = ingressEvent == null ? "unknown" : ingressEvent.sessionId();
+        if (!concurrentGuard.tryAcquire()) {
+            meterRegistry.counter(
+                            "asr.funasr.concurrency.rejected.total",
+                            "code",
+                            "ASR_PROVIDER_BUSY")
+                    .increment();
+            throw new AsrEngineException(
+                    "ASR_PROVIDER_BUSY",
+                    "FunASR concurrency limit reached for session " + sessionId,
+                    true);
         }
-        validateBase64(payload.audioBase64(), ingressEvent.sessionId());
+        inFlightRequests.incrementAndGet();
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            if (ingressEvent == null) {
+                throw new AsrEngineException(
+                        "ASR_INVALID_REQUEST",
+                        "asr ingress event must not be null",
+                        false);
+            }
+            AudioIngressRawPayload payload = ingressEvent.payload();
+            if (payload == null) {
+                throw new IllegalArgumentException("Missing audio payload for session " + sessionId);
+            }
 
-        String responseBody = webClient
-                .post()
-                .uri(properties.getFunasr().getPath())
-                .contentType(MediaType.APPLICATION_JSON)
-                .headers(headers -> {
-                    String authToken = properties.getFunasr().getAuthToken();
-                    if (authToken != null && !authToken.isBlank()) {
-                        headers.setBearerAuth(authToken);
-                    }
-                })
-                .bodyValue(toFunasrRequest(ingressEvent))
-                .retrieve()
-                .bodyToMono(String.class)
-                .timeout(Duration.ofMillis(properties.getFunasr().getTimeoutMs()))
-                .block();
+            assertProviderHealthy(sessionId);
+            validateBase64(payload.audioBase64(), sessionId);
 
-        return parseResponse(responseBody, ingressEvent);
+            String responseBody = webClient
+                    .post()
+                    .uri(properties.getFunasr().getPath())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .headers(headers -> {
+                        String authToken = properties.getFunasr().getAuthToken();
+                        if (authToken != null && !authToken.isBlank()) {
+                            headers.setBearerAuth(authToken);
+                        }
+                    })
+                    .bodyValue(toFunasrRequest(ingressEvent))
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofMillis(properties.getFunasr().getTimeoutMs()))
+                    .block();
+
+            AsrInferenceResult result = parseResponse(responseBody, ingressEvent);
+            meterRegistry.counter(
+                            "asr.funasr.requests.total",
+                            "result",
+                            "success",
+                            "code",
+                            "OK")
+                    .increment();
+            return result;
+        } catch (RuntimeException exception) {
+            AsrEngineException mapped = toEngineException(exception, sessionId);
+            meterRegistry.counter(
+                            "asr.funasr.requests.total",
+                            "result",
+                            "error",
+                            "code",
+                            mapped.errorCode())
+                    .increment();
+            throw mapped;
+        } finally {
+            sample.stop(meterRegistry.timer("asr.funasr.request.duration"));
+            inFlightRequests.decrementAndGet();
+            concurrentGuard.release();
+        }
     }
 
     private Map<String, Object> toFunasrRequest(AudioIngressRawEvent ingressEvent) {
@@ -91,14 +155,21 @@ public class FunasrAsrInferenceEngine implements AsrInferenceEngine {
 
     private AsrInferenceResult parseResponse(String responseBody, AudioIngressRawEvent ingressEvent) {
         if (responseBody == null || responseBody.isBlank()) {
-            throw new IllegalStateException("Empty FunASR response for session " + ingressEvent.sessionId());
+            throw new AsrEngineException(
+                    "ASR_PROVIDER_BAD_RESPONSE",
+                    "Empty FunASR response for session " + ingressEvent.sessionId(),
+                    true);
         }
 
         JsonNode root;
         try {
             root = objectMapper.readTree(responseBody);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Invalid FunASR response for session " + ingressEvent.sessionId(), exception);
+            throw new AsrEngineException(
+                    "ASR_PROVIDER_BAD_RESPONSE",
+                    "Invalid FunASR response for session " + ingressEvent.sessionId(),
+                    true,
+                    exception);
         }
 
         assertProviderSuccess(root, ingressEvent.sessionId());
@@ -118,7 +189,10 @@ public class FunasrAsrInferenceEngine implements AsrInferenceEngine {
                 firstTextFromArray(root.path("data").path("sentences")));
 
         if (text == null || text.isBlank()) {
-            throw new IllegalStateException("Empty FunASR transcript for session " + ingressEvent.sessionId());
+            throw new AsrEngineException(
+                    "ASR_PROVIDER_EMPTY_TRANSCRIPT",
+                    "Empty FunASR transcript for session " + ingressEvent.sessionId(),
+                    true);
         }
 
         String language = firstNonBlank(
@@ -193,25 +267,249 @@ public class FunasrAsrInferenceEngine implements AsrInferenceEngine {
                 textField(root.path("data"), "msg"),
                 textField(root.path("data"), "error"),
                 "unknown");
-        throw new IllegalStateException(
-                "FunASR provider error for session "
-                        + sessionId
-                        + " (code="
-                        + codeNode.asText()
-                        + ", message="
-                        + message
-                        + ")");
+        throw toProviderBusinessException(codeNode.asText(), message, sessionId);
     }
 
     private void validateBase64(String audioBase64, String sessionId) {
         if (audioBase64 == null || audioBase64.isBlank()) {
-            throw new IllegalArgumentException("Missing audioBase64 payload for session " + sessionId);
+            throw new AsrEngineException(
+                    "ASR_INVALID_AUDIO",
+                    "Missing audioBase64 payload for session " + sessionId,
+                    false);
         }
         try {
             Base64.getDecoder().decode(audioBase64);
         } catch (IllegalArgumentException exception) {
-            throw new IllegalArgumentException("Invalid audioBase64 payload for session " + sessionId, exception);
+            throw new AsrEngineException(
+                    "ASR_INVALID_AUDIO",
+                    "Invalid audioBase64 payload for session " + sessionId,
+                    false,
+                    exception);
         }
+    }
+
+    private void assertProviderHealthy(String sessionId) {
+        AsrInferenceProperties.Health healthProperties = properties.getFunasr().getHealth();
+        if (healthProperties == null || !healthProperties.isEnabled()) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        HealthSnapshot snapshot = healthSnapshot.get();
+        if (snapshot.expiresAtMs() > now) {
+            if (!snapshot.healthy()) {
+                throw new AsrEngineException(
+                        "ASR_PROVIDER_UNHEALTHY",
+                        "FunASR health check is unhealthy for session " + sessionId,
+                        true);
+            }
+            return;
+        }
+
+        synchronized (healthRefreshLock) {
+            snapshot = healthSnapshot.get();
+            if (snapshot.expiresAtMs() > now) {
+                if (!snapshot.healthy()) {
+                    throw new AsrEngineException(
+                            "ASR_PROVIDER_UNHEALTHY",
+                            "FunASR health check is unhealthy for session " + sessionId,
+                            true);
+                }
+                return;
+            }
+
+            try {
+                String responseBody = webClient
+                        .get()
+                        .uri(healthProperties.getPath())
+                        .accept(MediaType.APPLICATION_JSON)
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .timeout(Duration.ofMillis(healthProperties.getTimeoutMs()))
+                        .block();
+                boolean healthy = parseHealthResponse(responseBody);
+                cacheHealth(healthy, now, healthProperties.getCacheTtlMs());
+                meterRegistry.counter(
+                                "asr.funasr.healthcheck.total",
+                                "result",
+                                healthy ? "up" : "down")
+                        .increment();
+                if (!healthy) {
+                    throw new AsrEngineException(
+                            "ASR_PROVIDER_UNHEALTHY",
+                            "FunASR health check is unhealthy for session " + sessionId,
+                            true);
+                }
+            } catch (AsrEngineException exception) {
+                throw exception;
+            } catch (RuntimeException exception) {
+                if (healthProperties.isFailOpenOnError()) {
+                    cacheHealth(true, now, healthProperties.getCacheTtlMs());
+                    meterRegistry.counter(
+                                    "asr.funasr.healthcheck.total",
+                                    "result",
+                                    "error_fail_open")
+                            .increment();
+                    return;
+                }
+                cacheHealth(false, now, healthProperties.getCacheTtlMs());
+                meterRegistry.counter(
+                                "asr.funasr.healthcheck.total",
+                                "result",
+                                "error")
+                        .increment();
+                throw new AsrEngineException(
+                        "ASR_PROVIDER_UNHEALTHY",
+                        "FunASR health check failed for session " + sessionId,
+                        true,
+                        exception);
+            }
+        }
+    }
+
+    private boolean parseHealthResponse(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return true;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            JsonNode healthyNode = firstPresentNode(
+                    root.path("healthy"),
+                    root.path("ok"),
+                    root.path("ready"));
+            if (healthyNode != null) {
+                Boolean healthy = firstBooleanLike(healthyNode);
+                if (healthy != null) {
+                    return healthy;
+                }
+            }
+
+            JsonNode statusNode = firstPresentNode(
+                    root.path("status"),
+                    root.path("state"));
+            if (statusNode == null || !statusNode.isTextual()) {
+                return true;
+            }
+            String status = statusNode.asText().trim();
+            if (status.isEmpty()) {
+                return true;
+            }
+            return "up".equalsIgnoreCase(status)
+                    || "ok".equalsIgnoreCase(status)
+                    || "healthy".equalsIgnoreCase(status)
+                    || "ready".equalsIgnoreCase(status)
+                    || "success".equalsIgnoreCase(status);
+        } catch (JsonProcessingException exception) {
+            return true;
+        }
+    }
+
+    private void cacheHealth(boolean healthy, long nowMs, long ttlMs) {
+        long expiresAt = nowMs + Math.max(100L, ttlMs);
+        healthSnapshot.set(new HealthSnapshot(healthy, expiresAt));
+    }
+
+    private AsrEngineException toProviderBusinessException(String code, String message, String sessionId) {
+        Integer numericCode = parseInteger(code);
+        if (numericCode != null) {
+            if (numericCode == 429) {
+                return new AsrEngineException(
+                        "ASR_PROVIDER_RATE_LIMIT",
+                        "FunASR provider rate-limited for session " + sessionId + " (message=" + message + ")",
+                        true);
+            }
+            if (numericCode == 503 || numericCode == 502 || numericCode == 504) {
+                return new AsrEngineException(
+                        "ASR_PROVIDER_UNAVAILABLE",
+                        "FunASR provider unavailable for session " + sessionId + " (code=" + code + ", message=" + message + ")",
+                        true);
+            }
+            if (numericCode >= 500) {
+                return new AsrEngineException(
+                        "ASR_PROVIDER_FAILURE",
+                        "FunASR provider failure for session " + sessionId + " (code=" + code + ", message=" + message + ")",
+                        true);
+            }
+        }
+        return new AsrEngineException(
+                "ASR_PROVIDER_REJECTED",
+                "FunASR provider rejected request for session " + sessionId + " (code=" + code + ", message=" + message + ")",
+                false);
+    }
+
+    private AsrEngineException toEngineException(RuntimeException exception, String sessionId) {
+        if (exception instanceof AsrEngineException asrEngineException) {
+            return asrEngineException;
+        }
+
+        Throwable root = rootCause(exception);
+        if (root instanceof TimeoutException) {
+            return new AsrEngineException(
+                    "ASR_TIMEOUT",
+                    "FunASR inference timeout for session " + sessionId,
+                    true,
+                    exception);
+        }
+        if (root instanceof WebClientResponseException responseException) {
+            int status = responseException.getStatusCode().value();
+            if (status == 429) {
+                return new AsrEngineException(
+                        "ASR_PROVIDER_RATE_LIMIT",
+                        "FunASR returned HTTP 429 for session " + sessionId,
+                        true,
+                        exception);
+            }
+            if (status >= 500) {
+                return new AsrEngineException(
+                        "ASR_PROVIDER_UNAVAILABLE",
+                        "FunASR returned HTTP " + status + " for session " + sessionId,
+                        true,
+                        exception);
+            }
+            return new AsrEngineException(
+                    "ASR_PROVIDER_REJECTED",
+                    "FunASR returned HTTP " + status + " for session " + sessionId,
+                    false,
+                    exception);
+        }
+        if (root instanceof WebClientRequestException) {
+            return new AsrEngineException(
+                    "ASR_PROVIDER_UNAVAILABLE",
+                    "FunASR request failed for session " + sessionId,
+                    true,
+                    exception);
+        }
+        if (exception instanceof IllegalArgumentException) {
+            return new AsrEngineException(
+                    "ASR_INVALID_AUDIO",
+                    exception.getMessage() == null ? "Invalid audio payload for session " + sessionId : exception.getMessage(),
+                    false,
+                    exception);
+        }
+        return new AsrEngineException(
+                "ASR_PROVIDER_FAILURE",
+                "FunASR inference failed for session " + sessionId,
+                true,
+                exception);
+    }
+
+    private Integer parseInteger(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private Throwable rootCause(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
     }
 
     private String resolveAudioFormat(String codec, String configured) {
@@ -347,5 +645,8 @@ public class FunasrAsrInferenceEngine implements AsrInferenceEngine {
             }
         }
         return false;
+    }
+
+    private record HealthSnapshot(boolean healthy, long expiresAtMs) {
     }
 }

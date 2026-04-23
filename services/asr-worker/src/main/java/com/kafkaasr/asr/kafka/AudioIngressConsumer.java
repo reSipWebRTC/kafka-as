@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.asr.events.AsrKafkaProperties;
 import com.kafkaasr.asr.events.AudioIngressRawEvent;
+import com.kafkaasr.asr.pipeline.AsrEngineException;
 import com.kafkaasr.asr.pipeline.AsrPipelineService;
 import com.kafkaasr.asr.policy.TenantReliabilityPolicy;
 import com.kafkaasr.asr.policy.TenantReliabilityPolicyResolver;
@@ -151,10 +152,16 @@ public class AudioIngressConsumer {
         if (throwable instanceof IllegalArgumentException) {
             return "INVALID_PAYLOAD";
         }
+        if (throwable instanceof AsrEngineException asrEngineException) {
+            return asrEngineException.errorCode();
+        }
         return "PIPELINE_FAILURE";
     }
 
     private boolean isRetryable(RuntimeException failure) {
+        if (failure instanceof AsrEngineException asrEngineException) {
+            return asrEngineException.retryable();
+        }
         return !(failure instanceof IllegalArgumentException);
     }
 
