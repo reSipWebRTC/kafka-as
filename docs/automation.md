@@ -78,12 +78,47 @@ tools/loadtest-alert-closure.sh
 
 Outputs:
 
-- `build/reports/loadtest/gateway-pipeline-loadtest.json`
+- `build/reports/loadtest/gateway-pipeline-loadtest-aggregate.json`
 - `build/reports/loadtest/gateway-pipeline-loadtest-summary.md`
+- `build/reports/loadtest/gateway-pipeline-loadtest-<scenario>.json`
+- `build/reports/loadtest/gateway-pipeline-loadtest-<scenario>.log`
+- `build/reports/loadtest/gateway-pipeline-loadtest.json` (legacy compatibility path)
+
+Scenario defaults:
+
+- `smoke`
+- `baseline`
+- `stress`
+
+Scenario-specific overrides:
+
+- `LOADTEST_<SCENARIO>_SESSIONS`
+- `LOADTEST_<SCENARIO>_FRAMES_PER_SESSION`
+- `LOADTEST_<SCENARIO>_MIN_SUCCESS_RATIO`
+- `LOADTEST_<SCENARIO>_MAX_P95_LATENCY_MS`
+
+### Run fault-drill closure baseline
+
+Run from repository root or from a feature worktree:
+
+```bash
+tools/fault-drill-closure.sh
+```
+
+Outputs:
+
+- `build/reports/fault-drill/fault-drill-closure.json`
+- `build/reports/fault-drill/fault-drill-closure-summary.md`
+- `build/reports/fault-drill/fault-drill-<scenario>.log`
+
+Scenario filter:
+
+- `FAULT_DRILL_SCENARIOS="asr-engine-fault-mapping translation-engine-fault-mapping tts-engine-fault-mapping"`
 
 Related docs:
 
 - `docs/reports/loadtest/2026-04-22-baseline.md`
+- `docs/reports/loadtest/2026-04-23-closure.md`
 - `docs/runbooks/loadtest-alert-closure.md`
 
 ### Start local monitoring baseline
