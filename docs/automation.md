@@ -96,6 +96,12 @@ Scenario-specific overrides:
 - `LOADTEST_<SCENARIO>_FRAMES_PER_SESSION`
 - `LOADTEST_<SCENARIO>_MIN_SUCCESS_RATIO`
 - `LOADTEST_<SCENARIO>_MAX_P95_LATENCY_MS`
+- `LOADTEST_<SCENARIO>_MIN_THROUGHPUT_FPS`
+
+Capacity evidence:
+
+- `LOADTEST_CAPACITY_TARGET_SCENARIO` (defaults to the last scenario)
+- aggregate report includes `capacityEvidence.targetScenarioPass` and `capacityEvidence.highestPassingScenario`
 
 ### Run fault-drill closure baseline
 
@@ -140,6 +146,11 @@ Useful flags:
 - `PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,PipelineErrorRateHigh,KafkaConsumerLagHigh"`
 - `PREPROD_RECOVERY_TIMEOUT_SECONDS=900`
 - `PREPROD_RECOVERY_POLL_SECONDS=30`
+- `PREPROD_RECOVERY_MAX_SECONDS=900`
+- `PREPROD_LOADTEST_REPORT_PATH=build/reports/loadtest/gateway-pipeline-loadtest-aggregate.json`
+- `PREPROD_FAULT_DRILL_REPORT_PATH=build/reports/fault-drill/fault-drill-closure.json`
+- `PREPROD_REQUIRE_LOADTEST_EVIDENCE=1`
+- `PREPROD_REQUIRE_FAULT_EVIDENCE=1`
 - `PREPROD_SKIP_ALERT_CAPTURE=1` (local integration run without Alertmanager dependency)
 - `PREPROD_DRY_RUN=1` (script flow validation only)
 

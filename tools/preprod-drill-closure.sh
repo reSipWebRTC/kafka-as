@@ -13,10 +13,15 @@ loadtest_command="${PREPROD_LOADTEST_COMMAND:-tools/loadtest-alert-closure.sh}"
 fault_drill_command="${PREPROD_FAULT_DRILL_COMMAND:-tools/fault-drill-closure.sh}"
 auth_drill_command="${PREPROD_AUTH_DRILL_COMMAND:-}"
 auth_drill_required="${PREPROD_AUTH_DRILL_REQUIRED:-0}"
+loadtest_report_path="${PREPROD_LOADTEST_REPORT_PATH:-$repo_root/build/reports/loadtest/gateway-pipeline-loadtest-aggregate.json}"
+fault_drill_report_path="${PREPROD_FAULT_DRILL_REPORT_PATH:-$repo_root/build/reports/fault-drill/fault-drill-closure.json}"
+require_loadtest_evidence="${PREPROD_REQUIRE_LOADTEST_EVIDENCE:-1}"
+require_fault_evidence="${PREPROD_REQUIRE_FAULT_EVIDENCE:-1}"
 alertmanager_url="${PREPROD_ALERTMANAGER_URL:-http://localhost:9093}"
 watch_alerts_raw="${PREPROD_WATCH_ALERTS:-GatewayWsErrorRateHigh,DownlinkErrorRateHigh,PipelineErrorRateHigh,AsrPipelineP95LatencyHigh,TranslationPipelineP95LatencyHigh,TtsPipelineP95LatencyHigh,KafkaConsumerLagHigh,ControlPlaneAuthDenyRateHigh,ControlPlaneExternalIamUnavailableSpike,ControlPlaneHybridFallbackSpike}"
 recovery_timeout_seconds="${PREPROD_RECOVERY_TIMEOUT_SECONDS:-900}"
 recovery_poll_seconds="${PREPROD_RECOVERY_POLL_SECONDS:-30}"
+recovery_max_seconds="${PREPROD_RECOVERY_MAX_SECONDS:-$recovery_timeout_seconds}"
 dry_run="${PREPROD_DRY_RUN:-0}"
 skip_alert_capture="${PREPROD_SKIP_ALERT_CAPTURE:-0}"
 
@@ -234,8 +239,13 @@ python3 - <<'PY' \
   "$watch_alerts_raw" \
   "$recovery_timeout_seconds" \
   "$recovery_poll_seconds" \
+  "$recovery_max_seconds" \
   "$dry_run" \
   "$skip_alert_capture" \
+  "$loadtest_report_path" \
+  "$fault_drill_report_path" \
+  "$require_loadtest_evidence" \
+  "$require_fault_evidence" \
   "$auth_drill_command" \
   "$auth_drill_required" \
   "$auth_drill_executed" \
@@ -257,8 +267,13 @@ import sys
     watch_alerts_raw,
     recovery_timeout_seconds,
     recovery_poll_seconds,
+    recovery_max_seconds,
     dry_run_raw,
     skip_alert_capture_raw,
+    loadtest_report_path_raw,
+    fault_drill_report_path_raw,
+    require_loadtest_evidence_raw,
+    require_fault_evidence_raw,
     auth_drill_command,
     auth_drill_required_raw,
     auth_drill_executed_raw,
@@ -271,12 +286,16 @@ summary_path = pathlib.Path(summary_path_raw)
 phase_records_path = pathlib.Path(phase_records_raw)
 snapshot_records_path = pathlib.Path(snapshot_records_raw)
 recovery_records_path = pathlib.Path(recovery_records_raw)
+loadtest_report_path = pathlib.Path(loadtest_report_path_raw)
+fault_drill_report_path = pathlib.Path(fault_drill_report_path_raw)
 
 dry_run = dry_run_raw == "1"
 skip_alert_capture = skip_alert_capture_raw == "1"
 auth_drill_required = auth_drill_required_raw == "1"
 auth_drill_executed = auth_drill_executed_raw == "1"
 recovery_pass = recovery_pass_raw == "1"
+require_loadtest_evidence = require_loadtest_evidence_raw == "1"
+require_fault_evidence = require_fault_evidence_raw == "1"
 watch_alerts = [entry.strip() for entry in watch_alerts_raw.split(",") if entry.strip()]
 
 phases = []
@@ -342,7 +361,80 @@ else:
         "samples": recovery_samples,
     }
 
-overall_pass = phases_pass and capture_pass and recovery["pass"] and auth_drill_pass
+def parse_iso8601(raw: str):
+    normalized = raw.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    return datetime.fromisoformat(normalized)
+
+recovery_duration_seconds = 0
+if recovery_samples:
+    start_at = parse_iso8601(recovery_samples[0]["capturedAt"])
+    end_at = parse_iso8601(recovery_samples[-1]["capturedAt"])
+    recovery_duration_seconds = max(0, int((end_at - start_at).total_seconds()))
+
+recovery_slo_pass = recovery["pass"]
+if not (dry_run or skip_alert_capture):
+    recovery_slo_pass = recovery["pass"] and recovery_duration_seconds <= int(recovery_max_seconds)
+
+loadtest_evidence = {
+    "required": require_loadtest_evidence,
+    "path": str(loadtest_report_path),
+    "present": loadtest_report_path.exists(),
+    "parseOk": False,
+    "overallPass": False,
+    "capacityTargetPass": False,
+    "pass": False,
+    "reason": "not_checked",
+}
+if loadtest_evidence["present"]:
+    try:
+        loadtest_payload = json.loads(loadtest_report_path.read_text(encoding="utf-8"))
+        loadtest_evidence["parseOk"] = True
+        loadtest_evidence["overallPass"] = bool(loadtest_payload.get("overallPass"))
+        capacity_target_pass = loadtest_payload.get("capacityEvidence", {}).get("targetScenarioPass")
+        if isinstance(capacity_target_pass, bool):
+            loadtest_evidence["capacityTargetPass"] = capacity_target_pass
+        else:
+            loadtest_evidence["capacityTargetPass"] = loadtest_evidence["overallPass"]
+        loadtest_evidence["pass"] = loadtest_evidence["overallPass"] and loadtest_evidence["capacityTargetPass"]
+        loadtest_evidence["reason"] = "evaluated"
+    except (json.JSONDecodeError, OSError):
+        loadtest_evidence["parseOk"] = False
+
+fault_evidence = {
+    "required": require_fault_evidence,
+    "path": str(fault_drill_report_path),
+    "present": fault_drill_report_path.exists(),
+    "parseOk": False,
+    "overallPass": False,
+    "pass": False,
+    "reason": "not_checked",
+}
+if fault_evidence["present"]:
+    try:
+        fault_payload = json.loads(fault_drill_report_path.read_text(encoding="utf-8"))
+        fault_evidence["parseOk"] = True
+        fault_evidence["overallPass"] = bool(fault_payload.get("overallPass"))
+        fault_evidence["pass"] = fault_evidence["overallPass"]
+        fault_evidence["reason"] = "evaluated"
+    except (json.JSONDecodeError, OSError):
+        fault_evidence["parseOk"] = False
+
+if dry_run:
+    loadtest_evidence["pass"] = True
+    loadtest_evidence["reason"] = "dry_run_skipped"
+    fault_evidence["pass"] = True
+    fault_evidence["reason"] = "dry_run_skipped"
+    loadtest_requirement_pass = True
+    fault_requirement_pass = True
+else:
+    loadtest_requirement_pass = (not require_loadtest_evidence) or loadtest_evidence["pass"]
+    fault_requirement_pass = (not require_fault_evidence) or fault_evidence["pass"]
+
+slo_evidence_pass = loadtest_requirement_pass and fault_requirement_pass and recovery_slo_pass
+
+overall_pass = phases_pass and capture_pass and recovery["pass"] and auth_drill_pass and slo_evidence_pass
 
 report = {
     "generatedAt": datetime.now(timezone.utc).isoformat(),
@@ -352,8 +444,13 @@ report = {
         "watchAlerts": watch_alerts,
         "recoveryTimeoutSeconds": int(recovery_timeout_seconds),
         "recoveryPollSeconds": int(recovery_poll_seconds),
+        "recoveryMaxSeconds": int(recovery_max_seconds),
         "dryRun": dry_run,
         "skipAlertCapture": skip_alert_capture,
+        "loadtestReportPath": str(loadtest_report_path),
+        "faultDrillReportPath": str(fault_drill_report_path),
+        "requireLoadtestEvidence": require_loadtest_evidence,
+        "requireFaultEvidence": require_fault_evidence,
         "authDrill": {
             "command": auth_drill_command,
             "required": auth_drill_required,
@@ -363,11 +460,25 @@ report = {
     "phases": phases,
     "snapshots": snapshots,
     "recovery": recovery,
+    "sloEvidence": {
+        "loadtest": loadtest_evidence,
+        "faultDrill": fault_evidence,
+        "recovery": {
+            "durationSeconds": recovery_duration_seconds,
+            "maxAllowedSeconds": int(recovery_max_seconds),
+            "pass": recovery_slo_pass,
+        },
+        "pass": slo_evidence_pass,
+    },
     "checks": {
         "phasesPass": phases_pass,
         "alertCapturePass": capture_pass,
         "recoveryPass": recovery["pass"],
+        "recoverySloPass": recovery_slo_pass,
         "authDrillPass": auth_drill_pass,
+        "loadtestEvidencePass": loadtest_requirement_pass,
+        "faultEvidencePass": fault_requirement_pass,
+        "sloEvidencePass": slo_evidence_pass,
     },
     "overallPass": overall_pass,
 }
@@ -383,6 +494,10 @@ lines = [
     f"- phasesPass: {str(phases_pass).lower()}",
     f"- alertCapturePass: {str(capture_pass).lower()}",
     f"- recoveryPass: {str(recovery['pass']).lower()} ({recovery['reason']})",
+    f"- recoverySloPass: {str(recovery_slo_pass).lower()} (duration={recovery_duration_seconds}s / max={int(recovery_max_seconds)}s)",
+    f"- loadtestEvidencePass: {str(loadtest_requirement_pass).lower()}",
+    f"- faultEvidencePass: {str(fault_requirement_pass).lower()}",
+    f"- sloEvidencePass: {str(slo_evidence_pass).lower()}",
     f"- authDrillConfigured: {str(bool(auth_drill_command)).lower()}",
     f"- authDrillExecuted: {str(auth_drill_executed).lower()}",
     f"- authDrillPass: {str(auth_drill_pass).lower()}",
@@ -417,6 +532,30 @@ for item in snapshots:
             alerts_path=item["alertsPath"],
         )
     )
+
+lines.extend(
+    [
+        "",
+        "| evidence | required | present | parseOk | pass | reason | path |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| loadtest | {required} | {present} | {parse_ok} | {status} | {reason} | `{path}` |".format(
+            required=str(loadtest_evidence["required"]).lower(),
+            present=str(loadtest_evidence["present"]).lower(),
+            parse_ok=str(loadtest_evidence["parseOk"]).lower(),
+            status=str(loadtest_evidence["pass"]).lower(),
+            reason=loadtest_evidence["reason"],
+            path=loadtest_evidence["path"],
+        ),
+        "| fault-drill | {required} | {present} | {parse_ok} | {status} | {reason} | `{path}` |".format(
+            required=str(fault_evidence["required"]).lower(),
+            present=str(fault_evidence["present"]).lower(),
+            parse_ok=str(fault_evidence["parseOk"]).lower(),
+            status=str(fault_evidence["pass"]).lower(),
+            reason=fault_evidence["reason"],
+            path=fault_evidence["path"],
+        ),
+    ]
+)
 
 if recovery_samples:
     lines.extend(

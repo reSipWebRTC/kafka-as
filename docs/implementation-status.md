@@ -32,9 +32,9 @@
 - `deploy/monitoring` 已补齐 Alertmanager 通知路由基线（default/warning/critical + critical escalation）
 - `deploy/monitoring` 告警阈值与路由参数已支持模板化渲染（`alert-ops.env` + `tools/render-monitoring-config.sh`）
 - `tools/alert-ops-validate.sh` 已补齐告警运营化一键校验（阈值顺序、分级规则覆盖、通知链路完整性）并产出机器可读报告
-- `tools/loadtest-alert-closure.sh` 已升级为多场景（smoke/baseline/stress）压测聚合收口，并产出机器可读报告
+- `tools/loadtest-alert-closure.sh` 已升级为多场景（smoke/baseline/stress）压测聚合收口，支持吞吐门槛与容量上限证据（`capacityEvidence`）输出
 - `tools/fault-drill-closure.sh` 已补齐 ASR/Translation/TTS 故障演练收口，并产出机器可读报告
-- `tools/preprod-drill-closure.sh` 已补齐预发一键收口入口（loadtest/fault-drill/Alertmanager 恢复采样聚合）
+- `tools/preprod-drill-closure.sh` 已补齐预发一键收口入口（loadtest/fault-drill/Alertmanager 恢复采样聚合），并输出统一 `sloEvidence`（loadtest/fault/recovery）
 - `control-plane` 鉴权链路已补齐后端级决策/耗时指标与 hybrid 回退计数（`controlplane.auth.*`）
 - `tools/control-plane-auth-drill.sh` 已补齐控制面鉴权预发演练脚本，并可接入 `tools/preprod-drill-closure.sh` 的 `control-auth` 阶段
 - 已补齐真实 IAM 对接准备层：参数模板（`deploy/env/control-plane-iam.env.template`）、预检脚本（`tools/control-plane-iam-precheck.sh`）与 runbook 清单
