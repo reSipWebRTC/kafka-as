@@ -2,187 +2,172 @@
 
 ## 1. 当前阶段判断
 
-仓库当前不再处于“只有设计，没有代码”的阶段。
+仓库当前已经从“原始设计资料”推进到“文档、契约、服务骨架和第一版治理基线并存”的阶段。
 
-截至 `2026-04-23`，已经完成：
+截至 `2026-04-24`，已经完成：
 
 - 架构、服务边界、事件契约和协议文档基线
 - `api/protobuf` 与 `api/json-schema` 契约文件
-- 6 个核心服务加 `control-plane` 的工程骨架
-- 从 `audio.ingress.raw` 到 `tts.request` 的主链路（默认占位实现 + provider 适配入口，ASR 含 FunASR mode、VAD 静音切段与联调基线，Translation 含 OpenAI mode 与联调基线，TTS 含 synthesis mode 与联调基线）
-- Redis 会话状态和租户策略的最小落地
-- 统一的管理端点、Tracing 和第一版服务指标
-- `deploy/monitoring` 下 Prometheus/Grafana/Alertmanager 看板、告警与通知路由基线
+- `speech-gateway -> asr-worker -> translation-worker -> tts-orchestrator` 主链路跑通
+- `session-orchestrator -> control-plane -> Redis` 低频控制链路跑通
+- 第一版限流、背压、重试、DLQ、幂等、补偿信号、控制面熔断与动态策略分发
+- FunASR / OpenAI / HTTP TTS synthesis 第一版生产联调基线
+- `tts.ready` 对象存储上传、签名 URL、CDN 区域路由与回源回退基线
+- Prometheus / Grafana / Alertmanager 与仓库内 loadtest / fault-drill / preprod closure 基线
 
-当前真正的状态是：
+当前真正的状态不是“缺模块”，而是“缺生产闭环”：
 
-- `Phase 0` 基本完成
-- `Phase 1` 已经启动并跑通了“骨架链路”
-- 距离“生产可运行闭环”还差真实流量闭环、自适应治理能力与预发/生产压测证据
+- 真实依赖环境下的容量/故障/恢复证据仍不足
+- 用户可见的端到端体验闭环仍未补齐
+- 控制面平台化和事件治理仍停留在第一版能力
 
-## 2. Phase 0：文档与契约冻结
-
-目标：
-
-- 完成总体架构和服务边界设计
-- 冻结事件模型和 Topic 规划
-- 冻结会话状态机
-- 冻结外部协议
-
-当前完成情况：
-
-- 已完成 `docs/` 主文档基线
-- 已完成 `docs/html` 到 Markdown 的映射和维护边界划分
-- 已完成 `docs/contracts.md`
-- 已完成 `api/protobuf/realtime_speech.proto`
-- 已完成 `api/json-schema/*.v1.json`
-
-后续只保留两项持续动作：
-
-- 外部行为变化时同步更新 `docs/contracts.md` 与 `api/`
-- 防止“未来能力”和“当前实现”再次混写
-
-## 3. Phase 1：最小可运行链路
+## 2. Phase 0：文档真相对齐
 
 目标：
 
-- 跑通实时字幕闭环
+- 让 `docs/*.md` 完全对齐当前实现真相
+- 让 `docs/html/*.html` 回归“设计来源”而不是“当前事实来源”
 
-当前已落地范围：
+执行重点：
 
-- `speech-gateway`
-- `session-orchestrator`
-- `Kafka`
-- `asr-worker`
-- `translation-worker`
-- `Redis`
-- 占位态的 `tts-orchestrator`
-- 占位态的 `control-plane`
+- 用 `implementation-status.md`、`contracts.md`、`api/` 和已有测试覆盖行为反向校正文档
+- 清理“未来能力被写成当前能力”与“当前能力未写进文档”两类偏差
+- 优先同步 `architecture.md`、`services.md`、`observability.md`、`roadmap.md`
 
-当前已具备：
+退出标准：
 
-- WebSocket 音频上行
-- WebSocket `session.ping`
-- Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行
-- 下行链路仓库内 E2E smoke 基线（顺序、终态、重复与异常计数）
-- 会话 start/stop 控制
-- `audio.ingress.raw -> asr.partial / asr.final -> translation.result -> tts.request / tts.chunk / tts.ready`
-- 基础管理端点和服务指标
+- 关键主文档之间不存在互相矛盾的能力描述
+- 所有未落地能力都明确标注为“计划扩展”或“仍待完善”
+- 外部行为变化继续坚持同步更新 `docs/contracts.md` 与 `api/`
 
-当前仍缺：
-
-- 面向浏览器/SDK 的明确端到端 demo 与用户可见闭环
-- 预发/生产压测窗口下的延迟和稳定性证据
-
-退出标准保持不变，但当前还未达成：
-
-- 能稳定完成“音频上行 -> ASR -> 翻译 -> 字幕下发”
-- WebSocket 连接成功率 `>= 99.9%`
-- 实时字幕端到端延迟 `P95 <= 1500ms`
-- 关键 Topic lag 可回落
-- DLQ 比例 `< 0.1%`
-
-## 4. Phase 2：生产治理补齐
+## 3. Phase 1：真实引擎生产闭环
 
 目标：
 
-- 从“能跑”升级到“能扛”
+- 把当前 provider 适配从“联调基线”推进到“真实运行闭环”
 
 范围：
 
-- 幂等
-- 重试
-- DLQ
-- 限流
-- 熔断
-- 背压
-- 灰度开关
+- FunASR 真机容量与故障演练
+- OpenAI / 真实翻译引擎的真实配额、限流、超时与恢复证据
+- TTS synthesis 真机容量与故障演练
 
 当前判断：
 
-- 文档已经冻结方向
-- 代码基线已落地第一版重试、DLQ、限流、背压
-- 代码基线已落地第一版幂等判重、补偿信号、控制面熔断与灰度字段
-- 下一步是把治理从“固定策略”升级到“自适应策略 + 补偿编排 + 动态灰度路由”
+- 代码侧 provider 入口、健康探测、并发保护、错误语义映射已具备
+- 仓库内 fault-drill / preprod closure 已具备入口
+- 下一步不是继续加适配层，而是把真实环境证据补齐
 
-## 5. Phase 3：TTS 与分发体系
+退出标准：
+
+- 真实或准真实环境下能稳定产出 `loadtest`、`fault-drill`、`preprod-drill` 证据
+- 每条引擎链路都具备成功率、延迟、错误分类和恢复样本
+
+## 4. Phase 2：用户可见端到端闭环
 
 目标：
 
-- 支持语音回放和大规模下发
+- 从“服务链路可跑”升级到“用户体验可验证”
 
 范围：
 
-- 真实 `tts-orchestrator`
-- TTS 引擎接入
-- 文本归一化
-- 缓存键策略
-- 对象存储
-- CDN 分发
+- 浏览器 / SDK 级最小集成样例
+- `session-orchestrator` 结果聚合、超时编排与基础补偿
+- 客户端可感知指标（首个字幕时间、最终字幕时间、TTS 首包 / ready 时间）
+- 更完整的下行聚合策略
 
 当前判断：
 
-- `tts-orchestrator` 模块已存在
-- 已具备 `translation.result -> tts.request / tts.chunk / tts.ready` 编排与 HTTP synthesis 适配入口
-- 已补齐 `tts.ready` 的可配置 S3/MinIO 上传与真实 `playbackUrl` 回填基线
-- 已补齐 `tts.ready` 的 `cache-control` 与 `expires/sig` 签名 URL 策略基线
-- 已补齐 TTS 引擎第一版生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
-- 下一步是推进 TTS 真机容量/故障演练与 CDN 回放分发深度治理（区域路由、回源、命中率优化）
+- 主链路主题和下行回推已经存在
+- 当前缺少用户视角的验收面和体验级指标
 
-## 6. Phase 4：控制面与多租户
+退出标准：
+
+- 能稳定演示“音频上行 -> partial/final 字幕 -> TTS 回放”
+- 用户可感知指标进入看板和告警
+
+## 5. Phase 3：控制面平台化
 
 目标：
 
-- 把系统做成平台，而不是单业务项目
+- 把 `control-plane` 从策略服务升级为平台控制面
 
 范围：
 
-- `control-plane`
-- 租户管理
-- 配额管理
-- 模型版本管理
-- 语言对策略
-- 动态路由与灰度
+- 外部 IAM/RBAC 真实联调
+- 数据库持久化
+- 跨区域分发实际执行链路
+- 高级版本编排与回滚治理
 
 当前判断：
 
-- `control-plane` 模块已存在
-- 当前已覆盖租户策略 GET / PUT / rollback（`/policy:rollback`）、版本化 upsert/rollback、策略历史快照栈、`/api/v1/tenants/**` Bearer Token 鉴权/授权基线、`control.auth.mode=static/external-iam/hybrid` 鉴权后端切换与 JWKS 校验后端骨架、`tenant.policy.changed` 发布基线以及灰度/回退策略字段
-- 已补齐指定版本回滚与分发意图发布：`policy:rollback` 支持可选 `targetVersion` / `distributionRegions`，`tenant.policy.changed` 已携带编排元数据扩展（`sourcePolicyVersion` / `targetPolicyVersion` / `distributionRegions`）
-- 下一步是补齐外部 IAM/RBAC 提供方联调与生产级运行保障（真实参数、失败策略、监控证据），并推进跨区域分发、策略版本编排与回滚治理能力
+- 当前已具备 Bearer Token 鉴权/授权、`static/external-iam/hybrid` 模式切换、版本化 upsert/rollback、`tenant.policy.changed` 分发
+- 当前缺的不是基础接口，而是平台级运行保障和跨区域执行能力
 
-## 7. Phase 5：容量、压测与弹性
+退出标准：
+
+- 真实 IAM 环境下完成预检、演练、回退验证
+- 策略历史、回滚、审计和分发不再依赖单点 Redis 语义
+
+## 6. Phase 4：事件治理与补偿体系升级
 
 目标：
 
-- 验证平台的上限和弹性能力
+- 把当前第一版 consumer 治理升级成标准化事件治理体系
 
 范围：
 
-- 长连接压测
-- Kafka 容量规划
-- GPU 队列调优
-- K8s HPA / KEDA
-- 故障演练
+- `translation.request`
+- `platform.audit`
+- `platform.dlq`
+- 可选的 `audio.vad.segmented`
+- 统一死信治理、重放流程和会话级补偿编排
 
 当前判断：
 
-- 观测基线和仓库级看板/告警资产已接入
-- 告警通知路由和值班升级 runbook 基线已落地
-- 仓库内多场景 loadtest + fault-drill + 告警处置脚本闭环已落地
-- 预发环境一键收口入口（loadtest/fault-drill/Alertmanager 恢复采样）已落地
-- 预发/生产环境下的容量、恢复与弹性实战证据仍待建立并持续回填
+- 当前 `.dlq`、判重、补偿信号已落地，但仍偏“按服务局部实现”
+- 原始 Kafka 材料要求的是统一治理、统一审计、统一重放
+
+退出标准：
+
+- 事件模型文档、契约和实现一致
+- 失败后的排障、重放、审计有固定路径
+
+## 7. Phase 5：分发与弹性扩展
+
+目标：
+
+- 建立面向真实预发/生产的容量、恢复和分发治理能力
+
+范围：
+
+- 对象存储 HA
+- CDN 区域路由、多级缓存与回源策略深化
+- Kafka / GPU / K8s HPA / KEDA 容量与弹性治理
+- 结构化 JSON 日志
+- 预发 / 生产真实流量证据持续回填
+
+当前判断：
+
+- 仓库内监控、看板、告警、脚本闭环已经具备
+- 下一步是把这些能力迁移到真实环境，并持续回填容量证据
+
+退出标准：
+
+- TTS 分发链路具备高可用和回源策略证据
+- 扩缩容和恢复能力能用真实压测数据证明
+- 体验、服务、资源三层观测都进入运行闭环
 
 ## 8. 当前建议优先级
 
 如果资源有限，建议优先顺序如下：
 
-1. 补齐下行链路的稳定性与端到端验证
-2. 补齐幂等、补偿、熔断与灰度治理
-3. 推进 ASR/Translation/TTS 真实引擎联调（ASR/Translation/TTS 已补齐第一版联调基线，继续做真机容量与故障演练）
-4. 用预发/生产流量持续标定告警阈值，并将通知路由接入真实值班系统
-5. 落地压测与故障演练
-6. 补齐 TTS 分发与控制面高级能力
+1. 先完成文档真相对齐，避免继续出现多套事实来源
+2. 推进 ASR / Translation / TTS 真实引擎容量与故障演练
+3. 补齐用户可见的端到端体验闭环与体验级指标
+4. 推进控制面真实 IAM / RBAC 联调与平台化持久化
+5. 落地统一事件治理、补偿与重放
+6. 用预发 / 生产流量持续标定告警阈值和容量上限
 
 ## 9. 主要风险
 

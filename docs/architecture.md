@@ -25,7 +25,7 @@
 - 推理服务、翻译服务、TTS 服务独立伸缩
 - 可观测性默认内建，而不是上线前临时补充
 
-## 3. 当前仓库实现基线（2026-04-22）
+## 3. 当前仓库实现基线（2026-04-24）
 
 当前仓库已经落地的实际模块链路如下：
 
@@ -50,19 +50,27 @@ flowchart LR
 - `speech-gateway` 直写 `audio.ingress.raw`
 - `speech-gateway -> session-orchestrator` 的低频会话控制
 - `speech-gateway` 的 `session.ping` 处理
-- `speech-gateway` 基于 Kafka 的 `subtitle.partial` / `subtitle.final` / `session.closed` 下行回推
+- `speech-gateway` 的可配置 WS token 鉴权、会话级限流与背压保护
+- `speech-gateway` 基于 Kafka 的 `subtitle.partial` / `subtitle.final` / `tts.chunk` / `tts.ready` / `session.closed` 下行回推
+- `speech-gateway` 下行链路仓库内 E2E 稳定性基线
 - `speech-gateway` 会话级 `audio.frame` 限流与背压保护
 - `session-orchestrator -> control-plane` 的租户策略查询
 - `session-orchestrator` 查询 `control-plane` 的第一版熔断与缓存回退
+- `session-orchestrator` 消费 `tenant.policy.changed` 刷新本地策略缓存
 - `session-orchestrator` 的 Redis 会话状态与 `session.control` 发布
-- `asr-worker -> translation-worker -> tts-orchestrator` 的占位事件链路
+- `asr-worker -> translation-worker -> tts-orchestrator` 主链路已打通，并补齐 FunASR / OpenAI / HTTP synthesis 第一版生产联调基线
+- `asr-worker` 的 VAD 静音切段与 `asr.partial` / `asr.final` 分流
+- `tts-orchestrator` 的对象存储上传、签名 URL、CDN 区域路由与回源回退基线
+- `control-plane` 的 Bearer Token 鉴权/授权、版本化 upsert/rollback、`tenant.policy.changed` 动态策略分发
 - 核心 Kafka consumer 固定重试 + `.dlq` 死信回退
 - 核心 Kafka consumer `idempotencyKey` 判重 + 重复失败补偿信号基线
+- 观测与收口基线：Prometheus / Grafana / Alertmanager、loadtest / fault-drill / preprod closure
 
 当前尚未实现：
 
-- TTS 引擎、对象存储、CDN
-- 生产级补偿编排与自适应熔断/灰度治理
+- 真实依赖环境下的容量/故障演练与运行保障闭环
+- 生产级结果聚合、补偿编排与自适应熔断/灰度治理
+- 外部 IAM/RBAC 真实联调、数据库持久化、跨区域分发实际执行链路
 
 ## 4. 目标总体分层
 
@@ -141,8 +149,8 @@ flowchart TB
 
 当前基线：
 
-- 已实现 `/ws/audio`、`session.ping`、音频直写 Kafka、start/stop 调用 orchestrator、错误下行、基于 Kafka 的字幕与会话关闭回推
-- 未实现鉴权和更细粒度下行编排
+- 已实现 `/ws/audio`、WS token 鉴权、`session.ping`、音频直写 Kafka、start/stop 调用 orchestrator、错误下行，以及基于 Kafka 的字幕 / TTS / 会话关闭回推
+- 未实现外部 IAM/RBAC 集成和更细粒度下行聚合策略
 
 ### Session Orchestrator
 
@@ -196,8 +204,9 @@ flowchart TB
 
 当前基线：
 
-- 已实现默认 placeholder + 可切换 HTTP 适配的 `asr.final -> translation.result`
-- 未实现真实模型、术语增强和字幕回推
+- 已实现默认 placeholder + 可切换 HTTP/OpenAI 适配的 `asr.final -> translation.result`
+- 已补齐 OpenAI 第一版生产联调基线（health 探测、并发保护、错误语义映射、引擎级指标）
+- 未实现真实配额/容量治理、术语增强和上下文策略
 
 ### TTS Orchestrator
 
@@ -210,8 +219,8 @@ flowchart TB
 当前基线：
 
 - 已实现 `translation.result -> tts.request / tts.chunk / tts.ready`（规则 voice + 可切换 HTTP voice-policy 适配）
-- 已实现 `tts.ready` 可配置对象存储上传与 `playbackUrl` 回填（S3/MinIO 兼容）
-- 未实现真实引擎生产联调、CDN 策略与回放分发治理
+- 已实现 HTTP synthesis 第一版生产联调基线，以及 `tts.ready` 可配置对象存储上传、签名 URL、CDN 路由与回源回退
+- 未实现真实引擎容量/故障演练、对象存储 HA 和更高级 CDN 缓存治理
 
 ### Control Plane
 
@@ -222,8 +231,9 @@ flowchart TB
 
 当前基线：
 
-- 已实现租户策略 GET / PUT、灰度/回退字段与 Redis 存储
-- 未实现 auth、数据库与动态策略分发
+- 已实现租户策略 GET / PUT / rollback、Bearer Token 鉴权/授权、`control.auth.mode=static/external-iam/hybrid`、Redis 存储和 `tenant.policy.changed` 动态策略分发
+- 已支持回滚上一版本或指定 `targetVersion`，并附带 `distributionRegions` 分发意图元数据
+- 未实现数据库持久化、外部 IAM/RBAC 真实联调与跨区域分发实际执行链路
 
 ## 6. 数据面与控制面分离
 
@@ -322,4 +332,4 @@ TTS 在生产里关心的不只是“合成”：
 - `tts-orchestrator`
 - `control-plane`
 
-但这两个模块当前更多是“已落地骨架”，而不是“生产化完成”。
+这两个模块已经不只是“骨架”，而是具备第一版生产联调/治理基线；但距离真实依赖环境下的生产闭环仍有明显差距。
