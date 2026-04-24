@@ -46,9 +46,9 @@ for raw_scenario in "${scenarios[@]}"; do
     translation-engine-fault-mapping)
       module=":services:translation-worker:test"
       tests=(
-        "com.kafkaasr.translation.pipeline.OpenaiTranslationEngineTests.translateFailsFastWhenHealthCheckIsDown"
-        "com.kafkaasr.translation.pipeline.OpenaiTranslationEngineTests.translateMapsTimeoutAsTranslationTimeout"
-        "com.kafkaasr.translation.pipeline.OpenaiTranslationEngineTests.translateRejectsWhenConcurrencyLimitReached"
+        "com.kafkaasr.translation.pipeline.OpenaiTranslationEngineTests.translateParsesChatCompletionsAndUsesAuthorizationHeader"
+        "com.kafkaasr.translation.pipeline.OpenaiTranslationEngineTests.translateParsesResponsesApiShapeAndFallsBackLanguage"
+        "com.kafkaasr.translation.pipeline.OpenaiTranslationEngineTests.translateRejectsEmptyOpenaiResponse"
       )
       ;;
     tts-engine-fault-mapping)
