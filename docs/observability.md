@@ -183,7 +183,7 @@
 - 服务健康看板
 - 基础资源看板
 
-## 9. 当前仓库观测基线（2026-04-22）
+## 9. 当前仓库观测基线（2026-04-24）
 
 已在以下服务接入统一基线：
 
@@ -216,39 +216,43 @@
 - `controlplane.auth.decision.total` / `controlplane.auth.decision.duration`
 - `controlplane.auth.hybrid.fallback.total`
 
-### 已落地监控资产（2026-04-22）
+### 已落地监控资产（2026-04-24）
 
 - `deploy/monitoring/docker-compose.yml`：本地 Prometheus + Grafana 启停
 - `deploy/monitoring/prometheus/prometheus.yml`：六服务 `/actuator/prometheus` 抓取
 - `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`：错误率、P95 延迟、Kafka lag、控制面回退与鉴权告警
 - `deploy/monitoring/grafana/dashboards/kafka-asr-overview.json`：主链路吞吐/错误/延迟 + downlink + lag 看板
+- `deploy/monitoring/alertmanager/alertmanager.yml`：default / warning / critical / escalation 路由基线
 - `tools/monitoring-up.sh` / `tools/monitoring-down.sh`：一键启停入口
+- `tools/alert-ops-validate.sh`：告警阈值顺序、分级规则覆盖和通知链路完整性校验
 
-### 已落地压测与告警闭环基线（2026-04-22）
+### 已落地压测与告警闭环基线（2026-04-24）
 
-- `tools/loadtest-alert-closure.sh`：仓库内可重复执行的网关压测入口
-- `build/reports/loadtest/gateway-pipeline-loadtest.json`：结构化结果输出
-- `docs/reports/loadtest/2026-04-22-baseline.md`：本次基线证据与风险说明
+- `tools/loadtest-alert-closure.sh`：仓库内多场景（smoke / baseline / stress）压测聚合入口
+- `tools/fault-drill-closure.sh`：ASR / Translation / TTS 故障演练收口入口
+- `tools/preprod-drill-closure.sh`：预发环境 loadtest / fault-drill / recovery 证据聚合入口
+- `build/reports/loadtest/gateway-pipeline-loadtest-aggregate.json`：多场景结构化压测结果
+- `build/reports/fault-drill/fault-drill-closure.json`：结构化故障演练结果
+- `build/reports/preprod-drill/preprod-drill-closure.json`：结构化预发收口结果
 - `docs/runbooks/loadtest-alert-closure.md`：执行频率、门槛和告警升级路径
-- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`：按该基线收紧的第一版阈值
+- `docs/runbooks/control-plane-iam-provider-integration.md`：控制面鉴权预检、演练与回退 runbook
+- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`：按仓库内基线收紧的第一版阈值
 
-基线结果摘要：
+仓库内基线结果摘要：
 
-- `successRatio=1.0`
-- `throughputFramesPerSecond=7452.5`
-- `frameLatencyMsP95=0`
-- `gatewayWsErrorCount=0`
-- `downlinkErrorCount=0`
+- `loadtest-alert-closure` 已支持 `capacityEvidence`
+- `fault-drill-closure` 已支持多场景聚合 `overallPass`
+- `preprod-drill-closure` 已支持统一 `sloEvidence`（loadtest / fault / recovery）
 
 说明：
 
-- 上述结果来自 in-memory harness，不等于生产流量表现。
-- 当前告警阈值已完成“基线校准”，上线前仍需按预发/生产真实流量再标定。
+- 上述仓库内收口结果主要来自本地 harness、单测与 simulated/mock 预发演练，不等于生产流量表现。
+- 当前告警阈值与闭环脚本已完成“仓库内基线校准”，上线前仍需按预发/生产真实流量再标定。
 
 ### 当前仍缺失
 
 - 客户端可感知的字幕首包 / 最终字幕延迟指标
-- 告警阈值的生产环境再标定与分级路由（通知/升级）
+- 真实预发/生产环境下的告警阈值再标定与通知链路运营化
 - 结构化 JSON 日志
 - 真实引擎链路（Kafka + 外部 ASR/翻译/TTS）的压测报告与 SLO 达成证据
-- 故障注入与恢复演练基线
+- 真实依赖环境下的故障注入、恢复时间和弹性扩缩容证据
