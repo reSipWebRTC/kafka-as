@@ -53,7 +53,6 @@ flowchart LR
 - `speech-gateway` 的可配置 WS token 鉴权、会话级限流与背压保护
 - `speech-gateway` 基于 Kafka 的 `subtitle.partial` / `subtitle.final` / `tts.chunk` / `tts.ready` / `session.closed` 下行回推
 - `speech-gateway` 下行链路仓库内 E2E 稳定性基线
-- `speech-gateway` 会话级 `audio.frame` 限流与背压保护
 - `session-orchestrator -> control-plane` 的租户策略查询
 - `session-orchestrator` 查询 `control-plane` 的第一版熔断与缓存回退
 - `session-orchestrator` 消费 `tenant.policy.changed` 刷新本地策略缓存
