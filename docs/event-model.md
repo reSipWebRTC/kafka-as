@@ -61,14 +61,19 @@
 - 上述核心消费者均已接入基于 `idempotencyKey` 的 TTL 判重，重复消息按成功路径 no-op
 - 上述核心消费者在重复失败达到阈值后会发出 `ops.compensation` 信号到 `platform.compensation`
 
-## 4. 已冻结待实现 Topic
+## 4. 已冻结并分阶段落地 Topic
 
-以下 Topic 契约已在 `api/json-schema` 与 `api/protobuf` 冻结，当前代码尚未落地：
+以下 Topic 契约已在 `api/json-schema` 与 `api/protobuf` 冻结，当前为分阶段落地状态：
 
 | Topic | Producer | Consumer | Key | 说明 |
 | --- | --- | --- | --- | --- |
 | `command.confirm.request` | `speech-gateway` | `command-worker` | `sessionId` | 客户端二次确认请求（`confirm_token + accept`） |
 | `command.result` | `command-worker` | `speech-gateway`、`tts-orchestrator` | `sessionId` | 智能家居命令执行回执（含 `confirm_required`） |
+
+当前状态：
+
+- `speech-gateway` 已完成 `command.confirm.request` 发布与 `command.result` 消费下发
+- `command-worker` 与 `tts-orchestrator` 的完整业务产消逻辑仍待后续 PR 落地
 
 ## 5. 计划扩展 Topic
 
@@ -86,7 +91,7 @@
 补充说明：
 
 - `tenant.policy.changed` 的 JSON Schema / Protobuf 契约、`control-plane` 发布以及运行时服务消费刷新均已落地。
-- `command.confirm.request` 与 `command.result` 的 JSON Schema / Protobuf 契约已冻结，待后续服务实现接入。
+- `command.confirm.request` 与 `command.result` 的 JSON Schema / Protobuf 契约已冻结。
 
 ## 6. 分区与顺序策略
 

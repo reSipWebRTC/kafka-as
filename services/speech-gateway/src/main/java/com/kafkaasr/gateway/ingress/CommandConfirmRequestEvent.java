@@ -3,7 +3,7 @@ package com.kafkaasr.gateway.ingress;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record AudioIngressRawEvent(
+public record CommandConfirmRequestEvent(
         String eventId,
         String eventType,
         String eventVersion,
@@ -16,5 +16,5 @@ public record AudioIngressRawEvent(
         long seq,
         long ts,
         String idempotencyKey,
-        AudioIngressRawPayload payload) {
+        CommandConfirmRequestPayload payload) {
 }

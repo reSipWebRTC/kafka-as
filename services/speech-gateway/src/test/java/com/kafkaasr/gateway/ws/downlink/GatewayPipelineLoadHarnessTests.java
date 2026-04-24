@@ -10,12 +10,14 @@ import com.kafkaasr.gateway.flow.GatewayAudioFrameFlowController;
 import com.kafkaasr.gateway.flow.GatewayFlowControlProperties;
 import com.kafkaasr.gateway.ingress.AudioFrameIngressCommand;
 import com.kafkaasr.gateway.ingress.AudioIngressPublisher;
+import com.kafkaasr.gateway.ingress.CommandConfirmRequestPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
 import com.kafkaasr.gateway.ws.GatewayDownlinkPublisher;
 import com.kafkaasr.gateway.ws.GatewaySessionRegistry;
 import com.kafkaasr.gateway.ws.protocol.AudioFrameMessageDecoder;
+import com.kafkaasr.gateway.ws.protocol.CommandConfirmMessageDecoder;
 import com.kafkaasr.gateway.ws.protocol.GatewayMessageRouter;
 import com.kafkaasr.gateway.ws.protocol.SessionPingMessageDecoder;
 import com.kafkaasr.gateway.ws.protocol.SessionStartMessageDecoder;
@@ -93,6 +95,7 @@ class GatewayPipelineLoadHarnessTests {
         flowControlProperties.setAudioFrameMaxInflight(1024);
 
         AudioIngressPublisher ingressPublisher = command -> Mono.empty();
+        CommandConfirmRequestPublisher commandConfirmRequestPublisher = command -> Mono.empty();
         SessionControlClient sessionControlClient = new SessionControlClient() {
             @Override
             public Mono<Void> startSession(SessionStartCommand command) {
@@ -107,11 +110,13 @@ class GatewayPipelineLoadHarnessTests {
 
         GatewayMessageRouter router = new GatewayMessageRouter(
                 ingressPublisher,
+                commandConfirmRequestPublisher,
                 new GatewayAudioFrameFlowController(flowControlProperties),
                 new AudioFrameMessageDecoder(OBJECT_MAPPER, validator),
                 new SessionStartMessageDecoder(OBJECT_MAPPER, validator),
                 new SessionPingMessageDecoder(OBJECT_MAPPER, validator),
                 new SessionStopMessageDecoder(OBJECT_MAPPER, validator),
+                new CommandConfirmMessageDecoder(OBJECT_MAPPER, validator),
                 sessionControlClient,
                 OBJECT_MAPPER,
                 meterRegistry);
@@ -295,11 +300,12 @@ class GatewayPipelineLoadHarnessTests {
                   "type": "session.start",
                   "sessionId": "%s",
                   "tenantId": "tenant-a",
+                  "userId": "user-%s",
                   "sourceLang": "zh-CN",
                   "targetLang": "en-US",
                   "traceId": "trc-%s"
                 }
-                """.formatted(sessionId, sessionId);
+                """.formatted(sessionId, sessionId, sessionId);
     }
 
     private static String audioFrameMessage(String sessionId, long seq) {

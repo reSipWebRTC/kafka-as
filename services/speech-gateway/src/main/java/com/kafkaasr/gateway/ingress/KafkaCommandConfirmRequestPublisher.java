@@ -4,8 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Base64;
-import java.util.Set;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -14,25 +12,24 @@ import reactor.core.publisher.Mono;
 
 @Component
 @ConditionalOnProperty(name = "gateway.kafka.enabled", havingValue = "true", matchIfMissing = true)
-public class KafkaAudioIngressPublisher implements AudioIngressPublisher {
+public class KafkaCommandConfirmRequestPublisher implements CommandConfirmRequestPublisher {
 
-    private static final String EVENT_TYPE = "audio.ingress.raw";
+    private static final String EVENT_TYPE = "command.confirm.request";
     private static final String EVENT_VERSION = "v1";
-    private static final Set<String> SUPPORTED_CODECS = Set.of("pcm16le", "opus", "aac");
 
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private final GatewayKafkaProperties properties;
     private final Clock clock;
 
-    public KafkaAudioIngressPublisher(
+    public KafkaCommandConfirmRequestPublisher(
             KafkaTemplate<String, String> kafkaTemplate,
             ObjectMapper objectMapper,
             GatewayKafkaProperties properties) {
         this(kafkaTemplate, objectMapper, properties, Clock.systemUTC());
     }
 
-    KafkaAudioIngressPublisher(
+    KafkaCommandConfirmRequestPublisher(
             KafkaTemplate<String, String> kafkaTemplate,
             ObjectMapper objectMapper,
             GatewayKafkaProperties properties,
@@ -44,53 +41,40 @@ public class KafkaAudioIngressPublisher implements AudioIngressPublisher {
     }
 
     @Override
-    public Mono<Void> publishRawFrame(AudioFrameIngressCommand command) {
-        AudioIngressRawEvent event = toEvent(command);
-        String payload = toJson(event);
+    public Mono<Void> publish(CommandConfirmIngressCommand command) {
+        CommandConfirmRequestEvent event = toEvent(command);
+        String serialized = toJson(event);
         return Mono.fromFuture(kafkaTemplate.send(
-                        properties.getAudioIngressTopic(),
+                        properties.getCommandConfirmRequestTopic(),
                         command.sessionId(),
-                        payload))
+                        serialized))
                 .then();
     }
 
-    private AudioIngressRawEvent toEvent(AudioFrameIngressCommand command) {
+    private CommandConfirmRequestEvent toEvent(CommandConfirmIngressCommand command) {
         long timestamp = Instant.now(clock).toEpochMilli();
-        String traceId = coalesce(command.traceId(), prefixedId("trc"));
-        String tenantId = coalesce(command.tenantId(), properties.getTenantId());
-        String userId = nullable(command.userId());
-        return new AudioIngressRawEvent(
+        return new CommandConfirmRequestEvent(
                 prefixedId("evt"),
                 EVENT_TYPE,
                 EVENT_VERSION,
-                traceId,
+                coalesce(command.traceId(), prefixedId("trc")),
                 command.sessionId(),
-                tenantId,
-                userId,
+                coalesce(command.tenantId(), properties.getTenantId()),
+                nullable(command.userId()),
                 null,
                 properties.getProducerId(),
                 command.seq(),
                 timestamp,
                 command.sessionId() + ":" + EVENT_TYPE + ":" + command.seq(),
-                new AudioIngressRawPayload(
-                        normalizeCodec(command.codec()),
-                        command.sampleRate(),
-                        properties.getChannels(),
-                        Base64.getEncoder().encodeToString(command.audioBytes()),
-                        false));
+                new CommandConfirmRequestPayload(command.confirmToken(), command.accept()));
     }
 
-    private String toJson(AudioIngressRawEvent event) {
+    private String toJson(CommandConfirmRequestEvent event) {
         try {
             return objectMapper.writeValueAsString(event);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Failed to serialize audio ingress event", exception);
+            throw new IllegalStateException("Failed to serialize command confirm request event", exception);
         }
-    }
-
-    private String normalizeCodec(String codec) {
-        String normalizedCodec = codec.toLowerCase();
-        return SUPPORTED_CODECS.contains(normalizedCodec) ? normalizedCodec : "other";
     }
 
     private String coalesce(String value, String fallback) {

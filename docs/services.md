@@ -42,12 +42,13 @@
 
 - `/ws/audio`
 - 可配置 WS token 鉴权（`Authorization: Bearer <token>` 或 query `access_token`）
-- `session.start` / `session.ping` / `audio.frame` / `session.stop`
-- `audio.ingress.raw` 发布
+- `session.start` / `session.ping` / `audio.frame` / `session.stop` / `command.confirm`
+- `audio.ingress.raw` / `command.confirm.request` 发布
 - `audio.frame` 会话级限流与背压保护
 - `session.error` 下行
 - `asr.partial` -> `subtitle.partial`
 - `translation.result` -> `subtitle.final`
+- `command.result` -> `command.result`
 - `tts.chunk` -> `tts.chunk`
 - `tts.ready` -> `tts.ready`
 - `session.control(status=CLOSED)` -> `session.closed`

@@ -1,9 +1,6 @@
-package com.kafkaasr.gateway.ingress;
+package com.kafkaasr.gateway.ws.downlink.events;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-
-@JsonInclude(JsonInclude.Include.NON_NULL)
-public record AudioIngressRawEvent(
+public record CommandResultEvent(
         String eventId,
         String eventType,
         String eventVersion,
@@ -16,5 +13,5 @@ public record AudioIngressRawEvent(
         long seq,
         long ts,
         String idempotencyKey,
-        AudioIngressRawPayload payload) {
+        CommandResultPayload payload) {
 }

@@ -18,8 +18,9 @@
 
 当前仓库已经具备一条可运行的模块化骨架链路：
 
-- `speech-gateway` 通过 `/ws/audio` 接收 `session.start`、`audio.frame`、`session.stop`
-- `speech-gateway` 直接发布 `audio.ingress.raw` 到 Kafka
+- `speech-gateway` 通过 `/ws/audio` 接收 `session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`
+- `speech-gateway` 直接发布 `audio.ingress.raw` / `command.confirm.request` 到 Kafka
+- `speech-gateway` 消费 `command.result` 并回推 WebSocket 下行
 - `speech-gateway` 通过低频 HTTP 调用 `session-orchestrator` 做 start/stop
 - `session-orchestrator` 调用 `control-plane` 获取租户策略，写 Redis 会话状态，并发布 `session.control`
 - `asr-worker` 消费 `audio.ingress.raw` 并发布 `asr.partial` / `asr.final`

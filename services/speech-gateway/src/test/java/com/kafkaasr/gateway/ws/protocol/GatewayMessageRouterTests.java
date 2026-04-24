@@ -14,6 +14,8 @@ import com.kafkaasr.gateway.flow.GatewayAudioFrameFlowController;
 import com.kafkaasr.gateway.flow.GatewayFlowControlProperties;
 import com.kafkaasr.gateway.ingress.AudioFrameIngressCommand;
 import com.kafkaasr.gateway.ingress.AudioIngressPublisher;
+import com.kafkaasr.gateway.ingress.CommandConfirmIngressCommand;
+import com.kafkaasr.gateway.ingress.CommandConfirmRequestPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
@@ -41,6 +43,9 @@ class GatewayMessageRouterTests {
     private AudioIngressPublisher audioIngressPublisher;
 
     @Mock
+    private CommandConfirmRequestPublisher commandConfirmRequestPublisher;
+
+    @Mock
     private SessionControlClient sessionControlClient;
 
     private GatewayMessageRouter router;
@@ -62,16 +67,19 @@ class GatewayMessageRouterTests {
 
         GatewayMessageRouter gatewayMessageRouter = new GatewayMessageRouter(
                 audioIngressPublisher,
+                commandConfirmRequestPublisher,
                 new GatewayAudioFrameFlowController(flowControlProperties, clock),
                 new AudioFrameMessageDecoder(objectMapper, validator),
                 new SessionStartMessageDecoder(objectMapper, validator),
                 new SessionPingMessageDecoder(objectMapper, validator),
                 new SessionStopMessageDecoder(objectMapper, validator),
+                new CommandConfirmMessageDecoder(objectMapper, validator),
                 sessionControlClient,
                 objectMapper,
                 new SimpleMeterRegistry());
 
         lenient().when(audioIngressPublisher.publishRawFrame(any())).thenReturn(Mono.empty());
+        lenient().when(commandConfirmRequestPublisher.publish(any())).thenReturn(Mono.empty());
         lenient().when(sessionControlClient.startSession(any())).thenReturn(Mono.empty());
         lenient().when(sessionControlClient.stopSession(any())).thenReturn(Mono.empty());
 
@@ -105,6 +113,7 @@ class GatewayMessageRouterTests {
                   "type": "session.start",
                   "sessionId": "sess-2",
                   "tenantId": "tenant-a",
+                  "userId": "user-a",
                   "sourceLang": "zh-CN",
                   "targetLang": "en-US",
                   "traceId": "trc-1"
@@ -124,6 +133,7 @@ class GatewayMessageRouterTests {
         assertEquals("trc-1", command.traceId());
 
         verify(audioIngressPublisher, never()).publishRawFrame(any());
+        verify(commandConfirmRequestPublisher, never()).publish(any());
     }
 
     @Test
@@ -165,6 +175,70 @@ class GatewayMessageRouterTests {
         verify(audioIngressPublisher, never()).publishRawFrame(any());
         verify(sessionControlClient, never()).startSession(any());
         verify(sessionControlClient, never()).stopSession(any());
+        verify(commandConfirmRequestPublisher, never()).publish(any());
+    }
+
+    @Test
+    void routesCommandConfirmToIngressPublisherWithSessionContext() {
+        StepVerifier.create(router.route("""
+                {
+                  "type": "session.start",
+                  "sessionId": "sess-cmd-1",
+                  "tenantId": "tenant-home",
+                  "userId": "user-home",
+                  "sourceLang": "zh-CN",
+                  "targetLang": "en-US",
+                  "traceId": "trc-start"
+                }
+                """, sessionId -> {
+                }))
+                .verifyComplete();
+
+        StepVerifier.create(router.route("""
+                {
+                  "type": "command.confirm",
+                  "sessionId": "sess-cmd-1",
+                  "seq": 42,
+                  "confirmToken": "cfm-001",
+                  "accept": true
+                }
+                """, sessionId -> {
+                }))
+                .verifyComplete();
+
+        ArgumentCaptor<CommandConfirmIngressCommand> commandCaptor =
+                ArgumentCaptor.forClass(CommandConfirmIngressCommand.class);
+        verify(commandConfirmRequestPublisher).publish(commandCaptor.capture());
+        CommandConfirmIngressCommand command = commandCaptor.getValue();
+
+        assertEquals("sess-cmd-1", command.sessionId());
+        assertEquals(42L, command.seq());
+        assertEquals("tenant-home", command.tenantId());
+        assertEquals("user-home", command.userId());
+        assertEquals("trc-start", command.traceId());
+        assertEquals("cfm-001", command.confirmToken());
+    }
+
+    @Test
+    void rejectsCommandConfirmWhenSessionContextMissing() {
+        StepVerifier.create(router.route("""
+                {
+                  "type": "command.confirm",
+                  "sessionId": "sess-missing",
+                  "seq": 1,
+                  "confirmToken": "cfm-404",
+                  "accept": false
+                }
+                """, sessionId -> {
+                }))
+                .expectErrorSatisfies(error -> {
+                    MessageValidationException exception = assertInstanceOf(MessageValidationException.class, error);
+                    assertEquals("SESSION_NOT_FOUND", exception.code());
+                    assertEquals("sess-missing", exception.sessionId());
+                })
+                .verify();
+
+        verify(commandConfirmRequestPublisher, never()).publish(any());
     }
 
     @Test

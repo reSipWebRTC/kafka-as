@@ -9,68 +9,66 @@ import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class SessionStartMessageDecoderTests {
+class CommandConfirmMessageDecoderTests {
 
-    private SessionStartMessageDecoder decoder;
+    private CommandConfirmMessageDecoder decoder;
 
     @BeforeEach
     void setUp() {
         Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
-        decoder = new SessionStartMessageDecoder(new ObjectMapper(), validator);
+        decoder = new CommandConfirmMessageDecoder(new ObjectMapper(), validator);
     }
 
     @Test
-    void decodesValidSessionStartMessage() {
-        SessionStartMessage message = decoder.decode("""
+    void decodesValidMessage() {
+        CommandConfirmMessage message = decoder.decode("""
                 {
-                  "type": "session.start",
+                  "type": "command.confirm",
                   "sessionId": "sess-1",
-                  "tenantId": "tenant-a",
-                  "userId": "user-a",
-                  "sourceLang": "zh-CN",
-                  "targetLang": "en-US",
+                  "seq": 8,
+                  "confirmToken": "cfm-1",
+                  "accept": true,
                   "traceId": "trc-1"
                 }
                 """);
 
-        assertEquals("session.start", message.type());
+        assertEquals("command.confirm", message.type());
         assertEquals("sess-1", message.sessionId());
-        assertEquals("tenant-a", message.tenantId());
-        assertEquals("user-a", message.userId());
-        assertEquals("zh-CN", message.sourceLang());
-        assertEquals("en-US", message.targetLang());
+        assertEquals(8L, message.seq());
+        assertEquals("cfm-1", message.confirmToken());
+        assertEquals(true, message.accept());
         assertEquals("trc-1", message.traceId());
     }
 
     @Test
-    void rejectsMissingTenantId() {
-        MessageValidationException exception = assertThrows(
-                MessageValidationException.class,
-                    () -> decoder.decode("""
-                        {
-                          "type": "session.start",
-                          "sessionId": "sess-1",
-                          "userId": "user-a",
-                          "sourceLang": "zh-CN",
-                          "targetLang": "en-US"
-                        }
-                        """));
-
-        assertEquals("INVALID_MESSAGE", exception.code());
-        assertEquals("sess-1", exception.sessionId());
-    }
-
-    @Test
-    void rejectsMissingUserId() {
+    void rejectsNegativeSequence() {
         MessageValidationException exception = assertThrows(
                 MessageValidationException.class,
                 () -> decoder.decode("""
                         {
-                          "type": "session.start",
+                          "type": "command.confirm",
                           "sessionId": "sess-1",
-                          "tenantId": "tenant-a",
-                          "sourceLang": "zh-CN",
-                          "targetLang": "en-US"
+                          "seq": -1,
+                          "confirmToken": "cfm-1",
+                          "accept": true
+                        }
+                        """));
+
+        assertEquals("SESSION_SEQ_INVALID", exception.code());
+        assertEquals("sess-1", exception.sessionId());
+    }
+
+    @Test
+    void rejectsUnexpectedType() {
+        MessageValidationException exception = assertThrows(
+                MessageValidationException.class,
+                () -> decoder.decode("""
+                        {
+                          "type": "command.confirmed",
+                          "sessionId": "sess-1",
+                          "seq": 9,
+                          "confirmToken": "cfm-1",
+                          "accept": false
                         }
                         """));
 
