@@ -32,13 +32,19 @@ tools/verify.sh
 
 ## 3. 部署参数（最小可用）
 
-先统一导出公共依赖地址：
+先加载本地功能测试默认参数（推荐）：
 
 ```bash
-export KAFKA_BOOTSTRAP_SERVERS="<kafka-host:9092>"
-export REDIS_HOST="<redis-host>"
-export REDIS_PORT=6379
+source tools/local-functional-test-env.sh
 ```
+
+如果你需要覆盖默认值，再手工导出对应变量即可。
+
+脚本默认依赖地址如下（可按需覆盖）：
+
+- `KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:9092`
+- `REDIS_HOST=127.0.0.1`
+- `REDIS_PORT=6379`
 
 `control-plane` 鉴权采用静态凭据（无需真实 IAM）：
 
