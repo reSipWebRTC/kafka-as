@@ -102,6 +102,8 @@ flowchart LR
   `superpowers + git worktree` 的开发约定、分支命名和执行流程。
 - [superpowers-plan.md](superpowers-plan.md)
   `superpowers` 在本仓库中的实际触发顺序、边界和落地规则。
+- [runbooks/manual-deployment-test.md](runbooks/manual-deployment-test.md)
+  人工部署与验收 runbook（服务启动顺序、鉴权演练、预发收口与通过标准）。
 - [html/README.md](html/README.md)
   HTML 原始资料与当前 Markdown 文档的映射关系。
 
