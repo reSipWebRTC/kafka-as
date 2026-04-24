@@ -104,6 +104,8 @@ flowchart LR
   `superpowers` 在本仓库中的实际触发顺序、边界和落地规则。
 - [runbooks/manual-deployment-test.md](runbooks/manual-deployment-test.md)
   人工部署与验收 runbook（服务启动顺序、鉴权演练、预发收口与通过标准）。
+- [runbooks/real-environment-collaboration.md](runbooks/real-environment-collaboration.md)
+  真实环境协作 runbook（需要你提供什么、我来补什么、如何做预发/真实联调收口）。
 - [html/README.md](html/README.md)
   HTML 原始资料与当前 Markdown 文档的映射关系。
 
