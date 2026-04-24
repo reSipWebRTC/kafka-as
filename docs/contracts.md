@@ -29,6 +29,7 @@
 - `translation-worker` OpenAI 适配已补齐可用性探测、并发保护与错误语义映射（用于重试/DLQ 分类）
 - `tts-orchestrator` HTTP synthesis 适配已补齐可用性探测、并发保护与错误语义映射（用于重试/DLQ 分类）
 - `control-plane` 租户策略已包含灰度/回退与可靠性字段：`grayEnabled`、`grayTrafficPercent`、`controlPlaneFallbackFailOpen`、`controlPlaneFallbackCacheTtlMs`、`retryMaxAttempts`、`retryBackoffMs`、`dlqTopicSuffix`
+- `control-plane` 租户策略模型已扩展 `sessionMode`（`TRANSLATION`/`SMART_HOME`，默认 `TRANSLATION`）
 - `session-orchestrator` 查询租户策略时已落地第一版熔断与缓存回退（支持 fail-open/fail-closed）
 - 下行 `asr.partial -> subtitle.partial`、`translation.result -> subtitle.final`、`tts.chunk -> tts.chunk`、`tts.ready -> tts.ready`、`session.control(CLOSED) -> session.closed` 已有仓库内 E2E 稳定性回归测试
 - `session.closed` 触发后下行通道会终止并丢弃晚到消息
@@ -43,6 +44,13 @@
 - `control-plane` 已实现 `tenant.policy.changed` 事件发布（upsert/rollback），`session-orchestrator` / `asr-worker` / `translation-worker` / `tts-orchestrator` 已消费该事件用于策略缓存刷新
 - `control-plane` 已实现并冻结回滚编排契约：`POST /api/v1/tenants/{tenantId}/policy:rollback` 支持可选请求体 `targetVersion`、`distributionRegions`；请求体缺失时语义保持为“回滚上一版本”
 - `tenant.policy.changed` 已实现并冻结编排元数据扩展：`sourcePolicyVersion`、`targetPolicyVersion`、`distributionRegions`（均为可选字段，向后兼容）
+
+已冻结待实现（契约已补齐，代码待后续 PR 落地）：
+
+- WebSocket 上行：`command.confirm`
+- WebSocket 下行：`command.result`
+- 事件 Topic：`command.confirm.request`、`command.result`
+- 事件 Envelope 扩展字段：`userId`
 
 ## 2. 主数据路径（冻结）
 
@@ -66,6 +74,7 @@
   "traceId": "trc_123",
   "sessionId": "sess_456",
   "tenantId": "tenant_a",
+  "userId": "user_001",
   "roomId": "room_789",
   "producer": "speech-gateway",
   "seq": 1024,
@@ -95,6 +104,8 @@
 | `tts.chunk` | TTS 流式音频分片 | `tts.chunk` | `sessionId` |
 | `tts.ready` | TTS 回放就绪事件 | `tts.ready` | `sessionId` |
 | `tenant.policy.changed` | 租户策略变更通知（`control-plane` 发布，运行时服务消费刷新） | `tenant.policy.changed` | `tenantId` |
+| `command.confirm.request` | 客户端确认请求（`confirm_token + accept`） | `command.confirm.request` | `sessionId` |
+| `command.result` | 智能家居命令执行结果/确认要求回执 | `command.result` | `sessionId` |
 
 当前实现语义（`asr-worker`）：
 
@@ -112,14 +123,16 @@
 
 | `type` | 说明 | 关键字段 |
 | --- | --- | --- |
-| `session.start` | 开始会话 | `sessionId` `tenantId` `sourceLang` `targetLang` |
+| `session.start` | 开始会话 | `sessionId` `tenantId` `userId` `sourceLang` `targetLang` |
 | `audio.frame` | 音频分片 | `sessionId` `seq` `audioBase64` `codec` `sampleRate` |
 | `session.ping` | 心跳 | `sessionId` `ts` |
 | `session.stop` | 主动结束 | `sessionId` |
+| `command.confirm` | 命令确认提交 | `sessionId` `seq` `confirmToken` `accept` |
 
 当前实现说明：
 
 - `speech-gateway` 当前已接受 `session.start`、`session.ping`、`audio.frame`、`session.stop`
+- `command.confirm` 为已冻结待实现协议，后续由 `speech-gateway` 转发至 `command.confirm.request`
 - 当 `gateway.auth.enabled=true` 时，`/ws/audio` 需要携带合法 token（`Authorization: Bearer <token>` 或 query 参数 `access_token`）
 - token 缺失/非法时，网关会下发 `session.error(code=AUTH_INVALID_TOKEN)` 并关闭连接
 
@@ -131,6 +144,7 @@
 | `subtitle.final` | 最终字幕 | `sessionId` `seq` `text` |
 | `tts.chunk` | TTS 音频分片下行 | `sessionId` `seq` `audioBase64` `codec` `sampleRate` `chunkSeq` `lastChunk` |
 | `tts.ready` | TTS 回放就绪下行 | `sessionId` `seq` `playbackUrl` `codec` `sampleRate` `durationMs` `cacheKey` |
+| `command.result` | 智能家居命令执行回执下行 | `sessionId` `seq` `status` `code` `replyText` `retryable` `confirmToken?` `expiresInSec?` |
 | `session.error` | 错误信息 | `sessionId` `code` `message` |
 | `session.closed` | 会话关闭 | `sessionId` `reason` |
 
@@ -138,6 +152,7 @@
 
 - `session.error` 已由 `speech-gateway` 落地，用于协议校验和控制面错误
 - `subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`session.closed` 已通过 Kafka 下游事件回推到 WebSocket 客户端
+- `command.result` 为已冻结待实现协议，后续由 `speech-gateway` 消费 `command.result` Topic 后下发
 
 ### 5.3 Control-Plane 回滚编排 API（v1）
 
@@ -203,3 +218,5 @@
   - `api/json-schema/tts.chunk.v1.json`
   - `api/json-schema/tts.ready.v1.json`
   - `api/json-schema/tenant.policy.changed.v1.json`
+  - `api/json-schema/command.confirm.request.v1.json`
+  - `api/json-schema/command.result.v1.json`

@@ -57,6 +57,7 @@ class TenantPolicyServiceTests {
                 100,
                 1200,
                 true,
+                "SMART_HOME",
                 true,
                 10,
                 true,
@@ -78,6 +79,7 @@ class TenantPolicyServiceTests {
                     assertEquals(4, response.retryMaxAttempts());
                     assertEquals(350L, response.retryBackoffMs());
                     assertEquals(".tenant-a.dlq", response.dlqTopicSuffix());
+                    assertEquals("SMART_HOME", response.sessionMode());
                 })
                 .verifyComplete();
 
@@ -107,6 +109,7 @@ class TenantPolicyServiceTests {
                 null,
                 null,
                 null,
+                null,
                 null);
         TenantPolicyUpsertRequest second = new TenantPolicyUpsertRequest(
                 "zh-CN",
@@ -117,6 +120,7 @@ class TenantPolicyServiceTests {
                 50,
                 800,
                 true,
+                null,
                 true,
                 25,
                 false,
@@ -168,6 +172,7 @@ class TenantPolicyServiceTests {
                 null,
                 null,
                 null,
+                null,
                 null);
 
         StepVerifier.create(service.upsertTenantPolicy("tenant-defaults", request))
@@ -179,6 +184,7 @@ class TenantPolicyServiceTests {
                     assertEquals(3, response.retryMaxAttempts());
                     assertEquals(200L, response.retryBackoffMs());
                     assertEquals(".dlq", response.dlqTopicSuffix());
+                    assertEquals("TRANSLATION", response.sessionMode());
                 })
                 .verifyComplete();
 
@@ -197,6 +203,7 @@ class TenantPolicyServiceTests {
                 100,
                 1200,
                 true,
+                null,
                 null,
                 null,
                 null,
@@ -242,6 +249,7 @@ class TenantPolicyServiceTests {
                 null,
                 null,
                 null,
+                null,
                 null);
         TenantPolicyUpsertRequest second = new TenantPolicyUpsertRequest(
                 "zh-CN",
@@ -252,6 +260,7 @@ class TenantPolicyServiceTests {
                 50,
                 800,
                 true,
+                null,
                 true,
                 25,
                 false,
@@ -304,6 +313,7 @@ class TenantPolicyServiceTests {
                 null,
                 null,
                 null,
+                null,
                 null);
 
         StepVerifier.create(service.upsertTenantPolicy("tenant-no-history", request))
@@ -345,6 +355,7 @@ class TenantPolicyServiceTests {
                 null,
                 null,
                 null,
+                null,
                 null);
         TenantPolicyUpsertRequest second = new TenantPolicyUpsertRequest(
                 "zh-CN",
@@ -355,6 +366,7 @@ class TenantPolicyServiceTests {
                 50,
                 800,
                 true,
+                null,
                 true,
                 25,
                 false,
@@ -397,6 +409,7 @@ class TenantPolicyServiceTests {
                 null,
                 null,
                 null,
+                null,
                 null);
         TenantPolicyUpsertRequest second = new TenantPolicyUpsertRequest(
                 "zh-CN",
@@ -407,6 +420,7 @@ class TenantPolicyServiceTests {
                 50,
                 800,
                 true,
+                null,
                 true,
                 25,
                 false,
@@ -423,6 +437,7 @@ class TenantPolicyServiceTests {
                 30,
                 600,
                 true,
+                null,
                 true,
                 15,
                 false,
@@ -474,6 +489,7 @@ class TenantPolicyServiceTests {
                         100,
                         1200,
                         true,
+                        "TRANSLATION",
                         false,
                         0,
                         false,
@@ -544,6 +560,7 @@ class TenantPolicyServiceTests {
                 null,
                 null,
                 null,
+                null,
                 null);
         TenantPolicyUpsertRequest second = new TenantPolicyUpsertRequest(
                 "zh-CN",
@@ -554,6 +571,7 @@ class TenantPolicyServiceTests {
                 50,
                 800,
                 true,
+                null,
                 true,
                 25,
                 false,

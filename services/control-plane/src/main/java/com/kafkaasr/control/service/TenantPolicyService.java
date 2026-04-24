@@ -15,6 +15,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,8 @@ public class TenantPolicyService {
     private static final int DEFAULT_RETRY_MAX_ATTEMPTS = 3;
     private static final long DEFAULT_RETRY_BACKOFF_MS = 200L;
     private static final String DEFAULT_DLQ_TOPIC_SUFFIX = ".dlq";
+    private static final String DEFAULT_SESSION_MODE = "TRANSLATION";
+    private static final String SESSION_MODE_SMART_HOME = "SMART_HOME";
     private static final String EVENT_TYPE = "tenant.policy.changed";
     private static final String EVENT_VERSION = "v1";
     private static final String SYNTHETIC_SESSION_PREFIX = "tenant-policy::";
@@ -88,6 +91,7 @@ public class TenantPolicyService {
                     ? DEFAULT_RETRY_BACKOFF_MS
                     : request.retryBackoffMs();
             String dlqTopicSuffix = normalizeDlqTopicSuffix(request.dlqTopicSuffix());
+            String sessionMode = normalizeSessionMode(request.sessionMode());
 
             TenantPolicyState target;
             if (current == null) {
@@ -101,6 +105,7 @@ public class TenantPolicyService {
                         request.maxConcurrentSessions(),
                         request.rateLimitPerMinute(),
                         request.enabled(),
+                        sessionMode,
                         grayEnabled,
                         grayTrafficPercent,
                         fallbackFailOpen,
@@ -124,6 +129,7 @@ public class TenantPolicyService {
                             request.maxConcurrentSessions(),
                             request.rateLimitPerMinute(),
                             request.enabled(),
+                            sessionMode,
                             grayEnabled,
                             grayTrafficPercent,
                             fallbackFailOpen,
@@ -147,6 +153,7 @@ public class TenantPolicyService {
                         request.maxConcurrentSessions(),
                         request.rateLimitPerMinute(),
                         request.enabled(),
+                        sessionMode,
                         grayEnabled,
                         grayTrafficPercent,
                         fallbackFailOpen,
@@ -247,6 +254,7 @@ public class TenantPolicyService {
                     previous.maxConcurrentSessions(),
                     previous.rateLimitPerMinute(),
                     previous.enabled(),
+                    previous.sessionMode(),
                     previous.grayEnabled(),
                     previous.grayTrafficPercent(),
                     previous.controlPlaneFallbackFailOpen(),
@@ -305,6 +313,7 @@ public class TenantPolicyService {
                 state.maxConcurrentSessions(),
                 state.rateLimitPerMinute(),
                 state.enabled(),
+                state.sessionMode(),
                 state.grayEnabled(),
                 state.grayTrafficPercent(),
                 state.controlPlaneFallbackFailOpen(),
@@ -343,6 +352,19 @@ public class TenantPolicyService {
             return DEFAULT_DLQ_TOPIC_SUFFIX;
         }
         return dlqTopicSuffix;
+    }
+
+    private String normalizeSessionMode(String sessionMode) {
+        if (sessionMode == null || sessionMode.isBlank()) {
+            return DEFAULT_SESSION_MODE;
+        }
+        String normalized = sessionMode.trim().toUpperCase(Locale.ROOT);
+        if (!DEFAULT_SESSION_MODE.equals(normalized) && !SESSION_MODE_SMART_HOME.equals(normalized)) {
+            throw ControlPlaneException.invalidMessage(
+                    "sessionMode must be one of [TRANSLATION, SMART_HOME]",
+                    null);
+        }
+        return normalized;
     }
 
     private List<String> normalizeDistributionRegions(List<String> distributionRegions) {

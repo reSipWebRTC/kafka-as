@@ -31,6 +31,11 @@ public record TenantPolicyUpsertRequest(
         @NotNull(message = "enabled must not be null")
         Boolean enabled,
 
+        @Pattern(
+                regexp = "^(?i)(TRANSLATION|SMART_HOME)$",
+                message = "sessionMode must be TRANSLATION or SMART_HOME")
+        String sessionMode,
+
         Boolean grayEnabled,
 
         @Min(value = 0, message = "grayTrafficPercent must be >= 0")

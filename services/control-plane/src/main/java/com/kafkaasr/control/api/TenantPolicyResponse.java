@@ -10,6 +10,7 @@ public record TenantPolicyResponse(
         int maxConcurrentSessions,
         int rateLimitPerMinute,
         boolean enabled,
+        String sessionMode,
         boolean grayEnabled,
         int grayTrafficPercent,
         boolean controlPlaneFallbackFailOpen,
