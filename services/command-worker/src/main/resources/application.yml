@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: command-worker
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      group-id: ${COMMAND_CONSUMER_GROUP_ID:command-worker}
+      auto-offset-reset: latest
+      enable-auto-commit: false
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+server:
+  port: 8086
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      service: ${spring.application.name}
+      env: ${OBS_ENV:local}
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.10}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  pattern:
+    level: "%5p [service=${spring.application.name:-unknown},traceId=%X{traceId:-},spanId=%X{spanId:-}]"
+
+command:
+  kafka:
+    enabled: ${COMMAND_KAFKA_ENABLED:true}
+    asr-final-topic: ${COMMAND_ASR_FINAL_TOPIC:asr.final}
+    command-confirm-request-topic: ${COMMAND_CONFIRM_REQUEST_TOPIC:command.confirm.request}
+    command-result-topic: ${COMMAND_RESULT_TOPIC:command.result}
+    producer-id: ${COMMAND_PRODUCER_ID:command-worker}
+    retry-max-attempts: ${COMMAND_RETRY_MAX_ATTEMPTS:3}
+    retry-backoff-ms: ${COMMAND_RETRY_BACKOFF_MS:200}
+    dlq-topic-suffix: ${COMMAND_DLQ_TOPIC_SUFFIX:.dlq}
+    idempotency-enabled: ${COMMAND_IDEMPOTENCY_ENABLED:true}
+    idempotency-ttl-ms: ${COMMAND_IDEMPOTENCY_TTL_MS:300000}
+    compensation-topic: ${COMMAND_COMPENSATION_TOPIC:platform.compensation}
+  smarthome:
+    enabled: ${COMMAND_SMARTHOME_ENABLED:true}
+    base-url: ${COMMAND_SMARTHOME_BASE_URL:http://127.0.0.1:8000}
+    command-path: ${COMMAND_SMARTHOME_COMMAND_PATH:/api/v1/command}
+    confirm-path: ${COMMAND_SMARTHOME_CONFIRM_PATH:/api/v1/confirm}
+    timeout-ms: ${COMMAND_SMARTHOME_TIMEOUT_MS:1500}
+  control-plane:
+    enabled: ${COMMAND_CONTROL_PLANE_ENABLED:true}
+    base-url: ${COMMAND_CONTROL_PLANE_BASE_URL:http://localhost:8085}
+    request-timeout: ${COMMAND_CONTROL_PLANE_REQUEST_TIMEOUT:800ms}
+    policy-cache-ttl: ${COMMAND_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
+    fallback-fail-open: ${COMMAND_CONTROL_PLANE_FALLBACK_FAIL_OPEN:true}
+    policy-changed-topic: ${COMMAND_CONTROL_PLANE_POLICY_CHANGED_TOPIC:tenant.policy.changed}

@@ -38,7 +38,7 @@
 
 ## 3. 当前已实现 Topic
 
-截至 `2026-04-24`，仓库里已经落地并有代码/测试支撑的 Topic 如下：
+截至 `2026-04-25`，仓库里已经落地并有代码/测试支撑的 Topic 如下：
 
 | Topic | Producer | Consumer | Key | 说明 |
 | --- | --- | --- | --- | --- |
@@ -73,7 +73,8 @@
 当前状态：
 
 - `speech-gateway` 已完成 `command.confirm.request` 发布与 `command.result` 消费下发
-- `command-worker` 与 `tts-orchestrator` 的完整业务产消逻辑仍待后续 PR 落地
+- `command-worker` 已完成 `asr.final` / `command.confirm.request` 消费、smartHomeNlu 调用与 `command.result` 发布（含重试/DLQ/幂等/补偿）
+- `tts-orchestrator` 基于 `command.result` 的 SMART_HOME TTS 路由仍待后续 PR 落地
 
 ## 5. 计划扩展 Topic
 
