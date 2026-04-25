@@ -11,6 +11,7 @@ import com.kafkaasr.orchestrator.events.SessionControlPublisher;
 import com.kafkaasr.orchestrator.policy.TenantPolicy;
 import com.kafkaasr.orchestrator.policy.TenantPolicyClient;
 import com.kafkaasr.orchestrator.policy.TenantPolicyClientException;
+import com.kafkaasr.orchestrator.session.SessionProgressMarker;
 import com.kafkaasr.orchestrator.session.SessionState;
 import com.kafkaasr.orchestrator.session.SessionStateRepository;
 import com.kafkaasr.orchestrator.session.SessionStatus;
@@ -18,6 +19,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.concurrent.TimeUnit;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -139,6 +141,36 @@ public class SessionLifecycleService {
         }
     }
 
+    public ProgressUpdateResult recordProgress(String sessionId, SessionProgressMarker marker, long eventTsMs) {
+        try {
+            SessionState current = sessionStateRepository.findBySessionId(sessionId);
+            if (current == null) {
+                incrementProgressCounter(marker, "ignored", "SESSION_NOT_FOUND");
+                return ProgressUpdateResult.SESSION_NOT_FOUND;
+            }
+            if (!current.isActive()) {
+                incrementProgressCounter(marker, "ignored", "SESSION_CLOSED");
+                return ProgressUpdateResult.SESSION_CLOSED;
+            }
+
+            long effectiveTs = eventTsMs > 0 ? eventTsMs : nowMs();
+            SessionState updated = current.withProgress(marker, effectiveTs);
+            sessionStateRepository.save(updated);
+            incrementProgressCounter(marker, "updated", "OK");
+
+            long lagMs = Math.max(0L, nowMs() - effectiveTs);
+            meterRegistry.timer(
+                            "orchestrator.session.progress.lag",
+                            "event",
+                            marker.eventType())
+                    .record(lagMs, TimeUnit.MILLISECONDS);
+            return ProgressUpdateResult.UPDATED;
+        } catch (RuntimeException exception) {
+            incrementProgressCounter(marker, "error", normalizeErrorCode(exception));
+            throw exception;
+        }
+    }
+
     private StartResult createSession(SessionStartRequest request) {
         long now = nowMs();
         String traceId = coalesce(request.traceId(), prefixedId("trc"));
@@ -151,7 +183,13 @@ public class SessionLifecycleService {
                 SessionStatus.STREAMING,
                 1L,
                 now,
-                now);
+                now,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                "");
 
         SessionControlEvent event = toEvent(state, START_ACTION, null);
         SessionStartResponse response = new SessionStartResponse(
@@ -263,9 +301,8 @@ public class SessionLifecycleService {
         long now = nowMs();
         long nextSeq = current.lastSeq() + 1;
         String traceId = coalesce(request.traceId(), current.traceId(), prefixedId("trc"));
-        SessionState closed = current.withState(SessionStatus.CLOSED, traceId, nextSeq, now);
-
         String reason = coalesce(request.reason(), "client.stop");
+        SessionState closed = current.withState(SessionStatus.CLOSED, traceId, nextSeq, now, reason);
         SessionControlEvent event = toEvent(closed, STOP_ACTION, reason);
         SessionStopResponse response = new SessionStopResponse(
                 closed.sessionId(),
@@ -284,7 +321,8 @@ public class SessionLifecycleService {
                 SessionStatus.CLOSED,
                 traceId,
                 current.lastSeq(),
-                current.updatedAtMs());
+                current.updatedAtMs(),
+                coalesce(current.closeReason(), request.reason(), "already.closed"));
 
         SessionStopResponse response = new SessionStopResponse(
                 materialized.sessionId(),
@@ -335,6 +373,18 @@ public class SessionLifecycleService {
         return "";
     }
 
+    private void incrementProgressCounter(SessionProgressMarker marker, String result, String code) {
+        meterRegistry.counter(
+                        "orchestrator.session.progress.total",
+                        "event",
+                        marker.eventType(),
+                        "result",
+                        result,
+                        "code",
+                        code)
+                .increment();
+    }
+
     private String normalizeErrorCode(Throwable throwable) {
         if (throwable instanceof SessionControlException exception) {
             return exception.code();
@@ -355,5 +405,11 @@ public class SessionLifecycleService {
     }
 
     private record StopResult(SessionState state, SessionStopResponse response, SessionControlEvent event) {
+    }
+
+    public enum ProgressUpdateResult {
+        UPDATED,
+        SESSION_NOT_FOUND,
+        SESSION_CLOSED
     }
 }

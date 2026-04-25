@@ -14,7 +14,7 @@
 | 服务名 | 当前状态 | 当前已实现能力 | 主要依赖 |
 | --- | --- | --- | --- |
 | `speech-gateway` | 已落地骨架 | WebSocket 接入、可配置 WS token 鉴权、Kafka 音频发布、会话 start/stop 转发、会话级限流/背压、Kafka 驱动下行回推（`subtitle.*`/`tts.*`/`session.closed`）、下行 E2E 稳定性基线 | Kafka、`session-orchestrator` |
-| `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
+| `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布、`asr.partial/asr.final/translation.result/tts.ready/command.result` 聚合、idle/hard timeout 自动关闭与补偿信号基线 | Redis、Kafka、`control-plane` |
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、VAD 静音切段、发布 `asr.partial` / `asr.final`、FunASR 第一版生产联调基线 | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result`，OpenAI 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
 | `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`（`TRANSLATION`）与 `command.result`（`SMART_HOME`）、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control`/URL 签名/区域路由/回源回退、cache scope/shard 策略，HTTP synthesis 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
@@ -76,12 +76,13 @@
 - 消费 `tenant.policy.changed` 并刷新本地策略缓存
 - Redis 会话状态存储
 - `session.control` Kafka 发布
+- 消费 `asr.partial` / `asr.final` / `translation.result` / `tts.ready` / `command.result` 更新会话聚合进度
+- idle/hard timeout 定时扫描与自动 `session.stop` 编排（`session.control(status=CLOSED)`）
+- timeout 触发补偿信号发布（`ops.compensation -> platform.compensation`）
 
 当前未实现：
 
-- 结果聚合
-- 超时调度
-- 补偿与降级工作流
+- 高级跨服务补偿编排与降级工作流
 
 ### asr-worker
 

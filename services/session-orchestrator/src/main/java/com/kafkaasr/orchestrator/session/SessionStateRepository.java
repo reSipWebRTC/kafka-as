@@ -1,5 +1,7 @@
 package com.kafkaasr.orchestrator.session;
 
+import java.util.List;
+
 public interface SessionStateRepository {
 
     SessionState findBySessionId(String sessionId);
@@ -9,4 +11,6 @@ public interface SessionStateRepository {
     void save(SessionState state);
 
     long countActiveSessionsByTenantId(String tenantId);
+
+    List<SessionState> findActiveSessions();
 }

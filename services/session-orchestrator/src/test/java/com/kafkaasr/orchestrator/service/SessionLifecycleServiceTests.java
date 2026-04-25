@@ -13,6 +13,7 @@ import com.kafkaasr.orchestrator.events.SessionControlPublisher;
 import com.kafkaasr.orchestrator.policy.TenantPolicy;
 import com.kafkaasr.orchestrator.policy.TenantPolicyClient;
 import com.kafkaasr.orchestrator.policy.TenantPolicyClientException;
+import com.kafkaasr.orchestrator.session.SessionProgressMarker;
 import com.kafkaasr.orchestrator.session.SessionState;
 import com.kafkaasr.orchestrator.session.SessionStateRepository;
 import com.kafkaasr.orchestrator.session.SessionStatus;
@@ -201,7 +202,13 @@ class SessionLifecycleServiceTests {
                 SessionStatus.STREAMING,
                 1L,
                 1000L,
-                1000L));
+                1000L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                ""));
         tenantPolicyClient = new DelegatingTenantPolicyClient(tenantId -> Mono.just(new TenantPolicy(
                 tenantId,
                 "zh-CN",
@@ -240,6 +247,38 @@ class SessionLifecycleServiceTests {
                     assertEquals("RATE_LIMITED", exception.code());
                 })
                 .verify();
+    }
+
+    @Test
+    void recordProgressUpdatesAggregationTimestamps() {
+        StepVerifier.create(sessionLifecycleService.startSession(new SessionStartRequest(
+                        "sess-progress",
+                        "tenant-a",
+                        "zh-CN",
+                        "en-US",
+                        "trc-progress")))
+                .assertNext(response -> assertTrue(response.created()))
+                .verifyComplete();
+
+        SessionLifecycleService.ProgressUpdateResult result = sessionLifecycleService.recordProgress(
+                "sess-progress",
+                SessionProgressMarker.TTS_READY,
+                1710000000123L);
+
+        assertEquals(SessionLifecycleService.ProgressUpdateResult.UPDATED, result);
+        SessionState updated = stateRepository.findBySessionId("sess-progress");
+        assertEquals(SessionStatus.TTS_ACTIVE, updated.status());
+        assertEquals(1710000000123L, updated.lastTtsReadyAtMs());
+    }
+
+    @Test
+    void recordProgressIgnoresMissingSession() {
+        SessionLifecycleService.ProgressUpdateResult result = sessionLifecycleService.recordProgress(
+                "sess-missing",
+                SessionProgressMarker.ASR_PARTIAL,
+                1710000000456L);
+
+        assertEquals(SessionLifecycleService.ProgressUpdateResult.SESSION_NOT_FOUND, result);
     }
 
     @Test
@@ -334,8 +373,15 @@ class SessionLifecycleServiceTests {
         public long countActiveSessionsByTenantId(String tenantId) {
             return states.values().stream()
                     .filter(state -> state.tenantId().equals(tenantId))
-                    .filter(state -> state.status() == SessionStatus.STREAMING)
+                    .filter(SessionState::isActive)
                     .count();
+        }
+
+        @Override
+        public List<SessionState> findActiveSessions() {
+            return states.values().stream()
+                    .filter(SessionState::isActive)
+                    .toList();
         }
     }
 

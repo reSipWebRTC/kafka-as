@@ -64,7 +64,13 @@ class RedisSessionStateRepositoryTests {
                 SessionStatus.STREAMING,
                 1L,
                 1000L,
-                1000L);
+                1000L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                "");
         String payload = new ObjectMapper().writeValueAsString(expected);
         when(valueOperations.get("orchestrator:session:sess-2")).thenReturn(payload);
 
@@ -87,7 +93,13 @@ class RedisSessionStateRepositoryTests {
                 SessionStatus.STREAMING,
                 1L,
                 1000L,
-                1000L);
+                1000L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                "");
         when(valueOperations.setIfAbsent(eq("orchestrator:session:sess-3"), anyString(), eq(ttl)))
                 .thenReturn(true);
 
@@ -99,16 +111,22 @@ class RedisSessionStateRepositoryTests {
 
     @Test
     void countActiveSessionsByTenantIdCountsOnlyStreamingSessions() throws Exception {
-        SessionState streamingTenantA = new SessionState(
+        SessionState activeTenantA = new SessionState(
                 "sess-a1",
                 "tenant-a",
                 "zh-CN",
                 "en-US",
                 "trc-1",
-                SessionStatus.STREAMING,
+                SessionStatus.ASR_ACTIVE,
                 1L,
                 1000L,
-                1000L);
+                1000L,
+                900L,
+                0L,
+                0L,
+                0L,
+                0L,
+                "");
         SessionState closedTenantA = new SessionState(
                 "sess-a2",
                 "tenant-a",
@@ -118,7 +136,13 @@ class RedisSessionStateRepositoryTests {
                 SessionStatus.CLOSED,
                 2L,
                 1000L,
-                2000L);
+                2000L,
+                900L,
+                1200L,
+                0L,
+                0L,
+                0L,
+                "client.stop");
         SessionState streamingTenantB = new SessionState(
                 "sess-b1",
                 "tenant-b",
@@ -128,14 +152,20 @@ class RedisSessionStateRepositoryTests {
                 SessionStatus.STREAMING,
                 1L,
                 1000L,
-                1000L);
+                1000L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                "");
 
         when(redisTemplate.keys("orchestrator:session:*")).thenReturn(Set.of(
                 "orchestrator:session:sess-a1",
                 "orchestrator:session:sess-a2",
                 "orchestrator:session:sess-b1"));
         when(valueOperations.get("orchestrator:session:sess-a1"))
-                .thenReturn(new ObjectMapper().writeValueAsString(streamingTenantA));
+                .thenReturn(new ObjectMapper().writeValueAsString(activeTenantA));
         when(valueOperations.get("orchestrator:session:sess-a2"))
                 .thenReturn(new ObjectMapper().writeValueAsString(closedTenantA));
         when(valueOperations.get("orchestrator:session:sess-b1"))
@@ -144,5 +174,51 @@ class RedisSessionStateRepositoryTests {
         long count = repository.countActiveSessionsByTenantId("tenant-a");
 
         assertEquals(1L, count);
+    }
+
+    @Test
+    void findActiveSessionsReturnsOnlyNonClosedStates() throws Exception {
+        SessionState active = new SessionState(
+                "sess-live",
+                "tenant-a",
+                "zh-CN",
+                "en-US",
+                "trc-live",
+                SessionStatus.TRANSLATING,
+                2L,
+                1000L,
+                1500L,
+                1100L,
+                1200L,
+                1300L,
+                0L,
+                0L,
+                "");
+        SessionState closed = new SessionState(
+                "sess-closed",
+                "tenant-a",
+                "zh-CN",
+                "en-US",
+                "trc-closed",
+                SessionStatus.CLOSED,
+                3L,
+                1000L,
+                2000L,
+                1200L,
+                1300L,
+                1400L,
+                1500L,
+                0L,
+                "timeout.idle");
+
+        when(redisTemplate.keys("orchestrator:session:*"))
+                .thenReturn(Set.of("orchestrator:session:sess-live", "orchestrator:session:sess-closed"));
+        when(valueOperations.get("orchestrator:session:sess-live"))
+                .thenReturn(new ObjectMapper().writeValueAsString(active));
+        when(valueOperations.get("orchestrator:session:sess-closed"))
+                .thenReturn(new ObjectMapper().writeValueAsString(closed));
+
+        assertEquals(1, repository.findActiveSessions().size());
+        assertEquals("sess-live", repository.findActiveSessions().getFirst().sessionId());
     }
 }
