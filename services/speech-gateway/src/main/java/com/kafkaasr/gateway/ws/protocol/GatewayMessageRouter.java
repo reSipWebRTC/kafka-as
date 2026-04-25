@@ -12,6 +12,7 @@ import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionControlClientException;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
+import com.kafkaasr.gateway.ws.GatewayClientPerceivedMetrics;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.util.Map;
@@ -41,6 +42,7 @@ public class GatewayMessageRouter {
     private final SessionStopMessageDecoder sessionStopMessageDecoder;
     private final CommandConfirmMessageDecoder commandConfirmMessageDecoder;
     private final SessionControlClient sessionControlClient;
+    private final GatewayClientPerceivedMetrics clientPerceivedMetrics;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
     private final Map<String, SessionContext> sessionContexts = new ConcurrentHashMap<>();
@@ -55,6 +57,7 @@ public class GatewayMessageRouter {
             SessionStopMessageDecoder sessionStopMessageDecoder,
             CommandConfirmMessageDecoder commandConfirmMessageDecoder,
             SessionControlClient sessionControlClient,
+            GatewayClientPerceivedMetrics clientPerceivedMetrics,
             ObjectMapper objectMapper,
             MeterRegistry meterRegistry) {
         this.audioIngressPublisher = audioIngressPublisher;
@@ -66,6 +69,7 @@ public class GatewayMessageRouter {
         this.sessionStopMessageDecoder = sessionStopMessageDecoder;
         this.commandConfirmMessageDecoder = commandConfirmMessageDecoder;
         this.sessionControlClient = sessionControlClient;
+        this.clientPerceivedMetrics = clientPerceivedMetrics;
         this.objectMapper = objectMapper;
         this.meterRegistry = meterRegistry;
     }
@@ -135,7 +139,8 @@ public class GatewayMessageRouter {
                                 new SessionContext(
                                         request.tenantId(),
                                         request.userId(),
-                                        request.traceId())));
+                                        request.traceId())))
+                        .doOnSuccess(unused -> clientPerceivedMetrics.onSessionStarted(request.sessionId()));
             }
             case SESSION_PING_TYPE -> {
                 SessionPingMessage request = sessionPingMessageDecoder.decode(rawMessage);
@@ -150,6 +155,7 @@ public class GatewayMessageRouter {
                         request.sessionId(),
                         request.traceId(),
                         request.reason()))
+                        .doOnSuccess(unused -> clientPerceivedMetrics.onSessionClosed(request.sessionId()))
                         .doFinally(signalType -> sessionContexts.remove(request.sessionId()));
             }
             case COMMAND_CONFIRM_TYPE -> {

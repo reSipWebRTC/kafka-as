@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kafkaasr.gateway.ws.GatewayClientPerceivedMetrics;
 import com.kafkaasr.gateway.ws.GatewayDownlinkPublisher;
 import com.kafkaasr.gateway.ws.GatewaySessionRegistry;
 import io.micrometer.core.instrument.Counter;
@@ -43,12 +44,15 @@ class DownlinkE2EStabilityTests {
     @BeforeEach
     void setUp() {
         sessionRegistry = new GatewaySessionRegistry();
-        GatewayDownlinkPublisher downlinkPublisher = new GatewayDownlinkPublisher(objectMapper, sessionRegistry);
+        meterRegistry = new SimpleMeterRegistry();
+        GatewayDownlinkPublisher downlinkPublisher = new GatewayDownlinkPublisher(
+                objectMapper,
+                sessionRegistry,
+                new GatewayClientPerceivedMetrics(meterRegistry));
 
         GatewayDownlinkProperties properties = new GatewayDownlinkProperties();
         properties.setRetryMaxAttempts(3);
         TimedIdempotencyGuard idempotencyGuard = new TimedIdempotencyGuard(properties);
-        meterRegistry = new SimpleMeterRegistry();
 
         asrPartialConsumer = new AsrPartialDownlinkConsumer(
                 objectMapper,

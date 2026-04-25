@@ -23,11 +23,14 @@ class GatewayDownlinkPublisherTests {
     @Mock
     private GatewaySessionRegistry sessionRegistry;
 
+    @Mock
+    private GatewayClientPerceivedMetrics clientPerceivedMetrics;
+
     private GatewayDownlinkPublisher publisher;
 
     @BeforeEach
     void setUp() {
-        publisher = new GatewayDownlinkPublisher(new ObjectMapper(), sessionRegistry);
+        publisher = new GatewayDownlinkPublisher(new ObjectMapper(), sessionRegistry, clientPerceivedMetrics);
     }
 
     @Test
@@ -45,6 +48,25 @@ class GatewayDownlinkPublisherTests {
         assertTrue(payload.contains("\"sessionId\":\"sess-1\""));
         assertTrue(payload.contains("\"seq\":7"));
         assertTrue(payload.contains("\"text\":\"hello\""));
+        verify(clientPerceivedMetrics).onFirstSubtitleDelivered("sess-1");
+    }
+
+    @Test
+    void publishesSubtitleFinalPayload() {
+        when(sessionRegistry.emitToSession(eq("sess-1"), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(Mono.empty());
+
+        StepVerifier.create(publisher.publishSubtitleFinal("sess-1", 8L, "bonjour"))
+                .verifyComplete();
+
+        ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+        verify(sessionRegistry).emitToSession(eq("sess-1"), payloadCaptor.capture());
+        String payload = payloadCaptor.getValue();
+        assertTrue(payload.contains("\"type\":\"subtitle.final\""));
+        assertTrue(payload.contains("\"sessionId\":\"sess-1\""));
+        assertTrue(payload.contains("\"seq\":8"));
+        assertTrue(payload.contains("\"text\":\"bonjour\""));
+        verify(clientPerceivedMetrics).onFinalSubtitleDelivered("sess-1");
     }
 
     @Test
@@ -64,6 +86,7 @@ class GatewayDownlinkPublisherTests {
         String payload = payloadCaptor.getValue();
         assertTrue(payload.contains("\"type\":\"session.closed\""));
         assertTrue(payload.contains("\"reason\":\"client.stop\""));
+        verify(clientPerceivedMetrics).onSessionClosed("sess-1");
     }
 
     @Test
@@ -113,6 +136,7 @@ class GatewayDownlinkPublisherTests {
         assertTrue(payload.contains("\"sampleRate\":16000"));
         assertTrue(payload.contains("\"durationMs\":1234"));
         assertTrue(payload.contains("\"cacheKey\":\"tts_v1_abc\""));
+        verify(clientPerceivedMetrics).onTtsReadyDelivered("sess-1");
     }
 
     @Test
@@ -151,5 +175,6 @@ class GatewayDownlinkPublisherTests {
                 .verifyComplete();
 
         verify(sessionRegistry, never()).emitToSession(eq(""), org.mockito.ArgumentMatchers.anyString());
+        verify(clientPerceivedMetrics, never()).onFinalSubtitleDelivered(eq(""));
     }
 }
