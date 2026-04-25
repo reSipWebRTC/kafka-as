@@ -268,6 +268,47 @@ Related docs:
 
 - `docs/runbooks/platform-dlq-replay.md`
 
+### Run platform DLQ auto-recovery orchestration
+
+Run from repository root or from a feature worktree:
+
+```bash
+tools/platform-dlq-auto-recovery.sh
+```
+
+Default behavior:
+
+- consumes up to `200` events from `platform.dlq`
+- skips already recovered `eventId` from recovery ledger
+- executes replay dry-run by default (`DLQ_AUTO_RECOVERY_APPLY=0`)
+
+Common flags:
+
+- `DLQ_AUTO_RECOVERY_APPLY=1` (perform replay publish)
+- `DLQ_AUTO_RECOVERY_TENANT_FILTER=tenant-a`
+- `DLQ_AUTO_RECOVERY_SOURCE_TOPIC_FILTER=translation.result`
+- `DLQ_AUTO_RECOVERY_REASON_FILTER=MAX_RETRIES_EXCEEDED`
+- `DLQ_AUTO_RECOVERY_SERVICE_FILTER=translation-worker`
+- `DLQ_AUTO_RECOVERY_OUTPUT_MODE=fixed-topic`
+- `DLQ_AUTO_RECOVERY_FIXED_TOPIC=replay.platform.dlq`
+- `DLQ_AUTO_RECOVERY_EVENT_FILE=<jsonl>` (simulated/mock mode)
+- `DLQ_AUTO_RECOVERY_STATE_PATH=<jsonl>` (custom ledger path)
+
+Outputs:
+
+- `build/reports/platform-dlq-auto-recovery/platform-dlq-auto-recovery.json`
+- `build/reports/platform-dlq-auto-recovery/platform-dlq-auto-recovery-summary.md`
+- `build/reports/platform-dlq-auto-recovery/platform-dlq-auto-recovery-candidates.jsonl`
+- `build/reports/platform-dlq-auto-recovery/platform-dlq-auto-recovery-selected.jsonl`
+- `build/reports/platform-dlq-auto-recovery/platform-dlq-auto-recovery-failed.jsonl`
+- `build/reports/platform-dlq-auto-recovery/replay/platform-dlq-replay.json`
+- `build/state/platform-dlq-auto-recovery-success.jsonl`
+
+Related docs:
+
+- `docs/runbooks/platform-dlq-auto-recovery.md`
+- `docs/runbooks/platform-dlq-replay.md`
+
 ### Start local monitoring baseline
 
 Run from repository root:
