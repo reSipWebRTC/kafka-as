@@ -53,6 +53,8 @@ command:
     idempotency-enabled: ${COMMAND_IDEMPOTENCY_ENABLED:true}
     idempotency-ttl-ms: ${COMMAND_IDEMPOTENCY_TTL_MS:300000}
     compensation-topic: ${COMMAND_COMPENSATION_TOPIC:platform.compensation}
+    audit-topic: ${COMMAND_AUDIT_TOPIC:platform.audit}
+    platform-dlq-topic: ${COMMAND_PLATFORM_DLQ_TOPIC:platform.dlq}
   smarthome:
     enabled: ${COMMAND_SMARTHOME_ENABLED:true}
     base-url: ${COMMAND_SMARTHOME_BASE_URL:http://127.0.0.1:8000}

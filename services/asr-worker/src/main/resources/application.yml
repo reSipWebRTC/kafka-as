@@ -60,6 +60,8 @@ asr:
     idempotency-enabled: ${ASR_IDEMPOTENCY_ENABLED:true}
     idempotency-ttl-ms: ${ASR_IDEMPOTENCY_TTL_MS:300000}
     compensation-topic: ${ASR_COMPENSATION_TOPIC:platform.compensation}
+    audit-topic: ${ASR_AUDIT_TOPIC:platform.audit}
+    platform-dlq-topic: ${ASR_PLATFORM_DLQ_TOPIC:platform.dlq}
   inference:
     mode: ${ASR_INFERENCE_MODE:placeholder}
     vad:
