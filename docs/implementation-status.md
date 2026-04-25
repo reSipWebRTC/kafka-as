@@ -46,6 +46,7 @@
 - 已补齐 external-iam claim 映射与授权矩阵单测（读/写权限、租户范围、拒绝原因）
 - 已补齐控制面鉴权失败策略 simulated 演练脚本（`tools/control-plane-auth-failure-drill.sh`）：覆盖 JWKS 不可用/超时分类、hybrid fallback、指标与告警规则校验
 - 已补齐本地 JWKS + JWT 全链路 simulated 演练脚本（`tools/control-plane-jwks-jwt-drill.sh`）：覆盖 `external-iam` JWT 校验链路与 `hybrid` fallback 行为
+- Android 客户端示例已切换 WS 命令流主链路（`sherpa-asr-android`）：`session.start/audio.frame/session.stop/command.confirm` 上行与 `command.result/tts.ready` 下行，支持 `tts.ready` 优先与本地 TTS 回退
 - 全仓测试与 `tools/verify.sh` 校验基线
 
 ## 2. 服务模块现状
