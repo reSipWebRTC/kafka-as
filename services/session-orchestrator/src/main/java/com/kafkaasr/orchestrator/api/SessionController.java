@@ -3,6 +3,7 @@ package com.kafkaasr.orchestrator.api;
 import com.kafkaasr.orchestrator.service.SessionLifecycleService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,6 +26,11 @@ public class SessionController {
     @PostMapping(":start")
     public Mono<SessionStartResponse> start(@Valid @RequestBody SessionStartRequest request) {
         return sessionLifecycleService.startSession(request);
+    }
+
+    @GetMapping("/{sessionId}")
+    public Mono<SessionStatusResponse> get(@PathVariable @NotBlank String sessionId) {
+        return sessionLifecycleService.getSession(sessionId);
     }
 
     @PostMapping("/{sessionId}:stop")

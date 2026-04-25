@@ -2,6 +2,7 @@ package com.kafkaasr.orchestrator.service;
 
 import com.kafkaasr.orchestrator.api.SessionStartRequest;
 import com.kafkaasr.orchestrator.api.SessionStartResponse;
+import com.kafkaasr.orchestrator.api.SessionStatusResponse;
 import com.kafkaasr.orchestrator.api.SessionStopRequest;
 import com.kafkaasr.orchestrator.api.SessionStopResponse;
 import com.kafkaasr.orchestrator.events.OrchestratorKafkaProperties;
@@ -138,6 +139,37 @@ public class SessionLifecycleService {
                     .increment();
             sample.stop(meterRegistry.timer("orchestrator.session.stop.duration"));
             throw exception;
+        }
+    }
+
+    public Mono<SessionStatusResponse> getSession(String sessionId) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            SessionState state = sessionStateRepository.findBySessionId(sessionId);
+            if (state == null) {
+                throw SessionControlException.sessionNotFound(sessionId);
+            }
+
+            SessionStatusResponse response = toStatusResponse(state);
+            meterRegistry.counter(
+                            "orchestrator.session.get.total",
+                            "result",
+                            "found",
+                            "code",
+                            "OK")
+                    .increment();
+            return Mono.just(response);
+        } catch (RuntimeException exception) {
+            meterRegistry.counter(
+                            "orchestrator.session.get.total",
+                            "result",
+                            "error",
+                            "code",
+                            normalizeErrorCode(exception))
+                    .increment();
+            return Mono.error(exception);
+        } finally {
+            sample.stop(meterRegistry.timer("orchestrator.session.get.duration"));
         }
     }
 
@@ -371,6 +403,36 @@ public class SessionLifecycleService {
             }
         }
         return "";
+    }
+
+    private SessionStatusResponse toStatusResponse(SessionState state) {
+        return new SessionStatusResponse(
+                state.sessionId(),
+                state.tenantId(),
+                state.traceId(),
+                state.sourceLang(),
+                state.targetLang(),
+                state.status().name(),
+                state.lastSeq(),
+                state.startedAtMs(),
+                state.updatedAtMs(),
+                state.closeReason(),
+                state.lastPartialAtMs(),
+                state.lastFinalAtMs(),
+                state.lastTranslationAtMs(),
+                state.lastTtsReadyAtMs(),
+                state.lastCommandResultAtMs(),
+                elapsedOrNull(state.startedAtMs(), state.lastFinalAtMs()),
+                elapsedOrNull(state.startedAtMs(), state.lastTranslationAtMs()),
+                elapsedOrNull(state.startedAtMs(), state.lastTtsReadyAtMs()),
+                elapsedOrNull(state.startedAtMs(), state.lastCommandResultAtMs()));
+    }
+
+    private Long elapsedOrNull(long startAtMs, long eventAtMs) {
+        if (startAtMs <= 0 || eventAtMs <= 0) {
+            return null;
+        }
+        return Math.max(0L, eventAtMs - startAtMs);
     }
 
     private void incrementProgressCounter(SessionProgressMarker marker, String result, String code) {
