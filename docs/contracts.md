@@ -11,16 +11,16 @@
 - 第一批核心事件类型与字段
 - 错误码与版本演进规则
 
-## 1.1 当前实现注记（2026-04-24）
+## 1.1 当前实现注记（2026-04-25）
 
 本文件仍然是外部行为的权威定义，但当前仓库只实现了其中一部分。
 
 当前已经落地：
 
-- WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`
-- WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`session.closed`
+- WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`
+- WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`command.result`、`session.closed`
 - 低频控制 API：会话 start/stop、租户策略 get/put/rollback
-- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`
+- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`
 - 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
 - 核心 Kafka consumer 已落地重试与按源 Topic 的 `.dlq` 死信回退；`asr-worker`、`translation-worker`、`tts-orchestrator` 已支持按租户策略驱动重试参数与 DLQ 后缀
 - 核心 Kafka consumer 已落地 `idempotencyKey` 判重（TTL 窗口）与重复消息丢弃
@@ -50,7 +50,12 @@
 - `speech-gateway` 已实现：
   - WebSocket 上行 `command.confirm` -> Kafka `command.confirm.request`
   - Kafka `command.result` -> WebSocket 下行 `command.result`
-- `command-worker`、`tts-orchestrator` 对 `command.result` 的完整业务产消仍在后续 PR 继续落地
+- `command-worker` 已实现：
+  - 消费 `asr.final`（仅 `sessionMode=SMART_HOME`）
+  - 消费 `command.confirm.request`
+  - 调用 smartHomeNlu `/api/v1/command`、`/api/v1/confirm`
+  - 发布 `command.result`（含租户策略驱动重试/DLQ、幂等与补偿信号）
+- `tts-orchestrator` 基于 `command.result` 的 SMART_HOME 路由仍在后续 PR 继续落地
 - 事件 Envelope 扩展字段 `userId` 已在契约与当前网关实现中支持（随会话上下文透传）
 
 ## 2. 主数据路径（冻结）
