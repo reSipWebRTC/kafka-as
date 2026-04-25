@@ -109,6 +109,8 @@ flowchart LR
   人工部署与验收 runbook（服务启动顺序、鉴权演练、预发收口与通过标准）。
 - [runbooks/real-environment-collaboration.md](runbooks/real-environment-collaboration.md)
   真实环境协作 runbook（需要你提供什么、我来补什么、如何做预发/真实联调收口）。
+- [runbooks/platform-dlq-replay.md](runbooks/platform-dlq-replay.md)
+  统一死信重放 runbook（dry-run/apply、过滤策略、报告与失败处置）。
 - [html/README.md](html/README.md)
   HTML 原始资料与当前 Markdown 文档的映射关系。
 

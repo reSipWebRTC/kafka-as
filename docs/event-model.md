@@ -169,9 +169,10 @@
 - `IllegalArgumentException`（如 payload 非法）按不可重试处理，直接进入对应 DLQ
 - 核心 consumer 失败达到重试阈值后会额外发送 `ops.compensation`，并双写 `platform.audit` 审计事件
 
-下一步（运营化）：
+运营化现状（`2026-04-25`）：
 
-- 基于 `platform.dlq` 建立标准化重放与审计流程
+- 已提供 `tools/platform-dlq-replay.sh` 作为标准化重放入口（默认 dry-run，支持筛选与报告产物）
+- 重放 runbook 已落地：`docs/runbooks/platform-dlq-replay.md`
 
 以下情况最终都应进入统一死信治理：
 
@@ -221,6 +222,6 @@ FAILED
 6. `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`、`tts.chunk`、`tts.ready`
 6. `control-plane` 在策略 upsert 后发布 `tenant.policy.changed`，运行时服务消费后立即失效本地策略缓存
 
-仍未打通的部分：
+仍待深化的部分：
 
-- DLQ、补偿和故障恢复链路
+- `platform.dlq` 重放后的跨服务补偿编排与自动化恢复策略
