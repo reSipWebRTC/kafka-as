@@ -177,7 +177,7 @@ flowchart TB
 
 - 已承接 `audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.request`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`
 - 已落地消费侧固定重试、`.dlq` 死信回退、`idempotencyKey` 判重和补偿信号
-- 暂未落地统一重放流程和 Lag 治理文档化闭环
+- 已落地统一重放脚本入口（`tools/platform-dlq-replay.sh`），Lag 治理文档化闭环仍待补齐
 
 ### ASR Worker
 

@@ -24,6 +24,7 @@
 - 核心 Kafka 消费链路 `idempotencyKey` 判重与重复消息 no-op（含 `command-worker`）
 - 核心 Kafka 消费链路重复失败阈值补偿信号（`ops.compensation -> platform.compensation`，含 `command-worker`）
 - 核心补偿/超时路径已同步发布 `platform.audit` 事件（兼容保留 `platform.compensation`）
+- `tools/platform-dlq-replay.sh` 已落地统一重放运营入口（支持 tenant/sourceTopic/reason 过滤、dry-run/apply、结构化报告）
 - `session-orchestrator` 查询 `control-plane` 已落地第一版熔断 + 缓存回退（fail-open/fail-closed）
 - `session-orchestrator` 已消费 `asr.partial` / `asr.final` / `translation.result` / `tts.ready` / `command.result` 并写入会话聚合进度快照
 - `session-orchestrator` 已补齐 idle/hard timeout 自动关闭基线（超时触发 `session.control(status=CLOSED)`）与 timeout 补偿信号发布
@@ -144,7 +145,7 @@
 
 ## 5. 当前缺口
 
-- `platform.audit` / `platform.dlq` 已完成契约冻结并接入核心运行时路径（补偿审计双写 + 消费失败统一上报），后续仍需补齐统一重放运营流程
+- `platform.audit` / `platform.dlq` 已完成契约冻结并接入核心运行时路径；统一重放脚本基线已落地，后续仍需补齐跨服务自动恢复编排
 - 客户端播放阶段“端侧渲染卡顿”细粒度指标仍待补齐（当前基线已覆盖 `playback start/stall/complete/fallback`）
 - ASR / Translation / TTS 已落地第一版生产联调基线，并补齐仓库内 fault-drill 收口与预发收口入口；但尚未完成真实流量闭环与预发/生产容量实战
 - 对象存储 HA 治理、CDN 区域路由/多级缓存治理、完整补偿编排、自适应熔断/灰度治理，以及压测/告警升级实战证据仍待完善

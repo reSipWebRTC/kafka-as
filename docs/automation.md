@@ -233,6 +233,41 @@ Related docs:
 - `docs/runbooks/control-plane-iam-provider-integration.md`
 - `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`
 
+### Run platform DLQ replay operations
+
+Run from repository root or from a feature worktree:
+
+```bash
+tools/platform-dlq-replay.sh
+```
+
+Default behavior:
+
+- consumes up to `200` events from `platform.dlq`
+- applies filter selection only
+- dry-run by default (`DLQ_REPLAY_APPLY=0`)
+
+Common flags:
+
+- `DLQ_REPLAY_APPLY=1` (perform publish replay)
+- `DLQ_REPLAY_TENANT_FILTER=tenant-a`
+- `DLQ_REPLAY_SOURCE_TOPIC_FILTER=translation.result`
+- `DLQ_REPLAY_REASON_FILTER=MAX_RETRIES_EXCEEDED`
+- `DLQ_REPLAY_OUTPUT_MODE=fixed-topic`
+- `DLQ_REPLAY_FIXED_TOPIC=replay.platform.dlq`
+- `DLQ_REPLAY_EVENT_FILE=<jsonl>` (simulated/mock mode)
+
+Outputs:
+
+- `build/reports/platform-dlq-replay/platform-dlq-replay.json`
+- `build/reports/platform-dlq-replay/platform-dlq-replay-summary.md`
+- `build/reports/platform-dlq-replay/platform-dlq-replay-selected.jsonl`
+- `build/reports/platform-dlq-replay/platform-dlq-replay-failed.jsonl`
+
+Related docs:
+
+- `docs/runbooks/platform-dlq-replay.md`
+
 ### Start local monitoring baseline
 
 Run from repository root:
