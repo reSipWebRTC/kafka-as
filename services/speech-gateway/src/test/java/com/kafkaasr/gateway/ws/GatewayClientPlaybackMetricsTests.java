@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 class GatewayClientPlaybackMetricsTests {
 
     @Test
-    void recordsStartStallAndCompleteMetrics() {
+    void recordsStartStallBeginStallEndAndCompleteMetrics() {
         SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         GatewayClientPlaybackMetrics metrics = new GatewayClientPlaybackMetrics(meterRegistry);
 
@@ -41,6 +41,26 @@ class GatewayClientPlaybackMetricsTests {
                 "playback.metric",
                 "sess-1",
                 8L,
+                "stall.begin",
+                "remote",
+                null,
+                null,
+                "buffering",
+                "trc-1"));
+        metrics.onPlaybackMetric(new PlaybackMetricMessage(
+                "playback.metric",
+                "sess-1",
+                8L,
+                "stall.end",
+                "remote",
+                180L,
+                null,
+                "buffering",
+                "trc-1"));
+        metrics.onPlaybackMetric(new PlaybackMetricMessage(
+                "playback.metric",
+                "sess-1",
+                8L,
                 "complete",
                 "remote",
                 180L,
@@ -51,12 +71,20 @@ class GatewayClientPlaybackMetricsTests {
         Timer startTimer = meterRegistry.find("gateway.client.playback.duration")
                 .tags("stage", "start", "source", "remote")
                 .timer();
-        Timer stallTimer = meterRegistry.find("gateway.client.playback.duration")
-                .tags("stage", "stall", "source", "remote")
+        Timer stallEndTimer = meterRegistry.find("gateway.client.playback.duration")
+                .tags("stage", "stall.end", "source", "remote")
                 .timer();
         DistributionSummary stallCountSummary = meterRegistry.find("gateway.client.playback.stall.count")
                 .tags("source", "remote")
                 .summary();
+        Counter stallBeginCounter = meterRegistry.find("gateway.client.playback.total")
+                .tags(
+                        "stage", "stall.begin",
+                        "source", "remote",
+                        "reason", "buffering",
+                        "result", "recorded",
+                        "code", "OK")
+                .counter();
         Counter totalCounter = meterRegistry.find("gateway.client.playback.total")
                 .tags(
                         "stage", "start",
@@ -67,13 +95,15 @@ class GatewayClientPlaybackMetricsTests {
                 .counter();
 
         assertNotNull(startTimer);
-        assertNotNull(stallTimer);
+        assertNotNull(stallEndTimer);
         assertNotNull(stallCountSummary);
+        assertNotNull(stallBeginCounter);
         assertNotNull(totalCounter);
         assertEquals(1L, startTimer.count());
-        assertEquals(1L, stallTimer.count());
+        assertEquals(1L, stallEndTimer.count());
         assertEquals(1L, stallCountSummary.count());
         assertEquals(1.0, stallCountSummary.totalAmount(), 1e-9);
+        assertEquals(1.0, stallBeginCounter.count(), 1e-9);
         assertEquals(1.0, totalCounter.count(), 1e-9);
     }
 
@@ -104,5 +134,27 @@ class GatewayClientPlaybackMetricsTests {
         assertNotNull(fallbackCounter);
         assertEquals(1.0, fallbackCounter.count(), 1e-9);
     }
-}
 
+    @Test
+    void keepsLegacyStallStageCompatible() {
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        GatewayClientPlaybackMetrics metrics = new GatewayClientPlaybackMetrics(meterRegistry);
+
+        metrics.onPlaybackMetric(new PlaybackMetricMessage(
+                "playback.metric",
+                "sess-3",
+                10L,
+                "stall",
+                "remote",
+                120L,
+                null,
+                "buffering",
+                "trc-3"));
+
+        Timer timer = meterRegistry.find("gateway.client.playback.duration")
+                .tags("stage", "stall", "source", "remote")
+                .timer();
+        assertNotNull(timer);
+        assertEquals(1L, timer.count());
+    }
+}

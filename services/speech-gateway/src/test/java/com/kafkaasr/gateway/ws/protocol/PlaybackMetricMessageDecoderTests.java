@@ -1,6 +1,7 @@
 package com.kafkaasr.gateway.ws.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -42,6 +43,24 @@ class PlaybackMetricMessageDecoderTests {
     }
 
     @Test
+    void decodesStallBeginWithoutDuration() {
+        PlaybackMetricMessage message = decoder.decode("""
+                {
+                  "type": "playback.metric",
+                  "sessionId": "sess-1",
+                  "seq": 13,
+                  "stage": "stall.begin",
+                  "source": "remote",
+                  "reason": "buffering"
+                }
+                """);
+
+        assertEquals("stall.begin", message.stage());
+        assertEquals("remote", message.source());
+        assertNull(message.durationMs());
+    }
+
+    @Test
     void rejectsUnsupportedStage() {
         MessageValidationException exception = assertThrows(
                 MessageValidationException.class,
@@ -60,7 +79,7 @@ class PlaybackMetricMessageDecoderTests {
     }
 
     @Test
-    void rejectsDurationMissingForStartStage() {
+    void rejectsDurationMissingForStartStageAndStallEnd() {
         MessageValidationException exception = assertThrows(
                 MessageValidationException.class,
                 () -> decoder.decode("""
@@ -74,6 +93,20 @@ class PlaybackMetricMessageDecoderTests {
                         """));
 
         assertEquals("INVALID_MESSAGE", exception.code());
+
+        MessageValidationException stallEndException = assertThrows(
+                MessageValidationException.class,
+                () -> decoder.decode("""
+                        {
+                          "type": "playback.metric",
+                          "sessionId": "sess-1",
+                          "seq": 12,
+                          "stage": "stall.end",
+                          "source": "remote"
+                        }
+                        """));
+
+        assertEquals("INVALID_MESSAGE", stallEndException.code());
     }
 
     @Test
@@ -94,4 +127,3 @@ class PlaybackMetricMessageDecoderTests {
         assertEquals("SESSION_SEQ_INVALID", exception.code());
     }
 }
-

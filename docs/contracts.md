@@ -148,13 +148,15 @@
 | `session.ping` | 心跳 | `sessionId` `ts` |
 | `session.stop` | 主动结束 | `sessionId` |
 | `command.confirm` | 命令确认提交 | `sessionId` `seq` `confirmToken` `accept` |
-| `playback.metric` | 客户端播放阶段指标上报 | `sessionId` `seq` `stage(start/stall/complete/fallback)` `source(remote/local)` `durationMs?` `stallCount?` `reason?` |
+| `playback.metric` | 客户端播放阶段指标上报 | `sessionId` `seq` `stage(start/stall.begin/stall.end/stall/complete/fallback)` `source(remote/local)` `durationMs?` `stallCount?` `reason?` |
 
 当前实现说明：
 
 - `speech-gateway` 已接受 `session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`、`playback.metric`
 - `command.confirm` 已由 `speech-gateway` 转发至 Kafka Topic `command.confirm.request`（需先完成 `session.start` 建立 `tenantId/userId` 会话上下文）
 - `playback.metric` 由 `speech-gateway` 直接转化为观测指标（`gateway.client.playback.*`），不进入 Kafka 高频链路
+- `playback.metric.stage` 新增细粒度卡顿语义：`stall.begin`（卡顿开始）/`stall.end`（卡顿结束）；`stall` 保留为兼容旧客户端的单点卡顿事件
+- `durationMs` 要求：`start` / `stall.end` / `stall` 必填，`stall.begin` / `fallback` / `complete` 可选
 - 当 `gateway.auth.enabled=true` 时，`/ws/audio` 需要携带合法 token（`Authorization: Bearer <token>` 或 query 参数 `access_token`）
 - token 缺失/非法时，网关会下发 `session.error(code=AUTH_INVALID_TOKEN)` 并关闭连接
 

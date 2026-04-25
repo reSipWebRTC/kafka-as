@@ -74,7 +74,7 @@ public class GatewayClientPlaybackMetrics {
     private String normalizeStage(String stage) {
         String normalized = normalizeTagValue(stage);
         return switch (normalized) {
-            case "start", "stall", "complete", "fallback" -> normalized;
+            case "start", "stall", "stall.begin", "stall.end", "complete", "fallback" -> normalized;
             default -> "invalid";
         };
     }
@@ -92,7 +92,7 @@ public class GatewayClientPlaybackMetrics {
         if (normalized.equals("unknown")) {
             return switch (stage) {
                 case "start", "complete" -> "none";
-                case "stall" -> "buffering";
+                case "stall", "stall.begin", "stall.end" -> "buffering";
                 default -> "unknown";
             };
         }
@@ -125,7 +125,8 @@ public class GatewayClientPlaybackMetrics {
             if ((current >= 'a' && current <= 'z')
                     || (current >= '0' && current <= '9')
                     || current == '-'
-                    || current == '_') {
+                    || current == '_'
+                    || current == '.') {
                 normalized.append(current);
             } else {
                 normalized.append('_');
@@ -137,4 +138,3 @@ public class GatewayClientPlaybackMetrics {
         return normalized.toString();
     }
 }
-
