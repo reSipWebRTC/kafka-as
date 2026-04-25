@@ -2,6 +2,7 @@ package com.kafkaasr.orchestrator.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -272,6 +273,37 @@ class SessionLifecycleServiceTests {
     }
 
     @Test
+    void getSessionReturnsAggregatedTimestampsAndLatencies() {
+        StepVerifier.create(sessionLifecycleService.startSession(new SessionStartRequest(
+                        "sess-status",
+                        "tenant-a",
+                        "zh-CN",
+                        "en-US",
+                        "trc-status")))
+                .assertNext(response -> assertTrue(response.created()))
+                .verifyComplete();
+
+        SessionState started = stateRepository.findBySessionId("sess-status");
+        long asrFinalAt = started.startedAtMs() + 100L;
+        long translationAt = started.startedAtMs() + 200L;
+        sessionLifecycleService.recordProgress("sess-status", SessionProgressMarker.ASR_FINAL, asrFinalAt);
+        sessionLifecycleService.recordProgress("sess-status", SessionProgressMarker.TRANSLATION_RESULT, translationAt);
+
+        StepVerifier.create(sessionLifecycleService.getSession("sess-status"))
+                .assertNext(response -> {
+                    assertEquals("sess-status", response.sessionId());
+                    assertEquals("tenant-a", response.tenantId());
+                    assertEquals("TRANSLATING", response.status());
+                    assertEquals(asrFinalAt, response.lastFinalAtMs());
+                    assertEquals(translationAt, response.lastTranslationAtMs());
+                    assertEquals(100L, response.asrFinalLatencyMs());
+                    assertEquals(200L, response.translationLatencyMs());
+                    assertNull(response.ttsReadyLatencyMs());
+                })
+                .verifyComplete();
+    }
+
+    @Test
     void recordProgressIgnoresMissingSession() {
         SessionLifecycleService.ProgressUpdateResult result = sessionLifecycleService.recordProgress(
                 "sess-missing",
@@ -279,6 +311,16 @@ class SessionLifecycleServiceTests {
                 1710000000456L);
 
         assertEquals(SessionLifecycleService.ProgressUpdateResult.SESSION_NOT_FOUND, result);
+    }
+
+    @Test
+    void getSessionMissingReturnsSessionNotFound() {
+        StepVerifier.create(sessionLifecycleService.getSession("missing-session"))
+                .expectErrorSatisfies(error -> {
+                    SessionControlException exception = (SessionControlException) error;
+                    assertEquals("SESSION_NOT_FOUND", exception.code());
+                })
+                .verify();
     }
 
     @Test

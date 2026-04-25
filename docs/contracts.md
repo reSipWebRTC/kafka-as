@@ -19,7 +19,7 @@
 
 - WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`、`playback.metric`
 - WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`command.result`、`session.closed`
-- 低频控制 API：会话 start/stop、租户策略 get/put/rollback、策略分发状态查询
+- 低频控制 API：会话 start/stop/get、租户策略 get/put/rollback、策略分发状态查询
 - 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.request`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`、`platform.audit`、`platform.dlq`
 - 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
 - 核心 Kafka consumer 已落地重试与按源 Topic 的 `.dlq` 死信回退；`asr-worker`、`translation-worker`、`tts-orchestrator` 已支持按租户策略驱动重试参数与 DLQ 后缀
@@ -213,6 +213,18 @@
 - 返回指定 `tenantId + policyVersion` 在各运行时服务的执行回执聚合结果
 - `overallStatus` 取值：`PENDING`、`APPLIED`、`FAILED`、`IGNORED`、`PARTIAL`
 - `overallPass=true` 仅在 `overallStatus=APPLIED` 时成立
+
+### 5.5 Session-Orchestrator 会话状态查询 API（v1）
+
+路径：
+
+- `GET /api/v1/sessions/{sessionId}`
+
+响应语义：
+
+- 返回会话当前状态与聚合进度时间戳：`lastPartialAtMs`、`lastFinalAtMs`、`lastTranslationAtMs`、`lastTtsReadyAtMs`、`lastCommandResultAtMs`
+- 返回关键阶段耗时（相对 `startedAtMs`）：`asrFinalLatencyMs`、`translationLatencyMs`、`ttsReadyLatencyMs`、`commandResultLatencyMs`
+- 当阶段尚未到达时，对应耗时字段为 `null`
 
 ## 6. 错误码（v1）
 

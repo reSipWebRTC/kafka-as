@@ -17,7 +17,7 @@
 
 - 统一 v1 事件 Envelope
 - 14 个已落地 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.request`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`、`platform.audit`、`platform.dlq`
-- 低频控制 API：会话 start/stop、租户策略 get/put/rollback
+- 低频控制 API：会话 start/stop/get、租户策略 get/put/rollback
 - 网关 `audio.frame` 会话级限流/背压保护（`RATE_LIMITED` / `BACKPRESSURE_DROP`）
 - 核心 Kafka 消费链路已落地重试与按源 Topic 的 `.dlq` 死信回退（`asr-worker`、`translation-worker`、`tts-orchestrator`、`command-worker` 已升级到按租户策略驱动重试/DLQ）
 - 核心 Kafka 消费链路已在死信恢复时同步发布统一 `platform.dlq` 事件（兼容保留按源 Topic `.dlq`）
@@ -105,6 +105,7 @@
 | --- | --- | --- |
 | `session-orchestrator` | `POST /api/v1/sessions:start` | 创建或幂等返回会话 |
 | `session-orchestrator` | `POST /api/v1/sessions/{sessionId}:stop` | 关闭或幂等返回会话 |
+| `session-orchestrator` | `GET /api/v1/sessions/{sessionId}` | 查询会话状态与聚合进度（partial/final/translation/tts-ready/command） |
 | `control-plane` | `PUT /api/v1/tenants/{tenantId}/policy` | 创建/更新租户策略（当 `control.auth.enabled=true` 时需 Bearer Token 且具备写权限） |
 | `control-plane` | `GET /api/v1/tenants/{tenantId}/policy` | 查询租户策略（当 `control.auth.enabled=true` 时需 Bearer Token 且具备读权限） |
 | `control-plane` | `POST /api/v1/tenants/{tenantId}/policy:rollback` | 支持回滚上一版本或指定 `targetVersion` 并生成新版本；可选携带 `distributionRegions` 分发意图（当 `control.auth.enabled=true` 时需 Bearer Token 且具备写权限） |
