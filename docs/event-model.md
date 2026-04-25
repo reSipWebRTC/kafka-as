@@ -38,7 +38,7 @@
 
 ## 3. 当前已实现 Topic
 
-截至 `2026-04-25`，仓库里已经落地并有代码/测试支撑的 Topic 如下：
+截至 `2026-04-26`，仓库里已经落地并有代码/测试支撑的 Topic 如下：
 
 | Topic | Producer | Consumer | Key | 说明 |
 | --- | --- | --- | --- | --- |
@@ -175,6 +175,8 @@
 
 - 已提供 `tools/platform-dlq-replay.sh` 作为标准化重放入口（默认 dry-run，支持筛选与报告产物）
 - 重放 runbook 已落地：`docs/runbooks/platform-dlq-replay.md`
+- 已提供 `tools/platform-dlq-auto-recovery.sh` 作为跨服务自动恢复执行入口（恢复账本去重 + replay 编排 + 报告产物）
+- 自动恢复 runbook 已落地：`docs/runbooks/platform-dlq-auto-recovery.md`
 
 以下情况最终都应进入统一死信治理：
 
@@ -227,4 +229,4 @@ FAILED
 
 仍待深化的部分：
 
-- `platform.dlq` 重放后的跨服务补偿编排与自动化恢复策略
+- `platform.dlq` 自动恢复后的更细粒度会话级补偿编排策略
