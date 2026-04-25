@@ -50,6 +50,7 @@
 - `tools/preprod-drill-closure.sh` 已补齐预发一键收口入口（loadtest/fault-drill/Alertmanager 恢复采样聚合），并输出统一 `sloEvidence`（loadtest/fault/recovery）
 - `control-plane` 鉴权链路已补齐后端级决策/耗时指标与 hybrid 回退计数（`controlplane.auth.*`）
 - `tools/control-plane-auth-drill.sh` 已补齐控制面鉴权预发演练脚本，并可接入 `tools/preprod-drill-closure.sh` 的 `control-auth` 阶段
+- `control-plane` 策略存储已支持可切换后端（`control.policy-store.backend=redis|jdbc`，默认 `redis`），并保持版本化 upsert/rollback 与历史快照行为一致
 - 已补齐真实 IAM 对接准备层：参数模板（`deploy/env/control-plane-iam.env.template`）、预检脚本（`tools/control-plane-iam-precheck.sh`）与 runbook 清单
 - 已补齐 external-iam claim 映射与授权矩阵单测（读/写权限、租户范围、拒绝原因）
 - 已补齐控制面鉴权失败策略 simulated 演练脚本（`tools/control-plane-auth-failure-drill.sh`）：覆盖 JWKS 不可用/超时分类、hybrid fallback、指标与告警规则校验
@@ -67,7 +68,7 @@
 | `translation-worker` | `8083` | 消费 `asr.final` 后发布 `translation.request`，再消费 `translation.request` 生成并发布 `translation.result`；默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容、health 探测、并发保护、错误语义映射）；按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 真机容量/故障演练、术语治理、上下文增强 |
 | `tts-orchestrator` | `8084` | 消费 `translation.result`（仅 `sessionMode=TRANSLATION`）与 `command.result`（仅 `sessionMode=SMART_HOME`）、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容、health 探测、并发保护、错误语义映射）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、`tts.ready` 支持可配置 S3/MinIO 上传并回填真实 `playbackUrl`、支持 `cache-control` 与 `expires/sig` URL 签名策略、支持区域 CDN 路由/回源回退与可配置 cache scope/shard 策略、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS 真机容量/故障演练、对象存储高可用治理、CDN 区域路由与高级缓存治理 |
 | `command-worker` | `8086` | 消费 `asr.final`（仅 `sessionMode=SMART_HOME`）与 `command.confirm.request`、调用 smartHomeNlu `/api/v1/command` 与 `/api/v1/confirm`、发布 `command.result`、按租户策略驱动重试/DLQ（含控制面失败回退）、`idempotencyKey` 判重与补偿信号 | smartHomeNlu 真实环境联调、命令执行侧容量/故障演练 |
-| `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、`POST /api/v1/tenants/{tenantId}/policy:rollback`（支持可选 `targetVersion` / `distributionRegions`）、Redis 策略存储、版本化 upsert/rollback、历史快照栈、灰度/回退/可靠性策略字段、可配置 Bearer Token 鉴权与授权（读/写权限 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 切换与 JWKS 外部 IAM 校验后端骨架、鉴权决策/耗时/回退指标（`controlplane.auth.*`）、真实 IAM 对接参数模板与预检工具、external-iam claim 映射与授权矩阵单测、鉴权失败策略 simulated 演练脚本、本地 JWKS + JWT 全链路 simulated 演练脚本、`tenant.policy.changed` 发布（含 `sourcePolicyVersion` / `targetPolicyVersion` / `distributionRegions`） | 外部 IAM/RBAC 提供方联调与生产级运行保障（真实参数、阈值与告警闭环）、持久化数据库、跨区域分发与高级版本编排治理、跨区域分发实际执行链路 |
+| `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、`POST /api/v1/tenants/{tenantId}/policy:rollback`（支持可选 `targetVersion` / `distributionRegions`）、策略存储后端可切换（`redis` 默认 + `jdbc` 可选）、版本化 upsert/rollback、历史快照栈、灰度/回退/可靠性策略字段、可配置 Bearer Token 鉴权与授权（读/写权限 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 切换与 JWKS 外部 IAM 校验后端骨架、鉴权决策/耗时/回退指标（`controlplane.auth.*`）、真实 IAM 对接参数模板与预检工具、external-iam claim 映射与授权矩阵单测、鉴权失败策略 simulated 演练脚本、本地 JWKS + JWT 全链路 simulated 演练脚本、`tenant.policy.changed` 发布（含 `sourcePolicyVersion` / `targetPolicyVersion` / `distributionRegions`） | 外部 IAM/RBAC 提供方联调与生产级运行保障（真实参数、阈值与告警闭环）、跨区域分发与高级版本编排治理、跨区域分发实际执行链路 |
 
 ## 3. 当前协议与接口面
 
