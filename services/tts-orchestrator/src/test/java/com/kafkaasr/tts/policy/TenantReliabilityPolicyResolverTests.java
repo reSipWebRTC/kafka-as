@@ -24,7 +24,7 @@ class TenantReliabilityPolicyResolverTests {
     @Test
     void resolvesTenantPolicyFromControlPlane() {
         QueueExchangeFunction exchangeFunction = new QueueExchangeFunction();
-        exchangeFunction.enqueue(successResponse(4, 350L, ".tenant-a.dlq", true, 45000L));
+        exchangeFunction.enqueue(successResponse(4, 350L, ".tenant-a.dlq", true, 45000L, "SMART_HOME"));
 
         TenantReliabilityPolicyResolver resolver = new TenantReliabilityPolicyResolver(
                 WebClient.builder().exchangeFunction(exchangeFunction).build(),
@@ -37,6 +37,7 @@ class TenantReliabilityPolicyResolverTests {
         assertEquals(4, policy.retryMaxAttempts());
         assertEquals(350L, policy.retryBackoffMs());
         assertEquals(".tenant-a.dlq", policy.dlqTopicSuffix());
+        assertEquals("SMART_HOME", policy.sessionMode());
     }
 
     @Test
@@ -55,12 +56,13 @@ class TenantReliabilityPolicyResolverTests {
         assertEquals(3, policy.retryMaxAttempts());
         assertEquals(200L, policy.retryBackoffMs());
         assertEquals(".dlq", policy.dlqTopicSuffix());
+        assertEquals("TRANSLATION", policy.sessionMode());
     }
 
     @Test
     void usesCachedPolicyWhenFailOpenEnabledAndControlPlaneFails() {
         QueueExchangeFunction exchangeFunction = new QueueExchangeFunction();
-        exchangeFunction.enqueue(successResponse(5, 500L, ".tenant-a.dlq", true, 60000L));
+        exchangeFunction.enqueue(successResponse(5, 500L, ".tenant-a.dlq", true, 60000L, "SMART_HOME"));
         exchangeFunction.enqueue(ClientResponse.create(HttpStatus.SERVICE_UNAVAILABLE).build());
 
         TenantReliabilityPolicyResolver resolver = new TenantReliabilityPolicyResolver(
@@ -75,14 +77,15 @@ class TenantReliabilityPolicyResolverTests {
         assertEquals(5, first.retryMaxAttempts());
         assertEquals(5, second.retryMaxAttempts());
         assertEquals(".tenant-a.dlq", second.dlqTopicSuffix());
+        assertEquals("SMART_HOME", second.sessionMode());
         assertEquals(1, exchangeFunction.calls());
     }
 
     @Test
     void invalidateTenantClearsCachedPolicyAndForcesRefresh() {
         QueueExchangeFunction exchangeFunction = new QueueExchangeFunction();
-        exchangeFunction.enqueue(successResponse(4, 350L, ".tenant-a.dlq", true, 60000L));
-        exchangeFunction.enqueue(successResponse(6, 650L, ".tenant-a.v2.dlq", true, 60000L));
+        exchangeFunction.enqueue(successResponse(4, 350L, ".tenant-a.dlq", true, 60000L, "TRANSLATION"));
+        exchangeFunction.enqueue(successResponse(6, 650L, ".tenant-a.v2.dlq", true, 60000L, "SMART_HOME"));
 
         TenantReliabilityPolicyResolver resolver = new TenantReliabilityPolicyResolver(
                 WebClient.builder().exchangeFunction(exchangeFunction).build(),
@@ -97,6 +100,7 @@ class TenantReliabilityPolicyResolverTests {
         assertEquals(4, first.retryMaxAttempts());
         assertEquals(6, second.retryMaxAttempts());
         assertEquals(".tenant-a.v2.dlq", second.dlqTopicSuffix());
+        assertEquals("SMART_HOME", second.sessionMode());
         assertEquals(2, exchangeFunction.calls());
     }
 
@@ -123,7 +127,8 @@ class TenantReliabilityPolicyResolverTests {
             long retryBackoffMs,
             String dlqTopicSuffix,
             boolean failOpen,
-            long cacheTtlMs) {
+            long cacheTtlMs,
+            String sessionMode) {
         String body = """
                 {
                   "tenantId": "tenant-a",
@@ -131,9 +136,10 @@ class TenantReliabilityPolicyResolverTests {
                   "controlPlaneFallbackCacheTtlMs": %d,
                   "retryMaxAttempts": %d,
                   "retryBackoffMs": %d,
-                  "dlqTopicSuffix": "%s"
+                  "dlqTopicSuffix": "%s",
+                  "sessionMode": "%s"
                 }
-                """.formatted(failOpen, cacheTtlMs, retryMaxAttempts, retryBackoffMs, dlqTopicSuffix);
+                """.formatted(failOpen, cacheTtlMs, retryMaxAttempts, retryBackoffMs, dlqTopicSuffix, sessionMode);
         return ClientResponse.create(HttpStatus.OK)
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .body(body)

@@ -7,7 +7,9 @@ import com.kafkaasr.tts.events.TtsReadyEvent;
 import com.kafkaasr.tts.events.TtsReadyPayload;
 import com.kafkaasr.tts.events.TtsRequestEvent;
 import com.kafkaasr.tts.events.TtsRequestPayload;
+import com.kafkaasr.tts.events.CommandResultEvent;
 import com.kafkaasr.tts.events.TranslationResultEvent;
+import com.kafkaasr.tts.events.TranslationResultPayload;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -22,7 +24,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class TtsRequestPipelineService {
 
-    private static final String INPUT_EVENT_TYPE = "translation.result";
+    private static final String INPUT_TRANSLATION_EVENT_TYPE = "translation.result";
+    private static final String INPUT_COMMAND_RESULT_EVENT_TYPE = "command.result";
     private static final String OUTPUT_REQUEST_EVENT_TYPE = "tts.request";
     private static final String OUTPUT_CHUNK_EVENT_TYPE = "tts.chunk";
     private static final String OUTPUT_READY_EVENT_TYPE = "tts.ready";
@@ -162,11 +165,17 @@ public class TtsRequestPipelineService {
         return new PipelineOutput(requestEvent, chunkEvent, readyEvent);
     }
 
+    public PipelineOutput toPipelineEvents(CommandResultEvent commandResultEvent) {
+        validateCommandResultEvent(commandResultEvent);
+        TranslationResultEvent bridgeTranslationResult = toBridgeTranslationResult(commandResultEvent);
+        return toPipelineEvents(bridgeTranslationResult);
+    }
+
     private void validateTranslationResultEvent(TranslationResultEvent translationResultEvent) {
         if (translationResultEvent == null) {
             throw new IllegalArgumentException("translation.result event must not be null");
         }
-        if (!INPUT_EVENT_TYPE.equals(translationResultEvent.eventType())) {
+        if (!INPUT_TRANSLATION_EVENT_TYPE.equals(translationResultEvent.eventType())) {
             throw new IllegalArgumentException("Unsupported translation.result eventType: " + translationResultEvent.eventType());
         }
         if (translationResultEvent.sessionId() == null || translationResultEvent.sessionId().isBlank()) {
@@ -181,6 +190,51 @@ public class TtsRequestPipelineService {
         if (translationResultEvent.payload() == null) {
             throw new IllegalArgumentException("payload is required");
         }
+    }
+
+    private void validateCommandResultEvent(CommandResultEvent commandResultEvent) {
+        if (commandResultEvent == null) {
+            throw new IllegalArgumentException("command.result event must not be null");
+        }
+        if (!INPUT_COMMAND_RESULT_EVENT_TYPE.equals(commandResultEvent.eventType())) {
+            throw new IllegalArgumentException("Unsupported command.result eventType: " + commandResultEvent.eventType());
+        }
+        if (commandResultEvent.sessionId() == null || commandResultEvent.sessionId().isBlank()) {
+            throw new IllegalArgumentException("sessionId is required");
+        }
+        if (commandResultEvent.traceId() == null || commandResultEvent.traceId().isBlank()) {
+            throw new IllegalArgumentException("traceId is required");
+        }
+        if (commandResultEvent.tenantId() == null || commandResultEvent.tenantId().isBlank()) {
+            throw new IllegalArgumentException("tenantId is required");
+        }
+        if (commandResultEvent.payload() == null) {
+            throw new IllegalArgumentException("payload is required");
+        }
+    }
+
+    private TranslationResultEvent toBridgeTranslationResult(CommandResultEvent commandResultEvent) {
+        String ttsText = commandResultEvent.payload().ttsText();
+        String replyText = commandResultEvent.payload().replyText();
+        String normalizedText = normalizeText(ttsText, replyText);
+        return new TranslationResultEvent(
+                commandResultEvent.eventId(),
+                INPUT_TRANSLATION_EVENT_TYPE,
+                commandResultEvent.eventVersion(),
+                commandResultEvent.traceId(),
+                commandResultEvent.sessionId(),
+                commandResultEvent.tenantId(),
+                commandResultEvent.roomId(),
+                commandResultEvent.producer(),
+                commandResultEvent.seq(),
+                commandResultEvent.ts(),
+                commandResultEvent.idempotencyKey(),
+                new TranslationResultPayload(
+                        replyText,
+                        normalizedText,
+                        FALLBACK_LANGUAGE,
+                        FALLBACK_LANGUAGE,
+                        "command-worker"));
     }
 
     private String normalizeText(String translatedText, String sourceText) {

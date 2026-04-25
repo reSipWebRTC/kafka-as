@@ -17,7 +17,7 @@
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、VAD 静音切段、发布 `asr.partial` / `asr.final`、FunASR 第一版生产联调基线 | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result`，OpenAI 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
-| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control`/URL 签名/区域路由/回源回退、cache scope/shard 策略，HTTP synthesis 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
+| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`（`TRANSLATION`）与 `command.result`（`SMART_HOME`）、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control`/URL 签名/区域路由/回源回退、cache scope/shard 策略，HTTP synthesis 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
 | `command-worker` | 已落地骨架 | 消费 `asr.final`（仅 `SMART_HOME`）与 `command.confirm.request`、调用 smartHomeNlu `/api/v1/command` + `/api/v1/confirm`、发布 `command.result`、租户策略驱动重试/DLQ、幂等与补偿信号基线 | Kafka、`control-plane`、smartHomeNlu |
 | `control-plane` | 已落地骨架 | 租户策略 HTTP API、可配置 Bearer Token 鉴权/授权（读写 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 鉴权后端切换、JWKS 外部 IAM 校验后端骨架、Redis 存储、版本化 upsert/rollback（支持 `targetVersion` / `distributionRegions`）、策略历史快照、`tenant.policy.changed` 发布 | Redis、Kafka |
 
@@ -142,7 +142,8 @@
 
 当前已经实现：
 
-- `translation.result` 消费
+- `translation.result` 消费（仅 `sessionMode=TRANSLATION`）
+- `command.result` 消费（仅 `sessionMode=SMART_HOME`）
 - 规则 voice 选择 + 可切换 HTTP voice-policy 适配入口
 - 可切换 HTTP TTS synthesis 适配入口
 - TTS synthesis 响应兼容与错误语义加固（`code/status` 校验、`error` 快速失败、boolean-like stream 兼容）
@@ -183,7 +184,6 @@
 当前未实现：
 
 - smartHomeNlu 真实环境容量/故障演练与运行保障
-- 与 `tts-orchestrator` 的 SMART_HOME 语音播报路由闭环
 
 ### control-plane
 

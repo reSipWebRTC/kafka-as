@@ -55,7 +55,10 @@
   - 消费 `command.confirm.request`
   - 调用 smartHomeNlu `/api/v1/command`、`/api/v1/confirm`
   - 发布 `command.result`（含租户策略驱动重试/DLQ、幂等与补偿信号）
-- `tts-orchestrator` 基于 `command.result` 的 SMART_HOME 路由仍在后续 PR 继续落地
+- `tts-orchestrator` 已实现：
+  - 消费 `command.result`（仅 `sessionMode=SMART_HOME`）
+  - 消费 `translation.result`（仅 `sessionMode=TRANSLATION`）
+  - 双路径统一发布 `tts.request` / `tts.chunk` / `tts.ready`
 - 事件 Envelope 扩展字段 `userId` 已在契约与当前网关实现中支持（随会话上下文透传）
 
 ## 2. 主数据路径（冻结）

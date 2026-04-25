@@ -74,7 +74,8 @@
 
 - `speech-gateway` 已完成 `command.confirm.request` 发布与 `command.result` 消费下发
 - `command-worker` 已完成 `asr.final` / `command.confirm.request` 消费、smartHomeNlu 调用与 `command.result` 发布（含重试/DLQ/幂等/补偿）
-- `tts-orchestrator` 基于 `command.result` 的 SMART_HOME TTS 路由仍待后续 PR 落地
+- `tts-orchestrator` 已完成 `command.result` 消费并按 `sessionMode=SMART_HOME` 产出 `tts.request` / `tts.chunk` / `tts.ready`
+- `tts-orchestrator` 对 `translation.result` 已按租户 `sessionMode` 分流：`TRANSLATION` 处理，`SMART_HOME` 忽略
 
 ## 5. 计划扩展 Topic
 

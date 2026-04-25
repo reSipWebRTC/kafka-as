@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.kafkaasr.tts.events.CommandResultEvent;
+import com.kafkaasr.tts.events.CommandResultPayload;
 import com.kafkaasr.tts.events.TtsKafkaProperties;
 import com.kafkaasr.tts.events.TranslationResultEvent;
 import com.kafkaasr.tts.events.TranslationResultPayload;
@@ -86,6 +88,106 @@ class TtsRequestPipelineServiceTests {
                 "https://cdn.local/tts/" + out.requestEvent().payload().cacheKey() + ".wav",
                 out.readyEvent().payload().playbackUrl());
         assertEquals(out.requestEvent().payload().cacheKey(), out.readyEvent().payload().cacheKey());
+    }
+
+    @Test
+    void mapsCommandResultToTtsPipelineEvents() {
+        TtsKafkaProperties properties = new TtsKafkaProperties();
+        properties.setProducerId("tts-orchestrator");
+        properties.setDefaultVoice("voice-default");
+        properties.setStreamEnabled(true);
+        properties.setTtsChunkCodec("audio/pcm");
+        properties.setTtsChunkSampleRate(16000);
+        properties.setTtsReadyPlaybackUrlPrefix("https://cdn.local/tts");
+
+        VoicePolicy voicePolicy = (event, language, defaultVoice) -> defaultVoice;
+        TtsSynthesisEngine synthesisEngine = (event, input) -> new TtsSynthesisEngine.SynthesisPlan(
+                input.text(),
+                input.language(),
+                input.voice(),
+                input.stream());
+        TtsRequestPipelineService service = new TtsRequestPipelineService(
+                voicePolicy,
+                synthesisEngine,
+                properties,
+                Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
+
+        CommandResultEvent input = new CommandResultEvent(
+                "evt-cmd-1",
+                "command.result",
+                "v1",
+                "trc-9",
+                "sess-9",
+                "tenant-a",
+                "user-a",
+                null,
+                "command-worker",
+                12L,
+                1713744000000L,
+                "sess-9:command.result:asr.final:12",
+                new CommandResultPayload(
+                        "ok",
+                        "OK",
+                        "执行成功",
+                        "请查看设备状态",
+                        false,
+                        null,
+                        null,
+                        "device.control",
+                        "status"));
+
+        TtsRequestPipelineService.PipelineOutput out = service.toPipelineEvents(input);
+
+        assertEquals("tts.request", out.requestEvent().eventType());
+        assertEquals("trc-9", out.requestEvent().traceId());
+        assertEquals("sess-9", out.requestEvent().sessionId());
+        assertEquals("tenant-a", out.requestEvent().tenantId());
+        assertEquals(12L, out.requestEvent().seq());
+        assertEquals("请查看设备状态", out.requestEvent().payload().text());
+        assertEquals("und", out.requestEvent().payload().language());
+        assertTrue(out.requestEvent().payload().cacheKey().startsWith("tts:v1:"));
+        assertEquals("sess-9:tts.request:12", out.requestEvent().idempotencyKey());
+    }
+
+    @Test
+    void rejectsUnexpectedCommandResultEventType() {
+        TtsRequestPipelineService service = new TtsRequestPipelineService(
+                (event, language, defaultVoice) -> "voice-default",
+                (event, input) -> new TtsSynthesisEngine.SynthesisPlan(
+                        input.text(),
+                        input.language(),
+                        input.voice(),
+                        input.stream()),
+                new TtsKafkaProperties(),
+                Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
+
+        CommandResultEvent invalid = new CommandResultEvent(
+                "evt-cmd-2",
+                "translation.result",
+                "v1",
+                "trc-10",
+                "sess-10",
+                "tenant-a",
+                "user-a",
+                null,
+                "command-worker",
+                13L,
+                1713744000000L,
+                "sess-10:translation.result:13",
+                new CommandResultPayload(
+                        "ok",
+                        "OK",
+                        "执行成功",
+                        null,
+                        false,
+                        null,
+                        null,
+                        "device.control",
+                        "status"));
+
+        IllegalArgumentException exception =
+                assertThrows(IllegalArgumentException.class, () -> service.toPipelineEvents(invalid));
+        assertTrue(exception.getMessage().contains("Unsupported command.result eventType"));
     }
 
     @Test
