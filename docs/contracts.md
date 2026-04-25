@@ -17,7 +17,7 @@
 
 当前已经落地：
 
-- WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`
+- WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`、`playback.metric`
 - WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`command.result`、`session.closed`
 - 低频控制 API：会话 start/stop、租户策略 get/put/rollback
 - 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`
@@ -137,11 +137,13 @@
 | `session.ping` | 心跳 | `sessionId` `ts` |
 | `session.stop` | 主动结束 | `sessionId` |
 | `command.confirm` | 命令确认提交 | `sessionId` `seq` `confirmToken` `accept` |
+| `playback.metric` | 客户端播放阶段指标上报 | `sessionId` `seq` `stage(start/stall/complete/fallback)` `source(remote/local)` `durationMs?` `stallCount?` `reason?` |
 
 当前实现说明：
 
-- `speech-gateway` 已接受 `session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`
+- `speech-gateway` 已接受 `session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`、`playback.metric`
 - `command.confirm` 已由 `speech-gateway` 转发至 Kafka Topic `command.confirm.request`（需先完成 `session.start` 建立 `tenantId/userId` 会话上下文）
+- `playback.metric` 由 `speech-gateway` 直接转化为观测指标（`gateway.client.playback.*`），不进入 Kafka 高频链路
 - 当 `gateway.auth.enabled=true` 时，`/ws/audio` 需要携带合法 token（`Authorization: Bearer <token>` 或 query 参数 `access_token`）
 - token 缺失/非法时，网关会下发 `session.error(code=AUTH_INVALID_TOKEN)` 并关闭连接
 

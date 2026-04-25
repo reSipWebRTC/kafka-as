@@ -6,7 +6,10 @@ import android.util.Log
 
 class RemoteTtsPlayer(
     private val onPlaybackStateChanged: (Boolean) -> Unit,
-    private val onError: (String) -> Unit
+    private val onPlaybackStarted: (Long) -> Unit,
+    private val onPlaybackStall: (Long, Long) -> Unit,
+    private val onPlaybackCompleted: (Long, Int, Long) -> Unit,
+    private val onError: (Long?, String) -> Unit
 ) {
     private val tag = "RemoteTtsPlayer"
 
@@ -16,15 +19,31 @@ class RemoteTtsPlayer(
     @Volatile
     private var playing: Boolean = false
 
+    @Volatile
+    private var activeSeq: Long? = null
+
+    @Volatile
+    private var bufferingStartedAtMs: Long? = null
+
+    @Volatile
+    private var stallCount: Int = 0
+
+    @Volatile
+    private var totalStallDurationMs: Long = 0
+
     fun isPlaying(): Boolean = playing
 
-    fun play(url: String): Boolean {
+    fun play(url: String, seq: Long): Boolean {
         if (url.isBlank()) {
             return false
         }
         stop(notifyState = false)
 
         return runCatching {
+            activeSeq = seq
+            bufferingStartedAtMs = null
+            stallCount = 0
+            totalStallDurationMs = 0
             val player = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -36,15 +55,38 @@ class RemoteTtsPlayer(
                 setOnPreparedListener {
                     playing = true
                     onPlaybackStateChanged(true)
+                    onPlaybackStarted(seq)
                     it.start()
                 }
+                setOnInfoListener { _, what, _ ->
+                    when (what) {
+                        MediaPlayer.MEDIA_INFO_BUFFERING_START -> {
+                            if (bufferingStartedAtMs == null) {
+                                bufferingStartedAtMs = System.currentTimeMillis()
+                            }
+                        }
+
+                        MediaPlayer.MEDIA_INFO_BUFFERING_END -> {
+                            val startAt = bufferingStartedAtMs
+                            if (startAt != null) {
+                                val durationMs = (System.currentTimeMillis() - startAt).coerceAtLeast(0L)
+                                bufferingStartedAtMs = null
+                                stallCount += 1
+                                totalStallDurationMs += durationMs
+                                onPlaybackStall(seq, durationMs)
+                            }
+                        }
+                    }
+                    false
+                }
                 setOnCompletionListener {
+                    onPlaybackCompleted(seq, stallCount, totalStallDurationMs)
                     releaseInternal(notifyState = true)
                 }
                 setOnErrorListener { _, what, extra ->
                     val message = "Remote playback failed: what=$what, extra=$extra"
                     Log.e(tag, message)
-                    onError(message)
+                    onError(seq, message)
                     releaseInternal(notifyState = true)
                     true
                 }
@@ -53,7 +95,7 @@ class RemoteTtsPlayer(
             mediaPlayer = player
             true
         }.getOrElse { error ->
-            onError(error.message ?: "Remote playback init failed")
+            onError(activeSeq, error.message ?: "Remote playback init failed")
             releaseInternal(notifyState = true)
             false
         }
@@ -78,6 +120,10 @@ class RemoteTtsPlayer(
         mediaPlayer = null
         val wasPlaying = playing
         playing = false
+        activeSeq = null
+        bufferingStartedAtMs = null
+        stallCount = 0
+        totalStallDurationMs = 0
         if (notifyState && wasPlaying) {
             onPlaybackStateChanged(false)
         }

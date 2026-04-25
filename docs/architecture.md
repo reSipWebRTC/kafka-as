@@ -148,7 +148,7 @@ flowchart TB
 
 当前基线：
 
-- 已实现 `/ws/audio`、WS token 鉴权、`session.ping`、音频直写 Kafka、start/stop 调用 orchestrator、错误下行，以及基于 Kafka 的字幕 / TTS / 会话关闭回推
+- 已实现 `/ws/audio`、WS token 鉴权、`session.ping`、音频直写 Kafka、start/stop 调用 orchestrator、`playback.metric` 客户端播放指标上报、错误下行，以及基于 Kafka 的字幕 / TTS / 会话关闭回推
 - 未实现外部 IAM/RBAC 集成和更细粒度下行聚合策略
 
 ### Session Orchestrator

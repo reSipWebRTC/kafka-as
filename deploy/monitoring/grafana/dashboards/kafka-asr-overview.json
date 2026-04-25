@@ -364,6 +364,86 @@
       ],
       "title": "Control Plane Fallback Signals",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(gateway_client_playback_duration_seconds_bucket{stage=\"start\"}[$__rate_interval])))",
+          "legendFormat": "playback start p95",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(gateway_client_playback_duration_seconds_bucket{stage=\"stall\"}[$__rate_interval])))",
+          "legendFormat": "playback stall p95",
+          "refId": "B"
+        }
+      ],
+      "title": "Client Playback P95 Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(gateway_client_playback_total{stage=\"stall\",result=\"recorded\"}[$__rate_interval])) / clamp_min(sum(rate(gateway_client_playback_total{stage=\"start\",result=\"recorded\"}[$__rate_interval])), 1e-6)",
+          "legendFormat": "stall ratio",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(gateway_client_playback_total{stage=\"fallback\",result=\"recorded\"}[$__rate_interval])) / clamp_min(sum(rate(gateway_client_playback_total{stage=\"start\",result=\"recorded\"}[$__rate_interval])), 1e-6)",
+          "legendFormat": "fallback ratio",
+          "refId": "B"
+        }
+      ],
+      "title": "Client Playback Interruption Ratio",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",

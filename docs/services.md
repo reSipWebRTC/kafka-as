@@ -13,7 +13,7 @@
 
 | 服务名 | 当前状态 | 当前已实现能力 | 主要依赖 |
 | --- | --- | --- | --- |
-| `speech-gateway` | 已落地骨架 | WebSocket 接入、可配置 WS token 鉴权、Kafka 音频发布、会话 start/stop 转发、会话级限流/背压、Kafka 驱动下行回推（`subtitle.*`/`tts.*`/`session.closed`）、下行 E2E 稳定性基线、客户端可感知时延指标基线（first/final/tts.ready） | Kafka、`session-orchestrator` |
+| `speech-gateway` | 已落地骨架 | WebSocket 接入、可配置 WS token 鉴权、Kafka 音频发布、会话 start/stop 转发、会话级限流/背压、Kafka 驱动下行回推（`subtitle.*`/`tts.*`/`session.closed`）、下行 E2E 稳定性基线、客户端可感知时延指标基线（first/final/tts.ready）、客户端播放阶段指标上报（`playback.metric`）与网关指标聚合 | Kafka、`session-orchestrator` |
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布、`asr.partial/asr.final/translation.result/tts.ready/command.result` 聚合、idle/hard timeout 自动关闭与补偿信号基线 | Redis、Kafka、`control-plane` |
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、VAD 静音切段、发布 `asr.partial` / `asr.final`、FunASR 第一版生产联调基线 | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result`，OpenAI 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
@@ -43,7 +43,7 @@
 
 - `/ws/audio`
 - 可配置 WS token 鉴权（`Authorization: Bearer <token>` 或 query `access_token`）
-- `session.start` / `session.ping` / `audio.frame` / `session.stop` / `command.confirm`
+- `session.start` / `session.ping` / `audio.frame` / `session.stop` / `command.confirm` / `playback.metric`
 - `audio.ingress.raw` / `command.confirm.request` 发布
 - `audio.frame` 会话级限流与背压保护
 - `session.error` 下行
@@ -55,6 +55,7 @@
 - `session.control(status=CLOSED)` -> `session.closed`
 - 下行链路顺序/终态/重复语义的仓库内 E2E 回归测试
 - 客户端可感知时延指标：`session.start -> first subtitle / final subtitle / tts.ready`
+- 客户端播放阶段指标：`playback start / stall / complete / fallback`
 
 当前未实现：
 

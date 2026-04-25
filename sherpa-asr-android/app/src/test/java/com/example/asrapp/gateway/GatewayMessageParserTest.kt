@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
 class GatewayMessageParserTest {
 
@@ -67,5 +69,31 @@ class GatewayMessageParserTest {
         val message = parsed as WsUnknownDownlink
         assertEquals("custom.event", message.type)
         assertEquals("sess-x", message.sessionId)
+    }
+
+    @Test
+    fun serializePlaybackMetric_uplinkPayload() {
+        val moshi = Moshi.Builder()
+            .add(KotlinJsonAdapterFactory())
+            .build()
+        val adapter = moshi.adapter(WsPlaybackMetric::class.java)
+
+        val json = adapter.toJson(
+            WsPlaybackMetric(
+                sessionId = "sess-play-1",
+                seq = 33L,
+                stage = "start",
+                source = "remote",
+                durationMs = 210L,
+                reason = "tts_ready",
+                traceId = "trc-1"
+            )
+        )
+
+        assertTrue(json.contains("\"type\":\"playback.metric\""))
+        assertTrue(json.contains("\"sessionId\":\"sess-play-1\""))
+        assertTrue(json.contains("\"stage\":\"start\""))
+        assertTrue(json.contains("\"source\":\"remote\""))
+        assertTrue(json.contains("\"durationMs\":210"))
     }
 }
