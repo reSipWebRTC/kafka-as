@@ -60,11 +60,16 @@ public class SessionTimeoutOrchestrator {
         long now = nowMs();
         List<SessionState> activeSessions = sessionStateRepository.findActiveSessions();
         for (SessionState state : activeSessions) {
-            TimeoutDecision decision = evaluateTimeout(state, now);
-            if (decision == TimeoutDecision.NONE) {
+            TimeoutDecision timeoutDecision = evaluateTimeout(state, now);
+            if (timeoutDecision != TimeoutDecision.NONE) {
+                closeTimedOutSession(state, timeoutDecision);
                 continue;
             }
-            closeTimedOutSession(state, decision);
+
+            StalledDecision stalledDecision = evaluateStalled(state, now);
+            if (stalledDecision != StalledDecision.NONE) {
+                closeStalledSession(state, stalledDecision);
+            }
         }
     }
 
@@ -72,59 +77,126 @@ public class SessionTimeoutOrchestrator {
         String reason = decision == TimeoutDecision.HARD
                 ? orchestrationProperties.getHardTimeoutReason()
                 : orchestrationProperties.getIdleTimeoutReason();
+        closeSession(
+                state,
+                reason,
+                "orchestrator.session.timeout.total",
+                "type",
+                decision.metricTag,
+                (outcome, targetState, failure) -> compensationPublisher.publishTimeoutClose(
+                        decision.metricTag,
+                        outcome,
+                        targetState,
+                        failure));
+    }
 
+    private void closeStalledSession(SessionState state, StalledDecision decision) {
+        closeSession(
+                state,
+                stalledReason(decision),
+                "orchestrator.session.stalled.total",
+                "stage",
+                decision.metricTag,
+                (outcome, targetState, failure) -> compensationPublisher.publishStalledClose(
+                        decision.metricTag,
+                        outcome,
+                        targetState,
+                        failure));
+    }
+
+    private void closeSession(
+            SessionState state,
+            String reason,
+            String metricName,
+            String metricTagName,
+            String metricTagValue,
+            CompensationEmit emitCompensation) {
         try {
             SessionStopResponse response = sessionLifecycleService
                     .stopSession(state.sessionId(), new SessionStopRequest(state.traceId(), reason))
                     .block(orchestrationProperties.getCloseTimeout());
             boolean stopped = response != null && response.stopped();
-            meterRegistry.counter(
-                            "orchestrator.session.timeout.total",
-                            "type",
-                            decision.metricTag,
-                            "result",
-                            stopped ? "closed" : "idempotent",
-                            "code",
-                            "OK")
-                    .increment();
-            compensationPublisher.publishTimeoutClose(
-                    decision.metricTag,
-                    stopped ? "closed" : "idempotent",
-                    state,
-                    null);
+            String outcome = stopped ? "closed" : "idempotent";
+            incrementCounter(metricName, metricTagName, metricTagValue, outcome, "OK");
+            emitCompensation.publish(outcome, state, null);
         } catch (RuntimeException exception) {
-            meterRegistry.counter(
-                            "orchestrator.session.timeout.total",
-                            "type",
-                            decision.metricTag,
-                            "result",
-                            "error",
-                            "code",
-                            normalizeTimeoutError(exception))
-                    .increment();
-            compensationPublisher.publishTimeoutClose(
-                    decision.metricTag,
-                    "error",
-                    state,
-                    exception);
+            incrementCounter(metricName, metricTagName, metricTagValue, "error", normalizeTimeoutError(exception));
+            emitCompensation.publish("error", state, exception);
         }
     }
 
     private TimeoutDecision evaluateTimeout(SessionState state, long nowMs) {
         Duration hardTimeout = orchestrationProperties.getHardTimeout();
-        if (!hardTimeout.isZero()
-                && !hardTimeout.isNegative()
-                && nowMs - state.startedAtMs() >= hardTimeout.toMillis()) {
+        if (isEnabled(hardTimeout) && nowMs - state.startedAtMs() >= hardTimeout.toMillis()) {
             return TimeoutDecision.HARD;
         }
 
         Duration idleTimeout = orchestrationProperties.getIdleTimeout();
-        if (!idleTimeout.isZero()
-                && !idleTimeout.isNegative()
-                && nowMs - state.updatedAtMs() >= idleTimeout.toMillis()) {
+        if (isEnabled(idleTimeout) && nowMs - state.updatedAtMs() >= idleTimeout.toMillis()) {
             return TimeoutDecision.IDLE;
         }
         return TimeoutDecision.NONE;
+    }
+
+    private StalledDecision evaluateStalled(SessionState state, long nowMs) {
+        Duration stalledTimeout = orchestrationProperties.getStalledTimeout();
+        if (!isEnabled(stalledTimeout)) {
+            return StalledDecision.NONE;
+        }
+
+        long thresholdMs = stalledTimeout.toMillis();
+        long lastFinalAtMs = state.lastFinalAtMs();
+        if (lastFinalAtMs > 0) {
+            long downstreamProgressAtMs = max3(
+                    state.lastTranslationAtMs(),
+                    state.lastCommandResultAtMs(),
+                    state.lastTtsReadyAtMs());
+            if (downstreamProgressAtMs < lastFinalAtMs && nowMs - lastFinalAtMs >= thresholdMs) {
+                return StalledDecision.POST_FINAL;
+            }
+        }
+
+        long lastTranslationAtMs = state.lastTranslationAtMs();
+        if (lastTranslationAtMs > 0
+                && state.lastTtsReadyAtMs() < lastTranslationAtMs
+                && nowMs - lastTranslationAtMs >= thresholdMs) {
+            return StalledDecision.POST_TRANSLATION;
+        }
+
+        return StalledDecision.NONE;
+    }
+
+    private String stalledReason(StalledDecision decision) {
+        String prefix = orchestrationProperties.getStalledTimeoutReasonPrefix();
+        if (prefix == null || prefix.isBlank()) {
+            prefix = "timeout.stalled";
+        }
+        return prefix + "." + decision.reasonSuffix;
+    }
+
+    private boolean isEnabled(Duration timeout) {
+        return !timeout.isZero() && !timeout.isNegative();
+    }
+
+    private long max3(long first, long second, long third) {
+        return Math.max(first, Math.max(second, third));
+    }
+
+    private void incrementCounter(
+            String metricName,
+            String metricTagName,
+            String metricTagValue,
+            String result,
+            String code) {
+        meterRegistry.counter(
+                        metricName,
+                        metricTagName,
+                        metricTagValue,
+                        "result",
+                        result,
+                        "code",
+                        code)
+                .increment();
     }
 
     private String normalizeTimeoutError(Throwable throwable) {
@@ -148,5 +220,24 @@ public class SessionTimeoutOrchestrator {
         TimeoutDecision(String metricTag) {
             this.metricTag = metricTag;
         }
+    }
+
+    private enum StalledDecision {
+        NONE("none", "none"),
+        POST_FINAL("post_final", "post_final"),
+        POST_TRANSLATION("post_translation", "post_translation");
+
+        private final String metricTag;
+        private final String reasonSuffix;
+
+        StalledDecision(String metricTag, String reasonSuffix) {
+            this.metricTag = metricTag;
+            this.reasonSuffix = reasonSuffix;
+        }
+    }
+
+    @FunctionalInterface
+    private interface CompensationEmit {
+        void publish(String outcome, SessionState state, Throwable failure);
     }
 }

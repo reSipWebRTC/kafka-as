@@ -80,7 +80,8 @@
 - `session.control` Kafka 发布
 - 消费 `asr.partial` / `asr.final` / `translation.result` / `tts.ready` / `command.result` 更新会话聚合进度
 - idle/hard timeout 定时扫描与自动 `session.stop` 编排（`session.control(status=CLOSED)`）
-- timeout 触发补偿信号发布（`ops.compensation -> platform.compensation`）
+- stalled 阶段（`post_final` / `post_translation`）检测与自动 `session.stop` 编排
+- timeout/stalled 触发补偿信号发布（`ops.compensation -> platform.compensation`，并双写 `platform.audit`）
 
 当前未实现：
 

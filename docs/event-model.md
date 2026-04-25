@@ -229,4 +229,4 @@ FAILED
 
 仍待深化的部分：
 
-- `platform.dlq` 自动恢复后的更细粒度会话级补偿编排策略
+- `platform.dlq` 自动恢复后已补齐第一版会话级 stalled 补偿编排（`post_final` / `post_translation`）；后续仍需推进更完整跨服务补偿 Saga

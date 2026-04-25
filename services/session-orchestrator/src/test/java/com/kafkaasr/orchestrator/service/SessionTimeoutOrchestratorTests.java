@@ -47,6 +47,7 @@ class SessionTimeoutOrchestratorTests {
         properties = new SessionOrchestrationProperties();
         properties.setIdleTimeout(Duration.ofSeconds(30));
         properties.setHardTimeout(Duration.ofMinutes(10));
+        properties.setStalledTimeout(Duration.ofSeconds(20));
         properties.setCloseTimeout(Duration.ofSeconds(1));
 
         orchestrator = new SessionTimeoutOrchestrator(
@@ -158,5 +159,107 @@ class SessionTimeoutOrchestratorTests {
         orchestrator.scanTimeoutSessions();
 
         verify(compensationPublisher).publishTimeoutClose(eq("idle"), eq("error"), eq(active), any(SessionControlException.class));
+    }
+
+    @Test
+    void closesStalledPostFinalSession() {
+        SessionState active = new SessionState(
+                "sess-stalled-final",
+                "tenant-a",
+                "zh-CN",
+                "en-US",
+                "trc-4",
+                SessionStatus.ASR_ACTIVE,
+                3L,
+                NOW_MS - Duration.ofMinutes(2).toMillis(),
+                NOW_MS - Duration.ofSeconds(5).toMillis(),
+                NOW_MS - Duration.ofSeconds(7).toMillis(),
+                NOW_MS - Duration.ofSeconds(25).toMillis(),
+                0L,
+                0L,
+                0L,
+                "");
+        when(sessionStateRepository.findActiveSessions()).thenReturn(List.of(active));
+        when(sessionLifecycleService.stopSession(eq("sess-stalled-final"), any(SessionStopRequest.class)))
+                .thenReturn(Mono.just(new SessionStopResponse(
+                        "sess-stalled-final",
+                        "trc-4",
+                        "CLOSED",
+                        true,
+                        4L,
+                        "timeout.stalled.post_final",
+                        NOW_MS)));
+
+        orchestrator.scanTimeoutSessions();
+
+        ArgumentCaptor<SessionStopRequest> requestCaptor = ArgumentCaptor.forClass(SessionStopRequest.class);
+        verify(sessionLifecycleService).stopSession(eq("sess-stalled-final"), requestCaptor.capture());
+        verify(compensationPublisher).publishStalledClose(eq("post_final"), eq("closed"), eq(active), eq(null));
+        org.junit.jupiter.api.Assertions.assertEquals("timeout.stalled.post_final", requestCaptor.getValue().reason());
+    }
+
+    @Test
+    void closesStalledPostTranslationSession() {
+        SessionState active = new SessionState(
+                "sess-stalled-translation",
+                "tenant-a",
+                "zh-CN",
+                "en-US",
+                "trc-5",
+                SessionStatus.TRANSLATING,
+                7L,
+                NOW_MS - Duration.ofMinutes(3).toMillis(),
+                NOW_MS - Duration.ofSeconds(4).toMillis(),
+                NOW_MS - Duration.ofSeconds(35).toMillis(),
+                NOW_MS - Duration.ofSeconds(30).toMillis(),
+                NOW_MS - Duration.ofSeconds(25).toMillis(),
+                0L,
+                0L,
+                "");
+        when(sessionStateRepository.findActiveSessions()).thenReturn(List.of(active));
+        when(sessionLifecycleService.stopSession(eq("sess-stalled-translation"), any(SessionStopRequest.class)))
+                .thenReturn(Mono.just(new SessionStopResponse(
+                        "sess-stalled-translation",
+                        "trc-5",
+                        "CLOSED",
+                        true,
+                        8L,
+                        "timeout.stalled.post_translation",
+                        NOW_MS)));
+
+        orchestrator.scanTimeoutSessions();
+
+        ArgumentCaptor<SessionStopRequest> requestCaptor = ArgumentCaptor.forClass(SessionStopRequest.class);
+        verify(sessionLifecycleService).stopSession(eq("sess-stalled-translation"), requestCaptor.capture());
+        verify(compensationPublisher).publishStalledClose(eq("post_translation"), eq("closed"), eq(active), eq(null));
+        org.junit.jupiter.api.Assertions.assertEquals("timeout.stalled.post_translation", requestCaptor.getValue().reason());
+    }
+
+    @Test
+    void publishesStalledCompensationErrorWhenCloseFails() {
+        SessionState active = new SessionState(
+                "sess-stalled-fail",
+                "tenant-a",
+                "zh-CN",
+                "en-US",
+                "trc-6",
+                SessionStatus.ASR_ACTIVE,
+                5L,
+                NOW_MS - Duration.ofMinutes(2).toMillis(),
+                NOW_MS - Duration.ofSeconds(2).toMillis(),
+                NOW_MS - Duration.ofSeconds(5).toMillis(),
+                NOW_MS - Duration.ofSeconds(25).toMillis(),
+                0L,
+                0L,
+                0L,
+                "");
+        when(sessionStateRepository.findActiveSessions()).thenReturn(List.of(active));
+        when(sessionLifecycleService.stopSession(eq("sess-stalled-fail"), any(SessionStopRequest.class)))
+                .thenThrow(SessionControlException.internalError("close stalled failed", "sess-stalled-fail"));
+
+        orchestrator.scanTimeoutSessions();
+
+        verify(compensationPublisher)
+                .publishStalledClose(eq("post_final"), eq("error"), eq(active), any(SessionControlException.class));
     }
 }
