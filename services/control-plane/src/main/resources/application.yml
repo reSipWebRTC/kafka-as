@@ -57,7 +57,10 @@ control:
     policy-changed-topic: ${CONTROL_POLICY_CHANGED_TOPIC:tenant.policy.changed}
     producer-id: ${CONTROL_KAFKA_PRODUCER_ID:control-plane}
   policy-store:
+    backend: ${CONTROL_POLICY_STORE_BACKEND:redis}
     key-prefix: ${CONTROL_POLICY_STORE_KEY_PREFIX:control:tenant-policy:}
     history-key-prefix: ${CONTROL_POLICY_STORE_HISTORY_KEY_PREFIX:control:tenant-policy:history:}
+    jdbc-current-table: ${CONTROL_POLICY_STORE_JDBC_CURRENT_TABLE:control_tenant_policy_current}
+    jdbc-history-table: ${CONTROL_POLICY_STORE_JDBC_HISTORY_TABLE:control_tenant_policy_history}
     history-max-entries: ${CONTROL_POLICY_STORE_HISTORY_MAX_ENTRIES:20}
     ttl: ${CONTROL_POLICY_STORE_TTL:12h}
