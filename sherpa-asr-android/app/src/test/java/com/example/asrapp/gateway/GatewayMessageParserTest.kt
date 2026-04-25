@@ -96,4 +96,27 @@ class GatewayMessageParserTest {
         assertTrue(json.contains("\"source\":\"remote\""))
         assertTrue(json.contains("\"durationMs\":210"))
     }
+
+    @Test
+    fun serializePlaybackMetric_stallBeginPayload() {
+        val moshi = Moshi.Builder()
+            .add(KotlinJsonAdapterFactory())
+            .build()
+        val adapter = moshi.adapter(WsPlaybackMetric::class.java)
+
+        val json = adapter.toJson(
+            WsPlaybackMetric(
+                sessionId = "sess-play-2",
+                seq = 34L,
+                stage = "stall.begin",
+                source = "remote",
+                reason = "buffering",
+                traceId = "trc-2"
+            )
+        )
+
+        assertTrue(json.contains("\"stage\":\"stall.begin\""))
+        assertTrue(json.contains("\"source\":\"remote\""))
+        assertTrue(!json.contains("\"durationMs\""))
+    }
 }

@@ -12,7 +12,7 @@ Android 客户端已切换为 **网关 WebSocket 命令流** 主链路：
 1. 点击麦克风后，客户端建立会话并持续发送 `audio.frame`。
 2. 服务端返回字幕与命令执行回执；当回执包含 `confirmToken` 时，界面展示“确认执行/拒绝执行”按钮，触发 `command.confirm`。
 3. `tts.ready` 到达时优先远端播放；若未到达或播放失败，按配置延迟回退到本地 TTS。
-4. 远端播放启动/卡顿/完成/本地回退会通过 `playback.metric` 回传到网关指标。
+4. 远端播放启动/卡顿开始/卡顿结束/完成/本地回退会通过 `playback.metric` 回传到网关指标（`stall.begin` / `stall.end`，兼容 `stall`）。
 
 ## 配置项（设置页）
 

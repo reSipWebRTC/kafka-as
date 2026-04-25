@@ -86,7 +86,8 @@ public class PlaybackMetricMessageDecoder {
                     "Validation failed: source unsupported",
                     request.sessionId());
         }
-        if ((stage.equals("start") || stage.equals("stall")) && request.durationMs() == null) {
+        if ((stage.equals("start") || stage.equals("stall") || stage.equals("stall.end"))
+                && request.durationMs() == null) {
             throw new MessageValidationException(
                     INVALID_MESSAGE_CODE,
                     "Validation failed: durationMs required for stage=" + stage,
@@ -97,6 +98,8 @@ public class PlaybackMetricMessageDecoder {
     private boolean isValidStage(String stage) {
         return stage.equals("start")
                 || stage.equals("stall")
+                || stage.equals("stall.begin")
+                || stage.equals("stall.end")
                 || stage.equals("complete")
                 || stage.equals("fallback");
     }
@@ -132,4 +135,3 @@ public class PlaybackMetricMessageDecoder {
         return sessionId;
     }
 }
-

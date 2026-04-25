@@ -40,7 +40,7 @@
 - `tts-orchestrator` 对象键策略已支持可配置 cache scope（tenant/global）与 shard 前缀，用于缓存命中优化
 - `speech-gateway` 下行链路已补充仓库内 E2E 稳定性验证（顺序、终态、重复/异常计数）
 - `speech-gateway` 已补齐客户端可感知时延指标基线：`session.start -> subtitle.first/subtitle.final/tts.ready`（含重复事件幂等语义）
-- `speech-gateway` 已补齐客户端播放阶段指标入口：WebSocket 上行 `playback.metric`（播放首包/中断/完成/回退）并记录 `gateway.client.playback.*`
+- `speech-gateway` 已补齐客户端播放阶段指标入口：WebSocket 上行 `playback.metric`（播放首包/中断开始/中断结束/完成/回退）并记录 `gateway.client.playback.*`
 - `deploy/monitoring` 已补齐 Prometheus/Grafana 资产（含 Kafka lag、延迟、错误率看板与告警规则）
 - `deploy/monitoring` 已补齐 Alertmanager 通知路由基线（default/warning/critical + critical escalation）
 - `deploy/monitoring` 告警阈值与路由参数已支持模板化渲染（`alert-ops.env` + `tools/render-monitoring-config.sh`）
@@ -55,14 +55,14 @@
 - 已补齐 external-iam claim 映射与授权矩阵单测（读/写权限、租户范围、拒绝原因）
 - 已补齐控制面鉴权失败策略 simulated 演练脚本（`tools/control-plane-auth-failure-drill.sh`）：覆盖 JWKS 不可用/超时分类、hybrid fallback、指标与告警规则校验
 - 已补齐本地 JWKS + JWT 全链路 simulated 演练脚本（`tools/control-plane-jwks-jwt-drill.sh`）：覆盖 `external-iam` JWT 校验链路与 `hybrid` fallback 行为
-- Android 客户端示例已切换 WS 命令流主链路（`sherpa-asr-android`）：`session.start/audio.frame/session.stop/command.confirm/playback.metric` 上行与 `command.result/tts.ready` 下行，支持 `tts.ready` 优先与本地 TTS 回退，并上报播放阶段指标（start/stall/complete/fallback）
+- Android 客户端示例已切换 WS 命令流主链路（`sherpa-asr-android`）：`session.start/audio.frame/session.stop/command.confirm/playback.metric` 上行与 `command.result/tts.ready` 下行，支持 `tts.ready` 优先与本地 TTS 回退，并上报播放阶段指标（start/stall.begin/stall.end/complete/fallback，兼容 stall）
 - 全仓测试与 `tools/verify.sh` 校验基线
 
 ## 2. 服务模块现状
 
 | 服务 | 端口 | 当前已实现 | 当前未实现 |
 | --- | --- | --- | --- |
-| `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `session.ping` / `audio.frame` / `session.stop` / `command.confirm` / `playback.metric` 路由、`audio.ingress.raw` / `command.confirm.request` Kafka 发布、会话级限流/背压控制、错误下行 `session.error`、Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `tts.chunk` / `tts.ready` / `command.result` / `session.closed` 下行、下行 E2E 稳定性测试基线、客户端可感知时延指标基线（first/final/tts.ready）、客户端播放阶段指标基线（playback start/stall/complete/fallback）、可配置 WS token 鉴权（`Authorization: Bearer` 或 `access_token`） | 外部 IAM/RBAC 集成、更完整的下行聚合策略 |
+| `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `session.ping` / `audio.frame` / `session.stop` / `command.confirm` / `playback.metric` 路由、`audio.ingress.raw` / `command.confirm.request` Kafka 发布、会话级限流/背压控制、错误下行 `session.error`、Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `tts.chunk` / `tts.ready` / `command.result` / `session.closed` 下行、下行 E2E 稳定性测试基线、客户端可感知时延指标基线（first/final/tts.ready）、客户端播放阶段指标基线（playback start/stall.begin/stall.end/complete/fallback，兼容 stall）、可配置 WS token 鉴权（`Authorization: Bearer` 或 `access_token`） | 外部 IAM/RBAC 集成、更完整的下行聚合策略 |
 | `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、控制面熔断与缓存回退、Redis 会话状态、`session.control` Kafka 发布、会话聚合进度消费（`asr.partial`/`asr.final`/`translation.result`/`tts.ready`/`command.result`）、idle/hard timeout 自动关闭、timeout 补偿信号发布 | 高级补偿编排与结果聚合策略优化 |
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配（含 FunASR v2 响应兼容、health 探测、并发保护、错误语义映射）、按稳定度 + VAD 静音切段分流发布 `asr.partial` / `asr.final`、按租户策略驱动重试/DLQ（含控制面失败回退） | FunASR 真机容量/故障演练、高级上下文与切段策略 |
 | `translation-worker` | `8083` | 消费 `asr.final` 后发布 `translation.request`，再消费 `translation.request` 生成并发布 `translation.result`；默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容、health 探测、并发保护、错误语义映射）；按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 真机容量/故障演练、术语治理、上下文增强 |
@@ -148,7 +148,6 @@
 ## 5. 当前缺口
 
 - `platform.audit` / `platform.dlq` 已完成契约冻结并接入核心运行时路径；统一重放脚本基线已落地，后续仍需补齐跨服务自动恢复编排
-- 客户端播放阶段“端侧渲染卡顿”细粒度指标仍待补齐（当前基线已覆盖 `playback start/stall/complete/fallback`）
 - ASR / Translation / TTS 已落地第一版生产联调基线，并补齐仓库内 fault-drill 收口与预发收口入口；但尚未完成真实流量闭环与预发/生产容量实战
 - 对象存储 HA 治理、CDN 区域路由/多级缓存治理、完整补偿编排、自适应熔断/灰度治理，以及压测/告警升级实战证据仍待完善
 

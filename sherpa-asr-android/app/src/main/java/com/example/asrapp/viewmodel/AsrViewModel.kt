@@ -136,11 +136,21 @@ class AsrViewModel(
                 )
             }
         },
-        onPlaybackStall = { seq, durationMs ->
+        onPlaybackStallStarted = { seq ->
             onMain {
                 reportPlaybackMetric(
                     seq = seq,
-                    stage = "stall",
+                    stage = "stall.begin",
+                    source = "remote",
+                    reason = "buffering"
+                )
+            }
+        },
+        onPlaybackStallEnded = { seq, durationMs ->
+            onMain {
+                reportPlaybackMetric(
+                    seq = seq,
+                    stage = "stall.end",
                     source = "remote",
                     durationMs = durationMs,
                     reason = "buffering"
