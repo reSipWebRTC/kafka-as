@@ -2,6 +2,8 @@ package com.kafkaasr.orchestrator.session;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
@@ -66,11 +68,32 @@ public class RedisSessionStateRepository implements SessionStateRepository {
                 continue;
             }
             SessionState state = deserialize(payload, key);
-            if (state.tenantId().equals(tenantId) && state.status() == SessionStatus.STREAMING) {
+            if (state.tenantId().equals(tenantId) && state.isActive()) {
                 count++;
             }
         }
         return count;
+    }
+
+    @Override
+    public List<SessionState> findActiveSessions() {
+        Set<String> keys = redisTemplate.keys(storeProperties.getKeyPrefix() + "*");
+        if (keys == null || keys.isEmpty()) {
+            return List.of();
+        }
+
+        List<SessionState> activeSessions = new ArrayList<>();
+        for (String key : keys) {
+            String payload = redisTemplate.opsForValue().get(key);
+            if (payload == null || payload.isBlank()) {
+                continue;
+            }
+            SessionState state = deserialize(payload, key);
+            if (state.isActive()) {
+                activeSessions.add(state);
+            }
+        }
+        return activeSessions;
     }
 
     private String serialize(SessionState state) {

@@ -47,10 +47,24 @@ orchestrator:
   kafka:
     enabled: ${ORCHESTRATOR_KAFKA_ENABLED:true}
     session-control-topic: ${ORCHESTRATOR_SESSION_CONTROL_TOPIC:session.control}
+    asr-partial-topic: ${ORCHESTRATOR_ASR_PARTIAL_TOPIC:asr.partial}
+    asr-final-topic: ${ORCHESTRATOR_ASR_FINAL_TOPIC:asr.final}
+    translation-result-topic: ${ORCHESTRATOR_TRANSLATION_RESULT_TOPIC:translation.result}
+    tts-ready-topic: ${ORCHESTRATOR_TTS_READY_TOPIC:tts.ready}
+    command-result-topic: ${ORCHESTRATOR_COMMAND_RESULT_TOPIC:command.result}
+    compensation-topic: ${ORCHESTRATOR_COMPENSATION_TOPIC:platform.compensation}
     producer-id: ${ORCHESTRATOR_PRODUCER_ID:session-orchestrator}
   session-store:
     key-prefix: ${ORCHESTRATOR_SESSION_STORE_KEY_PREFIX:orchestrator:session:}
     ttl: ${ORCHESTRATOR_SESSION_STORE_TTL:12h}
+  session-orchestration:
+    aggregation-enabled: ${ORCHESTRATOR_SESSION_AGGREGATION_ENABLED:true}
+    idle-timeout: ${ORCHESTRATOR_SESSION_IDLE_TIMEOUT:2m}
+    hard-timeout: ${ORCHESTRATOR_SESSION_HARD_TIMEOUT:30m}
+    scan-interval: ${ORCHESTRATOR_SESSION_TIMEOUT_SCAN_INTERVAL:1s}
+    close-timeout: ${ORCHESTRATOR_SESSION_CLOSE_TIMEOUT:3s}
+    idle-timeout-reason: ${ORCHESTRATOR_SESSION_IDLE_TIMEOUT_REASON:timeout.idle}
+    hard-timeout-reason: ${ORCHESTRATOR_SESSION_HARD_TIMEOUT_REASON:timeout.hard}
   control-plane:
     base-url: ${ORCHESTRATOR_CONTROL_PLANE_BASE_URL:http://localhost:8085}
     request-timeout: ${ORCHESTRATOR_CONTROL_PLANE_REQUEST_TIMEOUT:2s}

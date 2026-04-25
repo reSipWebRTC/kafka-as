@@ -10,8 +10,10 @@ Current scope:
 - policy enforcement: enabled flag, language pair match, max concurrent sessions
 - Redis-backed lifecycle state machine
 - Kafka publication for `session.control`
+- progress aggregation from pipeline events (`asr.partial` / `asr.final` / `translation.result` / `tts.ready` / `command.result`)
+- timeout orchestration (`idleTimeout` / `hardTimeout`) with auto-close to `session.control(status=CLOSED)`
+- timeout compensation signal publication to `platform.compensation`
 
 Out of scope in this phase:
 
-- ASR/translation aggregation
-- timeout scheduler and compensation workflows
+- advanced multi-service compensation saga and rollback choreography
