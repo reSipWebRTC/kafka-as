@@ -1,11 +1,14 @@
 # tts-orchestrator
 
-`tts-orchestrator` consumes `translation.result` events and produces `tts.request`, `tts.chunk`, and `tts.ready` events.
+`tts-orchestrator` consumes `translation.result` and `command.result` events and produces `tts.request`, `tts.chunk`, and `tts.ready` events.
 
 Current scope:
 
 - Spring Boot module scaffold
 - Kafka integration foundation for consume/publish flow
+- session-mode routing:
+  - `TRANSLATION` tenants consume `translation.result`
+  - `SMART_HOME` tenants consume `command.result`
 - Placeholder voice/cache pipeline with contract-aligned event mapping
 - Configurable synthesis modes: `placeholder` / `http`
 - HTTP synthesis production-drill baseline: health probe, bounded concurrency, explicit error semantics, and engine-level metrics

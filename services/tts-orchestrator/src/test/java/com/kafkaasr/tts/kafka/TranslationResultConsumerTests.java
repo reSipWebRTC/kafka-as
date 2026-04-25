@@ -12,6 +12,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kafkaasr.tts.events.CommandResultEvent;
+import com.kafkaasr.tts.events.CommandResultPayload;
 import com.kafkaasr.tts.events.TtsChunkEvent;
 import com.kafkaasr.tts.events.TtsChunkPayload;
 import com.kafkaasr.tts.events.TtsKafkaProperties;
@@ -78,7 +80,7 @@ class TranslationResultConsumerTests {
                 reliabilityPolicyResolver,
                 new SimpleMeterRegistry());
         lenient().when(reliabilityPolicyResolver.resolve(anyString()))
-                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".dlq"));
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".dlq", "TRANSLATION"));
         lenient().when(storageUploader.upload(any()))
                 .thenReturn(new TtsObjectStorageUploader.UploadResult(
                         "tts/tenant-a/tts_v1_abc.wav",
@@ -144,7 +146,7 @@ class TranslationResultConsumerTests {
                 new TtsReadyPayload("https://cdn.local/tts/tts:v1:abc.wav", "audio/pcm", 16000, 400L, "tts:v1:abc"));
 
         String payload = objectMapper.writeValueAsString(input);
-        when(pipelineService.toPipelineEvents(any())).thenReturn(
+        when(pipelineService.toPipelineEvents(any(TranslationResultEvent.class))).thenReturn(
                 new TtsRequestPipelineService.PipelineOutput(output, chunkEvent, readyEvent));
         when(ttsRequestPublisher.publish(output)).thenReturn(Mono.empty());
         when(ttsChunkPublisher.publish(chunkEvent)).thenReturn(Mono.empty());
@@ -152,7 +154,7 @@ class TranslationResultConsumerTests {
 
         consumer.onMessage(payload);
 
-        verify(pipelineService).toPipelineEvents(any());
+        verify(pipelineService).toPipelineEvents(any(TranslationResultEvent.class));
         verify(ttsRequestPublisher).publish(output);
         verify(ttsChunkPublisher).publish(chunkEvent);
         verify(storageUploader).upload(any());
@@ -164,7 +166,7 @@ class TranslationResultConsumerTests {
     void rejectsMalformedTranslationResultPayload() {
         assertThrows(IllegalArgumentException.class, () -> consumer.onMessage("{invalid-json"));
 
-        verify(pipelineService, never()).toPipelineEvents(any());
+        verify(pipelineService, never()).toPipelineEvents(any(TranslationResultEvent.class));
         verify(ttsRequestPublisher, never()).publish(any());
         verify(ttsChunkPublisher, never()).publish(any());
         verify(ttsReadyPublisher, never()).publish(any());
@@ -230,7 +232,7 @@ class TranslationResultConsumerTests {
                 new TtsReadyPayload("https://cdn.local/tts/tts:v1:abc.wav", "audio/pcm", 16000, 400L, "tts:v1:abc"));
 
         String payload = objectMapper.writeValueAsString(input);
-        when(pipelineService.toPipelineEvents(any())).thenReturn(
+        when(pipelineService.toPipelineEvents(any(TranslationResultEvent.class))).thenReturn(
                 new TtsRequestPipelineService.PipelineOutput(output, chunkEvent, readyEvent));
         when(ttsRequestPublisher.publish(output)).thenReturn(Mono.empty());
         when(ttsChunkPublisher.publish(chunkEvent)).thenReturn(Mono.empty());
@@ -239,7 +241,7 @@ class TranslationResultConsumerTests {
         consumer.onMessage(payload);
         consumer.onMessage(payload);
 
-        verify(pipelineService, times(1)).toPipelineEvents(any());
+        verify(pipelineService, times(1)).toPipelineEvents(any(TranslationResultEvent.class));
         verify(ttsRequestPublisher, times(1)).publish(output);
         verify(ttsChunkPublisher, times(1)).publish(chunkEvent);
         verify(storageUploader, times(1)).upload(any());
@@ -263,12 +265,12 @@ class TranslationResultConsumerTests {
                 new TranslationResultPayload("你好", "hello", "zh-CN", "en-US", "placeholder"));
         String payload = objectMapper.writeValueAsString(input);
         when(reliabilityPolicyResolver.resolve("tenant-a"))
-                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
-        when(pipelineService.toPipelineEvents(any())).thenThrow(new IllegalStateException("tts failed"));
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq", "TRANSLATION"));
+        when(pipelineService.toPipelineEvents(any(TranslationResultEvent.class))).thenThrow(new IllegalStateException("tts failed"));
 
         assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
 
-        verify(pipelineService, times(2)).toPipelineEvents(any());
+        verify(pipelineService, times(2)).toPipelineEvents(any(TranslationResultEvent.class));
         verify(storageUploader, never()).upload(any());
         verify(compensationPublisher).publish(
                 eq("translation.result"),
@@ -294,13 +296,13 @@ class TranslationResultConsumerTests {
                 new TranslationResultPayload("你好", "hello", "zh-CN", "en-US", "placeholder"));
         String payload = objectMapper.writeValueAsString(input);
         when(reliabilityPolicyResolver.resolve("tenant-a"))
-                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
-        when(pipelineService.toPipelineEvents(any())).thenThrow(
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq", "TRANSLATION"));
+        when(pipelineService.toPipelineEvents(any(TranslationResultEvent.class))).thenThrow(
                 new TtsSynthesisException("TTS_TIMEOUT", "timed out", true));
 
         assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
 
-        verify(pipelineService, times(2)).toPipelineEvents(any());
+        verify(pipelineService, times(2)).toPipelineEvents(any(TranslationResultEvent.class));
         verify(storageUploader, never()).upload(any());
         verify(compensationPublisher).publish(
                 eq("translation.result"),
@@ -326,18 +328,172 @@ class TranslationResultConsumerTests {
                 new TranslationResultPayload("你好", "hello", "zh-CN", "en-US", "placeholder"));
         String payload = objectMapper.writeValueAsString(input);
         when(reliabilityPolicyResolver.resolve("tenant-a"))
-                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq"));
-        when(pipelineService.toPipelineEvents(any())).thenThrow(
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq", "TRANSLATION"));
+        when(pipelineService.toPipelineEvents(any(TranslationResultEvent.class))).thenThrow(
                 new TtsSynthesisException("TTS_PROVIDER_REJECTED", "rejected", false));
 
         assertThrows(TenantAwareDlqException.class, () -> consumer.onMessage(payload));
 
-        verify(pipelineService, times(1)).toPipelineEvents(any());
+        verify(pipelineService, times(1)).toPipelineEvents(any(TranslationResultEvent.class));
         verify(storageUploader, never()).upload(any());
         verify(compensationPublisher).publish(
                 eq("translation.result"),
                 eq("translation.result.tenant-a.dlq"),
                 eq(payload),
                 any(RuntimeException.class));
+    }
+
+    @Test
+    void ignoresTranslationResultForSmartHomeTenant() throws Exception {
+        TranslationResultEvent input = new TranslationResultEvent(
+                "evt-in-1",
+                "translation.result",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "translation-worker",
+                3L,
+                1713744000000L,
+                "sess-1:translation.result:3",
+                new TranslationResultPayload("你好", "hello", "zh-CN", "en-US", "placeholder"));
+        String payload = objectMapper.writeValueAsString(input);
+
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq", "SMART_HOME"));
+
+        consumer.onMessage(payload);
+
+        verify(pipelineService, never()).toPipelineEvents(any(TranslationResultEvent.class));
+        verify(ttsRequestPublisher, never()).publish(any());
+        verify(ttsChunkPublisher, never()).publish(any());
+        verify(ttsReadyPublisher, never()).publish(any());
+        verify(storageUploader, never()).upload(any());
+    }
+
+    @Test
+    void routesCommandResultForSmartHomeTenant() throws Exception {
+        CommandResultEvent input = new CommandResultEvent(
+                "evt-cmd-1",
+                "command.result",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                "user-a",
+                null,
+                "command-worker",
+                8L,
+                1713744000000L,
+                "sess-1:command.result:asr.final:8",
+                new CommandResultPayload(
+                        "ok",
+                        "OK",
+                        "已执行",
+                        "已执行",
+                        false,
+                        null,
+                        null,
+                        "device.control",
+                        "turn_on"));
+        String payload = objectMapper.writeValueAsString(input);
+
+        TtsRequestEvent output = new TtsRequestEvent(
+                "evt-out-1",
+                "tts.request",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "tts-orchestrator",
+                8L,
+                1713744001000L,
+                "sess-1:tts.request:8",
+                new TtsRequestPayload("已执行", "und", "voice-a", "tts:v1:abc", true));
+
+        TtsChunkEvent chunkEvent = new TtsChunkEvent(
+                "evt-out-2",
+                "tts.chunk",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "tts-orchestrator",
+                8L,
+                1713744001000L,
+                "sess-1:tts.chunk:8",
+                new TtsChunkPayload("aGVsbG8=", "audio/pcm", 16000, 0, true));
+
+        TtsReadyEvent readyEvent = new TtsReadyEvent(
+                "evt-out-3",
+                "tts.ready",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                null,
+                "tts-orchestrator",
+                8L,
+                1713744001000L,
+                "sess-1:tts.ready:8",
+                new TtsReadyPayload("https://cdn.local/tts/tts:v1:abc.wav", "audio/pcm", 16000, 400L, "tts:v1:abc"));
+
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq", "SMART_HOME"));
+        when(pipelineService.toPipelineEvents(any(CommandResultEvent.class))).thenReturn(
+                new TtsRequestPipelineService.PipelineOutput(output, chunkEvent, readyEvent));
+        when(ttsRequestPublisher.publish(output)).thenReturn(Mono.empty());
+        when(ttsChunkPublisher.publish(chunkEvent)).thenReturn(Mono.empty());
+        when(ttsReadyPublisher.publish(any())).thenReturn(Mono.empty());
+
+        consumer.onCommandResultMessage(payload);
+
+        verify(pipelineService).toPipelineEvents(any(CommandResultEvent.class));
+        verify(ttsRequestPublisher).publish(output);
+        verify(ttsChunkPublisher).publish(chunkEvent);
+        verify(storageUploader).upload(any());
+        verify(ttsReadyPublisher).publish(any());
+    }
+
+    @Test
+    void ignoresCommandResultForNonSmartHomeTenant() throws Exception {
+        CommandResultEvent input = new CommandResultEvent(
+                "evt-cmd-1",
+                "command.result",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-a",
+                "user-a",
+                null,
+                "command-worker",
+                8L,
+                1713744000000L,
+                "sess-1:command.result:asr.final:8",
+                new CommandResultPayload(
+                        "ok",
+                        "OK",
+                        "已执行",
+                        "已执行",
+                        false,
+                        null,
+                        null,
+                        "device.control",
+                        "turn_on"));
+        String payload = objectMapper.writeValueAsString(input);
+
+        when(reliabilityPolicyResolver.resolve("tenant-a"))
+                .thenReturn(new TenantReliabilityPolicy(2, 1L, ".tenant-a.dlq", "TRANSLATION"));
+
+        consumer.onCommandResultMessage(payload);
+
+        verify(pipelineService, never()).toPipelineEvents(any(CommandResultEvent.class));
+        verify(ttsRequestPublisher, never()).publish(any());
+        verify(ttsChunkPublisher, never()).publish(any());
+        verify(ttsReadyPublisher, never()).publish(any());
+        verify(storageUploader, never()).upload(any());
     }
 }

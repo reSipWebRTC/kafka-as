@@ -15,6 +15,9 @@ public class TtsKafkaProperties {
     private String translationResultTopic = "translation.result";
 
     @NotBlank
+    private String commandResultTopic = "command.result";
+
+    @NotBlank
     private String ttsRequestTopic = "tts.request";
 
     @NotBlank
@@ -71,6 +74,14 @@ public class TtsKafkaProperties {
 
     public void setTranslationResultTopic(String translationResultTopic) {
         this.translationResultTopic = translationResultTopic;
+    }
+
+    public String getCommandResultTopic() {
+        return commandResultTopic;
+    }
+
+    public void setCommandResultTopic(String commandResultTopic) {
+        this.commandResultTopic = commandResultTopic;
     }
 
     public String getTtsRequestTopic() {
