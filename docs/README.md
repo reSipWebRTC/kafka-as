@@ -111,6 +111,8 @@ flowchart LR
   真实环境协作 runbook（需要你提供什么、我来补什么、如何做预发/真实联调收口）。
 - [runbooks/platform-dlq-replay.md](runbooks/platform-dlq-replay.md)
   统一死信重放 runbook（dry-run/apply、过滤策略、报告与失败处置）。
+- [runbooks/platform-compensation-saga.md](runbooks/platform-compensation-saga.md)
+  跨服务补偿 Saga runbook（replay/session-close/manual 路由、审计事件与账本）。
 - [html/README.md](html/README.md)
   HTML 原始资料与当前 Markdown 文档的映射关系。
 

@@ -309,6 +309,46 @@ Related docs:
 - `docs/runbooks/platform-dlq-auto-recovery.md`
 - `docs/runbooks/platform-dlq-replay.md`
 
+### Run platform compensation saga orchestration
+
+Run from repository root or from a feature worktree:
+
+```bash
+tools/platform-compensation-saga.sh
+```
+
+Default behavior:
+
+- consumes up to `200` events from `platform.dlq`
+- classifies actions by `sourceTopic + reason` into `replay | session-close | manual`
+- executes dry-run by default (`COMPENSATION_SAGA_APPLY=0`)
+- emits audit evidence to JSONL artifact (`platform.audit` publish only when apply mode)
+
+Common flags:
+
+- `COMPENSATION_SAGA_APPLY=1` (execute replay/session-close and update success ledger)
+- `COMPENSATION_SAGA_ACTION_FILTER=replay,session-close`
+- `COMPENSATION_SAGA_TENANT_FILTER=tenant-a`
+- `COMPENSATION_SAGA_SOURCE_TOPIC_FILTER=tts.ready`
+- `COMPENSATION_SAGA_REASON_FILTER=PROCESSING_ERROR`
+- `COMPENSATION_SAGA_EVENT_FILE=<jsonl>` (simulated/mock mode)
+- `COMPENSATION_SAGA_PUBLISH_AUDIT=0` (skip audit Kafka publish in apply mode)
+
+Outputs:
+
+- `build/reports/platform-compensation-saga/platform-compensation-saga.json`
+- `build/reports/platform-compensation-saga/platform-compensation-saga-summary.md`
+- `build/reports/platform-compensation-saga/platform-compensation-saga-selected.jsonl`
+- `build/reports/platform-compensation-saga/platform-compensation-saga-failed.jsonl`
+- `build/reports/platform-compensation-saga/platform-compensation-saga-audit-events.jsonl`
+- `build/reports/platform-compensation-saga/replay/platform-dlq-replay.json`
+- `build/state/platform-compensation-saga-success.jsonl`
+
+Related docs:
+
+- `docs/runbooks/platform-compensation-saga.md`
+- `docs/runbooks/platform-dlq-auto-recovery.md`
+
 ### Start local monitoring baseline
 
 Run from repository root:
