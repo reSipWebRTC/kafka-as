@@ -9,10 +9,12 @@ public class SessionOrchestrationProperties {
     private boolean aggregationEnabled = true;
     private Duration idleTimeout = Duration.ofMinutes(2);
     private Duration hardTimeout = Duration.ofMinutes(30);
+    private Duration stalledTimeout = Duration.ZERO;
     private Duration scanInterval = Duration.ofSeconds(1);
     private Duration closeTimeout = Duration.ofSeconds(3);
     private String idleTimeoutReason = "timeout.idle";
     private String hardTimeoutReason = "timeout.hard";
+    private String stalledTimeoutReasonPrefix = "timeout.stalled";
 
     public boolean isAggregationEnabled() {
         return aggregationEnabled;
@@ -36,6 +38,14 @@ public class SessionOrchestrationProperties {
 
     public void setHardTimeout(Duration hardTimeout) {
         this.hardTimeout = hardTimeout;
+    }
+
+    public Duration getStalledTimeout() {
+        return stalledTimeout;
+    }
+
+    public void setStalledTimeout(Duration stalledTimeout) {
+        this.stalledTimeout = stalledTimeout;
     }
 
     public Duration getScanInterval() {
@@ -68,5 +78,13 @@ public class SessionOrchestrationProperties {
 
     public void setHardTimeoutReason(String hardTimeoutReason) {
         this.hardTimeoutReason = hardTimeoutReason;
+    }
+
+    public String getStalledTimeoutReasonPrefix() {
+        return stalledTimeoutReasonPrefix;
+    }
+
+    public void setStalledTimeoutReasonPrefix(String stalledTimeoutReasonPrefix) {
+        this.stalledTimeoutReasonPrefix = stalledTimeoutReasonPrefix;
     }
 }

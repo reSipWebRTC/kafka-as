@@ -12,7 +12,7 @@ Current scope:
 - Kafka publication for `session.control`
 - progress aggregation from pipeline events (`asr.partial` / `asr.final` / `translation.result` / `tts.ready` / `command.result`)
 - timeout orchestration (`idleTimeout` / `hardTimeout`) with auto-close to `session.control(status=CLOSED)`
-- timeout compensation signal publication to `platform.compensation`
+- timeout/stalled compensation signal publication to `platform.compensation` and `platform.audit`
 
 Out of scope in this phase:
 
