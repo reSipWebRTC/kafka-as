@@ -177,6 +177,8 @@
 - 重放 runbook 已落地：`docs/runbooks/platform-dlq-replay.md`
 - 已提供 `tools/platform-dlq-auto-recovery.sh` 作为跨服务自动恢复执行入口（恢复账本去重 + replay 编排 + 报告产物）
 - 自动恢复 runbook 已落地：`docs/runbooks/platform-dlq-auto-recovery.md`
+- 已提供 `tools/platform-compensation-saga.sh` 作为跨服务补偿 Saga v1 执行入口（`replay | session-close | manual` 路由 + `platform.audit` 证据）
+- Saga runbook 已落地：`docs/runbooks/platform-compensation-saga.md`
 
 以下情况最终都应进入统一死信治理：
 
@@ -229,4 +231,4 @@ FAILED
 
 仍待深化的部分：
 
-- `platform.dlq` 自动恢复后已补齐第一版会话级 stalled 补偿编排（`post_final` / `post_translation`）；后续仍需推进更完整跨服务补偿 Saga
+- 已具备第一版跨服务补偿 Saga 执行脚本（批处理）；后续仍需推进服务内实时化/强一致补偿编排

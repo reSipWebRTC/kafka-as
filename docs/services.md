@@ -82,10 +82,11 @@
 - idle/hard timeout 定时扫描与自动 `session.stop` 编排（`session.control(status=CLOSED)`）
 - stalled 阶段（`post_final` / `post_translation`）检测与自动 `session.stop` 编排
 - timeout/stalled 触发补偿信号发布（`ops.compensation -> platform.compensation`，并双写 `platform.audit`）
+- 跨服务补偿 Saga v1 执行入口（`tools/platform-compensation-saga.sh`，动作路由：`replay | session-close | manual`）
 
 当前未实现：
 
-- 高级跨服务补偿编排与降级工作流
+- 服务内实时化/强一致跨服务补偿编排与降级工作流
 
 ### asr-worker
 
