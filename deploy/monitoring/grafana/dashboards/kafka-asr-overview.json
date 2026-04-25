@@ -283,17 +283,62 @@
       "fieldConfig": {
         "defaults": {
           "min": 0,
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(gateway_client_perceived_duration_seconds_bucket{stage=\"first_subtitle\"}[$__rate_interval])))",
+          "legendFormat": "first subtitle p95",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(gateway_client_perceived_duration_seconds_bucket{stage=\"final_subtitle\"}[$__rate_interval])))",
+          "legendFormat": "final subtitle p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(gateway_client_perceived_duration_seconds_bucket{stage=\"tts_ready\"}[$__rate_interval])))",
+          "legendFormat": "tts ready p95",
+          "refId": "C"
+        }
+      ],
+      "title": "Client Perceived P95 Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
           "unit": "reqps"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
-        "x": 0,
+        "w": 12,
+        "x": 12,
         "y": 24
       },
-      "id": 7,
+      "id": 8,
       "options": {
         "legend": {
           "displayMode": "table",

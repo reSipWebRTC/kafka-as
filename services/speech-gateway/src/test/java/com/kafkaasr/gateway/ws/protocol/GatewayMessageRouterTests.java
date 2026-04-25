@@ -19,6 +19,7 @@ import com.kafkaasr.gateway.ingress.CommandConfirmRequestPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
+import com.kafkaasr.gateway.ws.GatewayClientPerceivedMetrics;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -64,6 +65,7 @@ class GatewayMessageRouterTests {
         GatewayFlowControlProperties flowControlProperties = new GatewayFlowControlProperties();
         flowControlProperties.setAudioFrameRateLimitPerSecond(rateLimitPerSecond);
         flowControlProperties.setAudioFrameMaxInflight(maxInflight);
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
         GatewayMessageRouter gatewayMessageRouter = new GatewayMessageRouter(
                 audioIngressPublisher,
@@ -75,8 +77,9 @@ class GatewayMessageRouterTests {
                 new SessionStopMessageDecoder(objectMapper, validator),
                 new CommandConfirmMessageDecoder(objectMapper, validator),
                 sessionControlClient,
+                new GatewayClientPerceivedMetrics(meterRegistry),
                 objectMapper,
-                new SimpleMeterRegistry());
+                meterRegistry);
 
         lenient().when(audioIngressPublisher.publishRawFrame(any())).thenReturn(Mono.empty());
         lenient().when(commandConfirmRequestPublisher.publish(any())).thenReturn(Mono.empty());

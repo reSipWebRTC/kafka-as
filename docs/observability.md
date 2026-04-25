@@ -183,7 +183,7 @@
 - 服务健康看板
 - 基础资源看板
 
-## 9. 当前仓库观测基线（2026-04-24）
+## 9. 当前仓库观测基线（2026-04-25）
 
 已在以下服务接入统一基线：
 
@@ -206,6 +206,7 @@
 ### 已落地指标（第一版）
 
 - `gateway.ws.messages.total` / `gateway.ws.messages.duration`
+- `gateway.client.perceived.total` / `gateway.client.perceived.duration` / `gateway.client.perceived.sessions.tracked`
 - `orchestrator.session.start.total` / `orchestrator.session.start.duration`
 - `orchestrator.session.stop.total` / `orchestrator.session.stop.duration`
 - `asr.pipeline.messages.total` / `asr.pipeline.duration`
@@ -216,12 +217,12 @@
 - `controlplane.auth.decision.total` / `controlplane.auth.decision.duration`
 - `controlplane.auth.hybrid.fallback.total`
 
-### 已落地监控资产（2026-04-24）
+### 已落地监控资产（2026-04-25）
 
 - `deploy/monitoring/docker-compose.yml`：本地 Prometheus + Grafana 启停
 - `deploy/monitoring/prometheus/prometheus.yml`：六服务 `/actuator/prometheus` 抓取
 - `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`：错误率、P95 延迟、Kafka lag、控制面回退与鉴权告警
-- `deploy/monitoring/grafana/dashboards/kafka-asr-overview.json`：主链路吞吐/错误/延迟 + downlink + lag 看板
+- `deploy/monitoring/grafana/dashboards/kafka-asr-overview.json`：主链路吞吐/错误/延迟 + downlink + lag + 客户端可感知时延看板
 - `deploy/monitoring/alertmanager/alertmanager.yml`：default / warning / critical / escalation 路由基线
 - `tools/monitoring-up.sh` / `tools/monitoring-down.sh`：一键启停入口
 - `tools/alert-ops-validate.sh`：告警阈值顺序、分级规则覆盖和通知链路完整性校验
@@ -251,7 +252,7 @@
 
 ### 当前仍缺失
 
-- 客户端可感知的字幕首包 / 最终字幕延迟指标
+- 客户端播放阶段指标（播放首包、播放中断率、端侧卡顿）
 - 真实预发/生产环境下的告警阈值再标定与通知链路运营化
 - 结构化 JSON 日志
 - 真实引擎链路（Kafka + 外部 ASR/翻译/TTS）的压测报告与 SLO 达成证据

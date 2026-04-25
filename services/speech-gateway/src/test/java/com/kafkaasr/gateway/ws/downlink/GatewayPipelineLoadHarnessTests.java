@@ -14,6 +14,7 @@ import com.kafkaasr.gateway.ingress.CommandConfirmRequestPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
+import com.kafkaasr.gateway.ws.GatewayClientPerceivedMetrics;
 import com.kafkaasr.gateway.ws.GatewayDownlinkPublisher;
 import com.kafkaasr.gateway.ws.GatewaySessionRegistry;
 import com.kafkaasr.gateway.ws.protocol.AudioFrameMessageDecoder;
@@ -59,8 +60,12 @@ class GatewayPipelineLoadHarnessTests {
         Files.createDirectories(reportPath.getParent());
 
         SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        GatewayClientPerceivedMetrics clientPerceivedMetrics = new GatewayClientPerceivedMetrics(meterRegistry);
         GatewaySessionRegistry sessionRegistry = new GatewaySessionRegistry();
-        GatewayDownlinkPublisher downlinkPublisher = new GatewayDownlinkPublisher(OBJECT_MAPPER, sessionRegistry);
+        GatewayDownlinkPublisher downlinkPublisher = new GatewayDownlinkPublisher(
+                OBJECT_MAPPER,
+                sessionRegistry,
+                clientPerceivedMetrics);
 
         GatewayDownlinkProperties downlinkProperties = new GatewayDownlinkProperties();
         downlinkProperties.setRetryMaxAttempts(3);
@@ -118,6 +123,7 @@ class GatewayPipelineLoadHarnessTests {
                 new SessionStopMessageDecoder(OBJECT_MAPPER, validator),
                 new CommandConfirmMessageDecoder(OBJECT_MAPPER, validator),
                 sessionControlClient,
+                clientPerceivedMetrics,
                 OBJECT_MAPPER,
                 meterRegistry);
 

@@ -24,36 +24,53 @@ public class GatewayDownlinkPublisher {
 
     private final ObjectMapper objectMapper;
     private final GatewaySessionRegistry sessionRegistry;
+    private final GatewayClientPerceivedMetrics clientPerceivedMetrics;
 
     public GatewayDownlinkPublisher(
             ObjectMapper objectMapper,
-            GatewaySessionRegistry sessionRegistry) {
+            GatewaySessionRegistry sessionRegistry,
+            GatewayClientPerceivedMetrics clientPerceivedMetrics) {
         this.objectMapper = objectMapper;
         this.sessionRegistry = sessionRegistry;
+        this.clientPerceivedMetrics = clientPerceivedMetrics;
     }
 
     public Mono<Void> publishSubtitlePartial(String sessionId, long seq, String text) {
+        if (!hasSessionId(sessionId)) {
+            return Mono.empty();
+        }
         return publishToSession(sessionId, new SubtitlePartialResponse(
                 SUBTITLE_PARTIAL_TYPE,
                 sessionId,
                 seq,
-                coalesceText(text)));
+                coalesceText(text)))
+                .doOnSuccess(unused -> clientPerceivedMetrics.onFirstSubtitleDelivered(sessionId));
     }
 
     public Mono<Void> publishSubtitleFinal(String sessionId, long seq, String text) {
+        if (!hasSessionId(sessionId)) {
+            return Mono.empty();
+        }
         return publishToSession(sessionId, new SubtitleFinalResponse(
                 SUBTITLE_FINAL_TYPE,
                 sessionId,
                 seq,
-                coalesceText(text)));
+                coalesceText(text)))
+                .doOnSuccess(unused -> clientPerceivedMetrics.onFinalSubtitleDelivered(sessionId));
     }
 
     public Mono<Void> publishSessionClosed(String sessionId, String reason) {
+        if (!hasSessionId(sessionId)) {
+            return Mono.empty();
+        }
         return publishToSession(sessionId, new SessionClosedResponse(
                 SESSION_CLOSED_TYPE,
                 sessionId,
                 coalesceText(reason)))
-                .then(sessionRegistry.closeSession(sessionId, CloseStatus.NORMAL));
+                .then(sessionRegistry.closeSession(sessionId, CloseStatus.NORMAL))
+                // session close is terminal for client-perceived timing state.
+                // clear after both downlink emit and close handshake are done.
+                .doOnSuccess(unused -> clientPerceivedMetrics.onSessionClosed(sessionId));
     }
 
     public Mono<Void> publishTtsChunk(
@@ -64,6 +81,9 @@ public class GatewayDownlinkPublisher {
             int sampleRate,
             int chunkSeq,
             boolean lastChunk) {
+        if (!hasSessionId(sessionId)) {
+            return Mono.empty();
+        }
         return publishToSession(sessionId, new TtsChunkResponse(
                 TTS_CHUNK_TYPE,
                 sessionId,
@@ -83,6 +103,9 @@ public class GatewayDownlinkPublisher {
             int sampleRate,
             long durationMs,
             String cacheKey) {
+        if (!hasSessionId(sessionId)) {
+            return Mono.empty();
+        }
         return publishToSession(sessionId, new TtsReadyResponse(
                 TTS_READY_TYPE,
                 sessionId,
@@ -91,7 +114,8 @@ public class GatewayDownlinkPublisher {
                 coalesceText(codec),
                 sampleRate,
                 durationMs,
-                coalesceText(cacheKey)));
+                coalesceText(cacheKey)))
+                .doOnSuccess(unused -> clientPerceivedMetrics.onTtsReadyDelivered(sessionId));
     }
 
     public Mono<Void> publishCommandResult(
@@ -103,6 +127,9 @@ public class GatewayDownlinkPublisher {
             boolean retryable,
             String confirmToken,
             Long expiresInSec) {
+        if (!hasSessionId(sessionId)) {
+            return Mono.empty();
+        }
         return publishToSession(sessionId, new CommandResultResponse(
                 COMMAND_RESULT_TYPE,
                 sessionId,
@@ -116,10 +143,6 @@ public class GatewayDownlinkPublisher {
     }
 
     private Mono<Void> publishToSession(String sessionId, Object payload) {
-        if (sessionId == null || sessionId.isBlank()) {
-            return Mono.empty();
-        }
-
         try {
             String serialized = objectMapper.writeValueAsString(payload);
             return sessionRegistry.emitToSession(sessionId, serialized);
@@ -140,5 +163,9 @@ public class GatewayDownlinkPublisher {
             return null;
         }
         return value;
+    }
+
+    private boolean hasSessionId(String sessionId) {
+        return sessionId != null && !sessionId.isBlank();
     }
 }

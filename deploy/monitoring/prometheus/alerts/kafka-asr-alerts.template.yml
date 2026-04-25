@@ -69,6 +69,106 @@ groups:
           summary: "Gateway downlink error ratio is critical"
           description: "gateway.downlink.messages.total error ratio > {{ALERT_DOWNLINK_ERROR_RATIO_CRITICAL}} for {{ALERT_DOWNLINK_ERROR_FOR_CRITICAL}}"
 
+      - alert: GatewayClientFirstSubtitleP95LatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(gateway_client_perceived_duration_seconds_bucket{stage="first_subtitle"}[5m])
+            )
+          ) > {{ALERT_CLIENT_FIRST_SUBTITLE_P95_SECONDS_WARNING}}
+          and
+          sum(
+            rate(gateway_client_perceived_duration_seconds_count{stage="first_subtitle"}[5m])
+          ) > {{ALERT_CLIENT_PERCEIVED_MIN_RPS}}
+        for: {{ALERT_CLIENT_FIRST_SUBTITLE_P95_FOR_WARNING}}
+        labels:
+          severity: warning
+          area: experience
+        annotations:
+          summary: "Gateway client first subtitle p95 latency is high"
+          description: "gateway.client.perceived.duration(stage=first_subtitle) p95 > {{ALERT_CLIENT_FIRST_SUBTITLE_P95_SECONDS_WARNING}}s for {{ALERT_CLIENT_FIRST_SUBTITLE_P95_FOR_WARNING}}"
+
+      - alert: GatewayClientFinalSubtitleP95LatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(gateway_client_perceived_duration_seconds_bucket{stage="final_subtitle"}[5m])
+            )
+          ) > {{ALERT_CLIENT_FINAL_SUBTITLE_P95_SECONDS_WARNING}}
+          and
+          sum(
+            rate(gateway_client_perceived_duration_seconds_count{stage="final_subtitle"}[5m])
+          ) > {{ALERT_CLIENT_PERCEIVED_MIN_RPS}}
+        for: {{ALERT_CLIENT_FINAL_SUBTITLE_P95_FOR_WARNING}}
+        labels:
+          severity: warning
+          area: experience
+        annotations:
+          summary: "Gateway client final subtitle p95 latency is high"
+          description: "gateway.client.perceived.duration(stage=final_subtitle) p95 > {{ALERT_CLIENT_FINAL_SUBTITLE_P95_SECONDS_WARNING}}s for {{ALERT_CLIENT_FINAL_SUBTITLE_P95_FOR_WARNING}}"
+
+      - alert: GatewayClientFinalSubtitleP95LatencyCritical
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(gateway_client_perceived_duration_seconds_bucket{stage="final_subtitle"}[5m])
+            )
+          ) > {{ALERT_CLIENT_FINAL_SUBTITLE_P95_SECONDS_CRITICAL}}
+          and
+          sum(
+            rate(gateway_client_perceived_duration_seconds_count{stage="final_subtitle"}[5m])
+          ) > {{ALERT_CLIENT_PERCEIVED_MIN_RPS}}
+        for: {{ALERT_CLIENT_FINAL_SUBTITLE_P95_FOR_CRITICAL}}
+        labels:
+          severity: critical
+          area: experience
+        annotations:
+          summary: "Gateway client final subtitle p95 latency is critical"
+          description: "gateway.client.perceived.duration(stage=final_subtitle) p95 > {{ALERT_CLIENT_FINAL_SUBTITLE_P95_SECONDS_CRITICAL}}s for {{ALERT_CLIENT_FINAL_SUBTITLE_P95_FOR_CRITICAL}}"
+
+      - alert: GatewayClientTtsReadyP95LatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(gateway_client_perceived_duration_seconds_bucket{stage="tts_ready"}[5m])
+            )
+          ) > {{ALERT_CLIENT_TTS_READY_P95_SECONDS_WARNING}}
+          and
+          sum(
+            rate(gateway_client_perceived_duration_seconds_count{stage="tts_ready"}[5m])
+          ) > {{ALERT_CLIENT_PERCEIVED_MIN_RPS}}
+        for: {{ALERT_CLIENT_TTS_READY_P95_FOR_WARNING}}
+        labels:
+          severity: warning
+          area: experience
+        annotations:
+          summary: "Gateway client TTS ready p95 latency is high"
+          description: "gateway.client.perceived.duration(stage=tts_ready) p95 > {{ALERT_CLIENT_TTS_READY_P95_SECONDS_WARNING}}s for {{ALERT_CLIENT_TTS_READY_P95_FOR_WARNING}}"
+
+      - alert: GatewayClientTtsReadyP95LatencyCritical
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(gateway_client_perceived_duration_seconds_bucket{stage="tts_ready"}[5m])
+            )
+          ) > {{ALERT_CLIENT_TTS_READY_P95_SECONDS_CRITICAL}}
+          and
+          sum(
+            rate(gateway_client_perceived_duration_seconds_count{stage="tts_ready"}[5m])
+          ) > {{ALERT_CLIENT_PERCEIVED_MIN_RPS}}
+        for: {{ALERT_CLIENT_TTS_READY_P95_FOR_CRITICAL}}
+        labels:
+          severity: critical
+          area: experience
+        annotations:
+          summary: "Gateway client TTS ready p95 latency is critical"
+          description: "gateway.client.perceived.duration(stage=tts_ready) p95 > {{ALERT_CLIENT_TTS_READY_P95_SECONDS_CRITICAL}}s for {{ALERT_CLIENT_TTS_READY_P95_FOR_CRITICAL}}"
+
       - alert: PipelineErrorRateHigh
         expr: |
           (
