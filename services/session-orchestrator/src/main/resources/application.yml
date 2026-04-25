@@ -62,10 +62,12 @@ orchestrator:
     aggregation-enabled: ${ORCHESTRATOR_SESSION_AGGREGATION_ENABLED:true}
     idle-timeout: ${ORCHESTRATOR_SESSION_IDLE_TIMEOUT:2m}
     hard-timeout: ${ORCHESTRATOR_SESSION_HARD_TIMEOUT:30m}
+    stalled-timeout: ${ORCHESTRATOR_SESSION_STALLED_TIMEOUT:0s}
     scan-interval: ${ORCHESTRATOR_SESSION_TIMEOUT_SCAN_INTERVAL:1s}
     close-timeout: ${ORCHESTRATOR_SESSION_CLOSE_TIMEOUT:3s}
     idle-timeout-reason: ${ORCHESTRATOR_SESSION_IDLE_TIMEOUT_REASON:timeout.idle}
     hard-timeout-reason: ${ORCHESTRATOR_SESSION_HARD_TIMEOUT_REASON:timeout.hard}
+    stalled-timeout-reason-prefix: ${ORCHESTRATOR_SESSION_STALLED_TIMEOUT_REASON_PREFIX:timeout.stalled}
   control-plane:
     base-url: ${ORCHESTRATOR_CONTROL_PLANE_BASE_URL:http://localhost:8085}
     request-timeout: ${ORCHESTRATOR_CONTROL_PLANE_REQUEST_TIMEOUT:2s}

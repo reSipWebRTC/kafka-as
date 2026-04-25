@@ -12,4 +12,9 @@ public class NoopSessionCompensationPublisher implements SessionCompensationPubl
     public void publishTimeoutClose(String timeoutType, String outcome, SessionState state, Throwable failure) {
         // No-op when Kafka is disabled in local/unit contexts.
     }
+
+    @Override
+    public void publishStalledClose(String stalledStage, String outcome, SessionState state, Throwable failure) {
+        // No-op when Kafka is disabled in local/unit contexts.
+    }
 }

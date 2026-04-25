@@ -126,7 +126,7 @@
 
 - `translation.request` 两段式链路（`asr.final -> translation.request -> translation.result`）已落地
 - `platform.audit` / `platform.dlq` 已落地，`tools/platform-dlq-replay.sh` 与 `tools/platform-dlq-auto-recovery.sh` 已补齐统一重放与自动恢复执行脚本基线
-- 当前仍缺更细粒度会话级补偿策略
+- 会话级补偿已补齐第一版 stalled 编排（`post_final` / `post_translation`）；后续仍需推进跨服务 Saga 级回滚策略
 - 原始 Kafka 材料要求的是统一治理、统一审计、统一重放
 
 退出标准：

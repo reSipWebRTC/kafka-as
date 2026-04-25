@@ -33,20 +33,70 @@ public class KafkaSessionCompensationPublisher implements SessionCompensationPub
 
     @Override
     public void publishTimeoutClose(String timeoutType, String outcome, SessionState state, Throwable failure) {
+        publishCompensation(
+                "session.timeout",
+                "timeout",
+                timeoutType,
+                "TIMEOUT_CLOSE_COMPENSATION",
+                "TIMEOUT_CLOSE",
+                outcome,
+                state,
+                failure);
+    }
+
+    @Override
+    public void publishStalledClose(String stalledStage, String outcome, SessionState state, Throwable failure) {
+        publishCompensation(
+                "session.stalled",
+                "stalled",
+                stalledStage,
+                "STALLED_CLOSE_COMPENSATION",
+                "SESSION_STALLED",
+                outcome,
+                state,
+                failure);
+    }
+
+    private void publishCompensation(
+            String sourceTopic,
+            String reasonType,
+            String reasonValue,
+            String action,
+            String reasonCode,
+            String outcome,
+            SessionState state,
+            Throwable failure) {
         try {
             kafkaTemplate.send(
                     kafkaProperties.getCompensationTopic(),
-                    objectMapper.writeValueAsString(buildLegacyCompensationEvent(timeoutType, outcome, state, failure)));
+                    objectMapper.writeValueAsString(
+                            buildLegacyCompensationEvent(sourceTopic, reasonType, reasonValue, outcome, state, failure)));
             kafkaTemplate.send(
                     kafkaProperties.getAuditTopic(),
-                    objectMapper.writeValueAsString(buildAuditEvent(timeoutType, outcome, state, failure)));
+                    objectMapper.writeValueAsString(
+                            buildAuditEvent(
+                                    sourceTopic,
+                                    reasonType,
+                                    reasonValue,
+                                    action,
+                                    reasonCode,
+                                    outcome,
+                                    state,
+                                    failure)));
         } catch (JsonProcessingException exception) {
-            log.warn("Failed to serialize session compensation signal for timeoutType={}", timeoutType, exception);
+            log.warn(
+                    "Failed to serialize session compensation signal for sourceTopic={}, reasonType={}, reasonValue={}",
+                    sourceTopic,
+                    reasonType,
+                    reasonValue,
+                    exception);
         }
     }
 
     private Map<String, Object> buildLegacyCompensationEvent(
-            String timeoutType,
+            String sourceTopic,
+            String reasonType,
+            String reasonValue,
             String outcome,
             SessionState state,
             Throwable failure) {
@@ -54,14 +104,18 @@ public class KafkaSessionCompensationPublisher implements SessionCompensationPub
         event.put("eventType", "ops.compensation");
         event.put("eventVersion", "v1");
         event.put("service", "session-orchestrator");
-        event.put("sourceTopic", "session.timeout");
-        event.put("timeoutType", timeoutType);
+        event.put("sourceTopic", sourceTopic);
+        if ("timeout".equals(reasonType)) {
+            event.put("timeoutType", reasonValue);
+        } else {
+            event.put("stalledStage", reasonValue);
+        }
         event.put("outcome", outcome);
         event.put("ts", System.currentTimeMillis());
         event.put("sessionId", state.sessionId());
         event.put("tenantId", state.tenantId());
         event.put("traceId", state.traceId());
-        event.put("idempotencyKey", state.sessionId() + ":timeout:" + timeoutType + ":" + state.lastSeq());
+        event.put("idempotencyKey", state.sessionId() + ":" + reasonType + ":" + reasonValue + ":" + state.lastSeq());
         if (failure != null) {
             event.put("failureType", failure.getClass().getSimpleName());
             event.put("failureMessage", failure.getMessage());
@@ -70,7 +124,11 @@ public class KafkaSessionCompensationPublisher implements SessionCompensationPub
     }
 
     private Map<String, Object> buildAuditEvent(
-            String timeoutType,
+            String sourceTopic,
+            String reasonType,
+            String reasonValue,
+            String action,
+            String reasonCode,
             String outcome,
             SessionState state,
             Throwable failure) {
@@ -81,20 +139,25 @@ public class KafkaSessionCompensationPublisher implements SessionCompensationPub
                 ? "governance::" + tenantId
                 : state.sessionId();
         String traceId = (state.traceId() == null || state.traceId().isBlank()) ? eventId : state.traceId();
-        String idempotencyKey = sessionId + ":timeout:" + timeoutType + ":" + state.lastSeq();
+        String idempotencyKey = sessionId + ":" + reasonType + ":" + reasonValue + ":" + state.lastSeq();
 
         Map<String, Object> details = new HashMap<>();
         details.put("legacyEventType", "ops.compensation");
-        details.put("timeoutType", timeoutType);
+        if ("timeout".equals(reasonType)) {
+            details.put("timeoutType", reasonValue);
+        } else {
+            details.put("stalledStage", reasonValue);
+        }
         details.put("outcome", outcome);
 
         Map<String, Object> payload = new HashMap<>();
         payload.put("service", "session-orchestrator");
-        payload.put("action", "TIMEOUT_CLOSE_COMPENSATION");
+        payload.put("action", action);
         payload.put("outcome", failure == null ? "SUCCESS" : "FAILED");
         payload.put("resourceType", "session");
         payload.put("resourceId", sessionId);
-        payload.put("reasonCode", "TIMEOUT_CLOSE");
+        payload.put("sourceTopic", sourceTopic);
+        payload.put("reasonCode", reasonCode);
         payload.put("occurredAtMs", now);
         payload.put("details", details);
         if (failure != null) {
