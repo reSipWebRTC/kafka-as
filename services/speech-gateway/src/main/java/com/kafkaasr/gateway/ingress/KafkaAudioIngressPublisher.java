@@ -56,13 +56,17 @@ public class KafkaAudioIngressPublisher implements AudioIngressPublisher {
 
     private AudioIngressRawEvent toEvent(AudioFrameIngressCommand command) {
         long timestamp = Instant.now(clock).toEpochMilli();
+        String traceId = coalesce(command.traceId(), prefixedId("trc"));
+        String tenantId = coalesce(command.tenantId(), properties.getTenantId());
+        String userId = nullable(command.userId());
         return new AudioIngressRawEvent(
                 prefixedId("evt"),
                 EVENT_TYPE,
                 EVENT_VERSION,
-                prefixedId("trc"),
+                traceId,
                 command.sessionId(),
-                properties.getTenantId(),
+                tenantId,
+                userId,
                 null,
                 properties.getProducerId(),
                 command.seq(),
@@ -87,6 +91,20 @@ public class KafkaAudioIngressPublisher implements AudioIngressPublisher {
     private String normalizeCodec(String codec) {
         String normalizedCodec = codec.toLowerCase();
         return SUPPORTED_CODECS.contains(normalizedCodec) ? normalizedCodec : "other";
+    }
+
+    private String coalesce(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value;
+    }
+
+    private String nullable(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value;
     }
 
     private String prefixedId(String prefix) {

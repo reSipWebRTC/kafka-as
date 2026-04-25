@@ -38,7 +38,7 @@
 
 ## 3. 当前已实现 Topic
 
-截至 `2026-04-24`，仓库里已经落地并有代码/测试支撑的 Topic 如下：
+截至 `2026-04-25`，仓库里已经落地并有代码/测试支撑的 Topic 如下：
 
 | Topic | Producer | Consumer | Key | 说明 |
 | --- | --- | --- | --- | --- |
@@ -61,14 +61,21 @@
 - 上述核心消费者均已接入基于 `idempotencyKey` 的 TTL 判重，重复消息按成功路径 no-op
 - 上述核心消费者在重复失败达到阈值后会发出 `ops.compensation` 信号到 `platform.compensation`
 
-## 4. 已冻结待实现 Topic
+## 4. 已冻结并分阶段落地 Topic
 
-以下 Topic 契约已在 `api/json-schema` 与 `api/protobuf` 冻结，当前代码尚未落地：
+以下 Topic 契约已在 `api/json-schema` 与 `api/protobuf` 冻结，当前为分阶段落地状态：
 
 | Topic | Producer | Consumer | Key | 说明 |
 | --- | --- | --- | --- | --- |
 | `command.confirm.request` | `speech-gateway` | `command-worker` | `sessionId` | 客户端二次确认请求（`confirm_token + accept`） |
 | `command.result` | `command-worker` | `speech-gateway`、`tts-orchestrator` | `sessionId` | 智能家居命令执行回执（含 `confirm_required`） |
+
+当前状态：
+
+- `speech-gateway` 已完成 `command.confirm.request` 发布与 `command.result` 消费下发
+- `command-worker` 已完成 `asr.final` / `command.confirm.request` 消费、smartHomeNlu 调用与 `command.result` 发布（含重试/DLQ/幂等/补偿）
+- `tts-orchestrator` 已完成 `command.result` 消费并按 `sessionMode=SMART_HOME` 产出 `tts.request` / `tts.chunk` / `tts.ready`
+- `tts-orchestrator` 对 `translation.result` 已按租户 `sessionMode` 分流：`TRANSLATION` 处理，`SMART_HOME` 忽略
 
 ## 5. 计划扩展 Topic
 
@@ -86,7 +93,7 @@
 补充说明：
 
 - `tenant.policy.changed` 的 JSON Schema / Protobuf 契约、`control-plane` 发布以及运行时服务消费刷新均已落地。
-- `command.confirm.request` 与 `command.result` 的 JSON Schema / Protobuf 契约已冻结，待后续服务实现接入。
+- `command.confirm.request` 与 `command.result` 的 JSON Schema / Protobuf 契约已冻结。
 
 ## 6. 分区与顺序策略
 

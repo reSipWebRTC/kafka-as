@@ -6,6 +6,7 @@ public record SessionStartMessage(
         @NotBlank String type,
         @NotBlank String sessionId,
         @NotBlank String tenantId,
+        @NotBlank String userId,
         @NotBlank String sourceLang,
         @NotBlank String targetLang,
         String traceId) {

@@ -1,0 +1,18 @@
+# IDE and local machine files
+.idea/
+.gradle/
+.kotlin/
+local.properties
+*.iml
+
+# Build outputs
+build/
+app/build/
+
+# Runtime/model binaries (download separately for local run)
+app/src/main/assets/
+app/src/main/jniLibs/
+app/libs/
+
+# Native libraries
+*.so

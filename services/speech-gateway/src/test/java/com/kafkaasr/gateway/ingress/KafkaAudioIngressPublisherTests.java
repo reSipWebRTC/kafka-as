@@ -82,6 +82,7 @@ class KafkaAudioIngressPublisherTests {
         assertEquals(7L, event.get("seq").asLong());
         assertEquals(FIXED_INSTANT.toEpochMilli(), event.get("ts").asLong());
         assertEquals("sess-1:audio.ingress.raw:7", event.get("idempotencyKey").asText());
+        assertFalse(event.has("userId"));
         assertFalse(event.has("roomId"));
 
         assertEquals("other", payload.get("audioCodec").asText());
@@ -89,5 +90,32 @@ class KafkaAudioIngressPublisherTests {
         assertEquals(1, payload.get("channels").asInt());
         assertEquals("AQID", payload.get("audioBase64").asText());
         assertFalse(payload.get("endOfStream").asBoolean());
+    }
+
+    @Test
+    void usesSessionContextWhenProvidedByRouter() throws Exception {
+        @SuppressWarnings("unchecked")
+        SendResult<String, String> sendResult = mock(SendResult.class);
+        when(kafkaTemplate.send(eq("audio.ingress.raw"), eq("sess-ctx"), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(sendResult));
+
+        StepVerifier.create(publisher.publishRawFrame(new AudioFrameIngressCommand(
+                        "sess-ctx",
+                        8L,
+                        "pcm16le",
+                        16000,
+                        new byte[] {1, 2},
+                        "tenant-ctx",
+                        "user-ctx",
+                        "trc-ctx")))
+                .verifyComplete();
+
+        ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+        verify(kafkaTemplate).send(eq("audio.ingress.raw"), eq("sess-ctx"), payloadCaptor.capture());
+
+        JsonNode event = objectMapper.readTree(payloadCaptor.getValue());
+        assertEquals("tenant-ctx", event.get("tenantId").asText());
+        assertEquals("user-ctx", event.get("userId").asText());
+        assertEquals("trc-ctx", event.get("traceId").asText());
     }
 }

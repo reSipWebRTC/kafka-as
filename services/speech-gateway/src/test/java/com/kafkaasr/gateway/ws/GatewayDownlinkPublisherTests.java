@@ -116,6 +116,36 @@ class GatewayDownlinkPublisherTests {
     }
 
     @Test
+    void publishesCommandResultPayload() {
+        when(sessionRegistry.emitToSession(eq("sess-1"), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(Mono.empty());
+
+        StepVerifier.create(publisher.publishCommandResult(
+                        "sess-1",
+                        22L,
+                        "CONFIRM_REQUIRED",
+                        "DEVICE_CONFIRM_NEEDED",
+                        "Please confirm turning on the light",
+                        false,
+                        "cfm-100",
+                        30L))
+                .verifyComplete();
+
+        ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+        verify(sessionRegistry).emitToSession(eq("sess-1"), payloadCaptor.capture());
+        String payload = payloadCaptor.getValue();
+        assertTrue(payload.contains("\"type\":\"command.result\""));
+        assertTrue(payload.contains("\"sessionId\":\"sess-1\""));
+        assertTrue(payload.contains("\"seq\":22"));
+        assertTrue(payload.contains("\"status\":\"CONFIRM_REQUIRED\""));
+        assertTrue(payload.contains("\"code\":\"DEVICE_CONFIRM_NEEDED\""));
+        assertTrue(payload.contains("\"replyText\":\"Please confirm turning on the light\""));
+        assertTrue(payload.contains("\"retryable\":false"));
+        assertTrue(payload.contains("\"confirmToken\":\"cfm-100\""));
+        assertTrue(payload.contains("\"expiresInSec\":30"));
+    }
+
+    @Test
     void ignoresBlankSessionId() {
         StepVerifier.create(publisher.publishSubtitleFinal("", 1L, "ignored"))
                 .verifyComplete();

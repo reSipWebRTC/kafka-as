@@ -6,12 +6,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.gateway.flow.GatewayAudioFrameFlowController;
 import com.kafkaasr.gateway.ingress.AudioFrameIngressCommand;
 import com.kafkaasr.gateway.ingress.AudioIngressPublisher;
+import com.kafkaasr.gateway.ingress.CommandConfirmIngressCommand;
+import com.kafkaasr.gateway.ingress.CommandConfirmRequestPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionControlClientException;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -22,36 +26,45 @@ public class GatewayMessageRouter {
     private static final String SESSION_START_TYPE = "session.start";
     private static final String SESSION_PING_TYPE = "session.ping";
     private static final String SESSION_STOP_TYPE = "session.stop";
+    private static final String COMMAND_CONFIRM_TYPE = "command.confirm";
     private static final String INVALID_MESSAGE_CODE = "INVALID_MESSAGE";
+    private static final String SESSION_NOT_FOUND_CODE = "SESSION_NOT_FOUND";
     private static final String RATE_LIMITED_CODE = "RATE_LIMITED";
     private static final String BACKPRESSURE_DROP_CODE = "BACKPRESSURE_DROP";
 
     private final AudioIngressPublisher audioIngressPublisher;
+    private final CommandConfirmRequestPublisher commandConfirmRequestPublisher;
     private final GatewayAudioFrameFlowController flowController;
     private final AudioFrameMessageDecoder audioFrameMessageDecoder;
     private final SessionStartMessageDecoder sessionStartMessageDecoder;
     private final SessionPingMessageDecoder sessionPingMessageDecoder;
     private final SessionStopMessageDecoder sessionStopMessageDecoder;
+    private final CommandConfirmMessageDecoder commandConfirmMessageDecoder;
     private final SessionControlClient sessionControlClient;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
+    private final Map<String, SessionContext> sessionContexts = new ConcurrentHashMap<>();
 
     public GatewayMessageRouter(
             AudioIngressPublisher audioIngressPublisher,
+            CommandConfirmRequestPublisher commandConfirmRequestPublisher,
             GatewayAudioFrameFlowController flowController,
             AudioFrameMessageDecoder audioFrameMessageDecoder,
             SessionStartMessageDecoder sessionStartMessageDecoder,
             SessionPingMessageDecoder sessionPingMessageDecoder,
             SessionStopMessageDecoder sessionStopMessageDecoder,
+            CommandConfirmMessageDecoder commandConfirmMessageDecoder,
             SessionControlClient sessionControlClient,
             ObjectMapper objectMapper,
             MeterRegistry meterRegistry) {
         this.audioIngressPublisher = audioIngressPublisher;
+        this.commandConfirmRequestPublisher = commandConfirmRequestPublisher;
         this.flowController = flowController;
         this.audioFrameMessageDecoder = audioFrameMessageDecoder;
         this.sessionStartMessageDecoder = sessionStartMessageDecoder;
         this.sessionPingMessageDecoder = sessionPingMessageDecoder;
         this.sessionStopMessageDecoder = sessionStopMessageDecoder;
+        this.commandConfirmMessageDecoder = commandConfirmMessageDecoder;
         this.sessionControlClient = sessionControlClient;
         this.objectMapper = objectMapper;
         this.meterRegistry = meterRegistry;
@@ -95,7 +108,16 @@ public class GatewayMessageRouter {
                             request.sessionId()));
                 }
 
-                yield audioIngressPublisher.publishRawFrame(request)
+                SessionContext context = sessionContexts.get(request.sessionId());
+                AudioFrameIngressCommand command = request;
+                if (context != null) {
+                    command = request.withSessionContext(
+                            context.tenantId(),
+                            context.userId(),
+                            context.traceId());
+                }
+
+                yield audioIngressPublisher.publishRawFrame(command)
                         .doFinally(signalType -> flowController.release(request.sessionId()));
             }
             case SESSION_START_TYPE -> {
@@ -107,7 +129,13 @@ public class GatewayMessageRouter {
                         request.tenantId(),
                         request.sourceLang(),
                         request.targetLang(),
-                        request.traceId()));
+                        request.traceId()))
+                        .doOnSuccess(unused -> sessionContexts.put(
+                                request.sessionId(),
+                                new SessionContext(
+                                        request.tenantId(),
+                                        request.userId(),
+                                        request.traceId())));
             }
             case SESSION_PING_TYPE -> {
                 SessionPingMessage request = sessionPingMessageDecoder.decode(rawMessage);
@@ -121,7 +149,28 @@ public class GatewayMessageRouter {
                 yield sessionControlClient.stopSession(new SessionStopCommand(
                         request.sessionId(),
                         request.traceId(),
-                        request.reason()));
+                        request.reason()))
+                        .doFinally(signalType -> sessionContexts.remove(request.sessionId()));
+            }
+            case COMMAND_CONFIRM_TYPE -> {
+                CommandConfirmMessage request = commandConfirmMessageDecoder.decode(rawMessage);
+                sessionBinder.bind(request.sessionId());
+                SessionContext context = sessionContexts.get(request.sessionId());
+                if (context == null) {
+                    yield Mono.error(new MessageValidationException(
+                            SESSION_NOT_FOUND_CODE,
+                            "Session context not found for command.confirm",
+                            request.sessionId()));
+                }
+
+                yield commandConfirmRequestPublisher.publish(new CommandConfirmIngressCommand(
+                        request.sessionId(),
+                        request.seq(),
+                        coalesce(request.traceId(), context.traceId()),
+                        context.tenantId(),
+                        context.userId(),
+                        request.confirmToken(),
+                        request.accept()));
             }
             default -> Mono.error(new MessageValidationException(
                     INVALID_MESSAGE_CODE,
@@ -184,7 +233,7 @@ public class GatewayMessageRouter {
 
     private String normalizeType(String type) {
         return switch (type) {
-            case AUDIO_FRAME_TYPE, SESSION_START_TYPE, SESSION_PING_TYPE, SESSION_STOP_TYPE -> type;
+            case AUDIO_FRAME_TYPE, SESSION_START_TYPE, SESSION_PING_TYPE, SESSION_STOP_TYPE, COMMAND_CONFIRM_TYPE -> type;
             default -> "unsupported";
         };
     }
@@ -203,6 +252,16 @@ public class GatewayMessageRouter {
     }
 
     private record InboundEnvelope(String type, String sessionId) {
+    }
+
+    private String coalesce(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value;
+    }
+
+    private record SessionContext(String tenantId, String userId, String traceId) {
     }
 
     @FunctionalInterface

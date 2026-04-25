@@ -2,6 +2,7 @@ package com.kafkaasr.gateway.ws;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kafkaasr.gateway.ws.protocol.CommandResultResponse;
 import com.kafkaasr.gateway.ws.protocol.SessionClosedResponse;
 import com.kafkaasr.gateway.ws.protocol.SubtitleFinalResponse;
 import com.kafkaasr.gateway.ws.protocol.SubtitlePartialResponse;
@@ -19,6 +20,7 @@ public class GatewayDownlinkPublisher {
     private static final String SESSION_CLOSED_TYPE = "session.closed";
     private static final String TTS_CHUNK_TYPE = "tts.chunk";
     private static final String TTS_READY_TYPE = "tts.ready";
+    private static final String COMMAND_RESULT_TYPE = "command.result";
 
     private final ObjectMapper objectMapper;
     private final GatewaySessionRegistry sessionRegistry;
@@ -92,6 +94,27 @@ public class GatewayDownlinkPublisher {
                 coalesceText(cacheKey)));
     }
 
+    public Mono<Void> publishCommandResult(
+            String sessionId,
+            long seq,
+            String status,
+            String code,
+            String replyText,
+            boolean retryable,
+            String confirmToken,
+            Long expiresInSec) {
+        return publishToSession(sessionId, new CommandResultResponse(
+                COMMAND_RESULT_TYPE,
+                sessionId,
+                seq,
+                coalesceText(status),
+                coalesceText(code),
+                coalesceText(replyText),
+                retryable,
+                nullableText(confirmToken),
+                expiresInSec));
+    }
+
     private Mono<Void> publishToSession(String sessionId, Object payload) {
         if (sessionId == null || sessionId.isBlank()) {
             return Mono.empty();
@@ -108,6 +131,13 @@ public class GatewayDownlinkPublisher {
     private String coalesceText(String value) {
         if (value == null || value.isBlank()) {
             return "";
+        }
+        return value;
+    }
+
+    private String nullableText(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
         }
         return value;
     }

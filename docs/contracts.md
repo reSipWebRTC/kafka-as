@@ -11,16 +11,16 @@
 - 第一批核心事件类型与字段
 - 错误码与版本演进规则
 
-## 1.1 当前实现注记（2026-04-24）
+## 1.1 当前实现注记（2026-04-25）
 
 本文件仍然是外部行为的权威定义，但当前仓库只实现了其中一部分。
 
 当前已经落地：
 
-- WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`
-- WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`session.closed`
+- WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`
+- WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`command.result`、`session.closed`
 - 低频控制 API：会话 start/stop、租户策略 get/put/rollback
-- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`
+- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`
 - 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
 - 核心 Kafka consumer 已落地重试与按源 Topic 的 `.dlq` 死信回退；`asr-worker`、`translation-worker`、`tts-orchestrator` 已支持按租户策略驱动重试参数与 DLQ 后缀
 - 核心 Kafka consumer 已落地 `idempotencyKey` 判重（TTL 窗口）与重复消息丢弃
@@ -45,12 +45,21 @@
 - `control-plane` 已实现并冻结回滚编排契约：`POST /api/v1/tenants/{tenantId}/policy:rollback` 支持可选请求体 `targetVersion`、`distributionRegions`；请求体缺失时语义保持为“回滚上一版本”
 - `tenant.policy.changed` 已实现并冻结编排元数据扩展：`sourcePolicyVersion`、`targetPolicyVersion`、`distributionRegions`（均为可选字段，向后兼容）
 
-已冻结待实现（契约已补齐，代码待后续 PR 落地）：
+已冻结并分阶段落地：
 
-- WebSocket 上行：`command.confirm`
-- WebSocket 下行：`command.result`
-- 事件 Topic：`command.confirm.request`、`command.result`
-- 事件 Envelope 扩展字段：`userId`
+- `speech-gateway` 已实现：
+  - WebSocket 上行 `command.confirm` -> Kafka `command.confirm.request`
+  - Kafka `command.result` -> WebSocket 下行 `command.result`
+- `command-worker` 已实现：
+  - 消费 `asr.final`（仅 `sessionMode=SMART_HOME`）
+  - 消费 `command.confirm.request`
+  - 调用 smartHomeNlu `/api/v1/command`、`/api/v1/confirm`
+  - 发布 `command.result`（含租户策略驱动重试/DLQ、幂等与补偿信号）
+- `tts-orchestrator` 已实现：
+  - 消费 `command.result`（仅 `sessionMode=SMART_HOME`）
+  - 消费 `translation.result`（仅 `sessionMode=TRANSLATION`）
+  - 双路径统一发布 `tts.request` / `tts.chunk` / `tts.ready`
+- 事件 Envelope 扩展字段 `userId` 已在契约与当前网关实现中支持（随会话上下文透传）
 
 ## 2. 主数据路径（冻结）
 
@@ -131,8 +140,8 @@
 
 当前实现说明：
 
-- `speech-gateway` 当前已接受 `session.start`、`session.ping`、`audio.frame`、`session.stop`
-- `command.confirm` 为已冻结待实现协议，后续由 `speech-gateway` 转发至 `command.confirm.request`
+- `speech-gateway` 已接受 `session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`
+- `command.confirm` 已由 `speech-gateway` 转发至 Kafka Topic `command.confirm.request`（需先完成 `session.start` 建立 `tenantId/userId` 会话上下文）
 - 当 `gateway.auth.enabled=true` 时，`/ws/audio` 需要携带合法 token（`Authorization: Bearer <token>` 或 query 参数 `access_token`）
 - token 缺失/非法时，网关会下发 `session.error(code=AUTH_INVALID_TOKEN)` 并关闭连接
 
@@ -152,7 +161,7 @@
 
 - `session.error` 已由 `speech-gateway` 落地，用于协议校验和控制面错误
 - `subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`session.closed` 已通过 Kafka 下游事件回推到 WebSocket 客户端
-- `command.result` 为已冻结待实现协议，后续由 `speech-gateway` 消费 `command.result` Topic 后下发
+- `command.result` 已由 `speech-gateway` 消费 Kafka Topic `command.result` 后下发到 WebSocket 客户端
 
 ### 5.3 Control-Plane 回滚编排 API（v1）
 
