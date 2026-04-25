@@ -46,6 +46,13 @@ data class CommandExecutionResult(
     val seq: Long
 )
 
+data class CommandInfo(
+    val action: String,
+    val device: String,
+    val location: String? = null,
+    val description: String = listOfNotNull(action, device, location).joinToString(" ")
+)
+
 data class AsrUiState(
     val finalText: String = "",
     val partialText: String = "",
