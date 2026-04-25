@@ -52,6 +52,8 @@
 | `tts.chunk` | `tts-orchestrator` | `speech-gateway` | `sessionId` | TTS 流式音频分片输出，用于 `tts.chunk` 下行 |
 | `tts.ready` | `tts-orchestrator` | `speech-gateway` | `sessionId` | TTS 回放就绪输出，用于 `tts.ready` 下行 |
 | `tenant.policy.changed` | `control-plane` | `session-orchestrator`、`asr-worker`、`translation-worker`、`tts-orchestrator` | `tenantId` | 租户策略变更通知，用于动态策略分发 |
+| `platform.audit` | `asr-worker`、`translation-worker`、`tts-orchestrator`、`command-worker`、`speech-gateway`、`session-orchestrator` | 暂无仓库内下游 | `tenantId` | 治理审计事件（补偿/超时等） |
+| `platform.dlq` | `asr-worker`、`translation-worker`、`tts-orchestrator`、`command-worker`、`speech-gateway` | 暂无仓库内下游 | `tenantId` | 统一死信治理事件（保留按源 `.dlq`） |
 
 说明：
 
@@ -61,6 +63,7 @@
 - `asr-worker`、`translation-worker`、`tts-orchestrator`、`speech-gateway` 下行消费者已接入固定重试 + `<source-topic>.dlq` 死信回退
 - 上述核心消费者均已接入基于 `idempotencyKey` 的 TTL 判重，重复消息按成功路径 no-op
 - 上述核心消费者在重复失败达到阈值后会发出 `ops.compensation` 信号到 `platform.compensation`
+- 上述核心消费者补偿路径已并行发布 `platform.audit`，并在死信恢复时追加 `platform.dlq`（兼容保留旧治理主题）
 
 ## 4. 已冻结并分阶段落地 Topic
 
@@ -78,17 +81,20 @@
 - `tts-orchestrator` 已完成 `command.result` 消费并按 `sessionMode=SMART_HOME` 产出 `tts.request` / `tts.chunk` / `tts.ready`
 - `tts-orchestrator` 对 `translation.result` 已按租户 `sessionMode` 分流：`TRANSLATION` 处理，`SMART_HOME` 忽略
 
-## 5. 计划扩展 Topic
+## 5. 扩展 Topic（契约冻结与实现状态）
 
-以下 Topic 仍然属于目标架构的一部分，但当前未在仓库实现中落地：
+以下 Topic 属于目标架构扩展能力，当前分为“契约已冻结待接入”和“规划中”两类：
 
-| Topic | 说明 | 计划用途 |
-| --- | --- | --- |
-| `audio.vad.segmented` | VAD 切分后的语音段 | 支撑更细粒度 ASR 管线 |
-| `platform.audit` | 审计事件 | 配置与治理追踪 |
-| `platform.dlq` | 死信队列 | 补偿与排障 |
+| Topic | 说明 | 计划用途 | 当前状态 |
+| --- | --- | --- | --- |
+| `audio.vad.segmented` | VAD 切分后的语音段 | 支撑更细粒度 ASR 管线 | 规划中 |
+| `platform.audit` | 审计事件 | 配置与治理追踪 | 已实现（补偿路径审计双写） |
+| `platform.dlq` | 统一死信治理事件 | 补偿与排障 | 已实现（消费失败统一上报） |
 
-这些 Topic 在文档中应该明确标记为“计划扩展”，不要写成当前已上线能力。
+说明：
+
+- `platform.audit` / `platform.dlq` 已新增 JSON Schema 与 Protobuf 契约并接入核心运行时路径。
+- 为兼容旧链路，现有 `<source-topic>.dlq` 与 `platform.compensation` 行为保持不变（并行双写）。
 
 补充说明：
 
@@ -156,16 +162,16 @@
 
 ### 死信
 
-当前实现（`2026-04-22`）：
+当前实现（`2026-04-25`）：
 
 - 核心 consumer 失败后会写入 `<source-topic>.dlq`
+- 核心 consumer 在死信恢复时会额外发布 `platform.dlq` 统一治理事件
 - `IllegalArgumentException`（如 payload 非法）按不可重试处理，直接进入对应 DLQ
-- 核心 consumer 失败达到重试阈值后会额外发送 `ops.compensation` 信号
+- 核心 consumer 失败达到重试阈值后会额外发送 `ops.compensation`，并双写 `platform.audit` 审计事件
 
-目标形态（规划中）：
+下一步（运营化）：
 
-- 统一汇聚到 `platform.dlq` 进行跨服务补偿与排障
-- 建立标准化重放与审计流程
+- 基于 `platform.dlq` 建立标准化重放与审计流程
 
 以下情况最终都应进入统一死信治理：
 

@@ -17,7 +17,8 @@ public class GatewayDownlinkKafkaConsumerConfig {
     @Bean
     DefaultErrorHandler gatewayDownlinkKafkaErrorHandler(
             KafkaTemplate<String, String> kafkaTemplate,
-            GatewayDownlinkProperties downlinkProperties) {
+            GatewayDownlinkProperties downlinkProperties,
+            GatewayPlatformDlqPublisher platformDlqPublisher) {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
                 kafkaTemplate,
                 (record, ignored) -> new TopicPartition(
@@ -28,7 +29,11 @@ public class GatewayDownlinkKafkaConsumerConfig {
                 downlinkProperties.getRetryBackoffMs(),
                 Math.max(0L, downlinkProperties.getRetryMaxAttempts() - 1L));
 
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, fixedBackOff);
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler((record, exception) -> {
+            String destinationTopic = record.topic() + downlinkProperties.getDlqTopicSuffix();
+            recoverer.accept(record, exception);
+            platformDlqPublisher.publish(record, destinationTopic, exception);
+        }, fixedBackOff);
         errorHandler.addNotRetryableExceptions(IllegalArgumentException.class);
         return errorHandler;
     }

@@ -20,11 +20,13 @@
 - WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`、`playback.metric`
 - WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`command.result`、`session.closed`
 - 低频控制 API：会话 start/stop、租户策略 get/put/rollback
-- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.request`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`
+- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.request`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`、`platform.audit`、`platform.dlq`
 - 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
 - 核心 Kafka consumer 已落地重试与按源 Topic 的 `.dlq` 死信回退；`asr-worker`、`translation-worker`、`tts-orchestrator` 已支持按租户策略驱动重试参数与 DLQ 后缀
+- 核心 Kafka consumer 在 `.dlq` 死信回退时会额外发布统一治理事件到 `platform.dlq`（兼容保留按源 Topic 的 `.dlq`）
 - 核心 Kafka consumer 已落地 `idempotencyKey` 判重（TTL 窗口）与重复消息丢弃
 - 核心 Kafka consumer 重复失败达到阈值后会发送 `ops.compensation` 信号到 `platform.compensation`
+- 核心补偿信号同时发布 `platform.audit` 审计事件（兼容保留 `platform.compensation`）
 - `asr-worker` FunASR 适配已补齐可用性探测、并发保护与错误语义映射（用于重试/DLQ 分类）
 - `translation-worker` OpenAI 适配已补齐可用性探测、并发保护与错误语义映射（用于重试/DLQ 分类）
 - `tts-orchestrator` HTTP synthesis 适配已补齐可用性探测、并发保护与错误语义映射（用于重试/DLQ 分类）
@@ -117,12 +119,15 @@
 | `tenant.policy.changed` | 租户策略变更通知（`control-plane` 发布，运行时服务消费刷新） | `tenant.policy.changed` | `tenantId` |
 | `command.confirm.request` | 客户端确认请求（`confirm_token + accept`） | `command.confirm.request` | `sessionId` |
 | `command.result` | 智能家居命令执行结果/确认要求回执 | `command.result` | `sessionId` |
+| `platform.audit` | 治理审计事件（配置变更、补偿、关键策略动作） | `platform.audit` | `tenantId` |
+| `platform.dlq` | 统一死信治理事件（跨服务排障与重放） | `platform.dlq` | `tenantId` |
 
 当前实现语义（`asr-worker`）：
 
 - 非稳定识别结果发布为 `asr.partial`
 - 稳定结果、`endOfStream=true`，或命中 VAD 静音切段阈值的结果发布为 `asr.final`
 - 治理事件 `tenant.policy.changed` 没有真实会话上下文时，`sessionId` 使用合成值（建议 `tenant-policy::<tenantId>`）
+- 治理事件（`tenant.policy.changed` / `platform.audit` / `platform.dlq`）没有真实会话上下文时，`sessionId` 使用合成值（建议 `governance::<tenantId>`）
 - 治理事件 `tenant.policy.changed.payload.operation` 当前取值：`CREATED`、`UPDATED`、`ROLLED_BACK`、`ROLLED_BACK_TO_VERSION`
 - 当 `operation=ROLLED_BACK_TO_VERSION` 时，`sourcePolicyVersion` 与 `targetPolicyVersion` 必填
 
@@ -234,3 +239,5 @@
   - `api/json-schema/tenant.policy.changed.v1.json`
   - `api/json-schema/command.confirm.request.v1.json`
   - `api/json-schema/command.result.v1.json`
+  - `api/json-schema/platform.audit.v1.json`
+  - `api/json-schema/platform.dlq.v1.json`

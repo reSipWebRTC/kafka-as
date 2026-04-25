@@ -18,7 +18,8 @@ public class TranslationKafkaConsumerConfig {
     @Bean
     DefaultErrorHandler translationKafkaErrorHandler(
             KafkaTemplate<String, String> kafkaTemplate,
-            TranslationKafkaProperties kafkaProperties) {
+            TranslationKafkaProperties kafkaProperties,
+            TranslationPlatformDlqPublisher platformDlqPublisher) {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
                 kafkaTemplate,
                 (record, exception) -> new TopicPartition(
@@ -27,7 +28,11 @@ public class TranslationKafkaConsumerConfig {
 
         FixedBackOff fixedBackOff = new FixedBackOff(0L, 0L);
 
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, fixedBackOff);
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler((record, exception) -> {
+            String destinationTopic = record.topic() + resolveDlqTopicSuffix(exception, kafkaProperties.getDlqTopicSuffix());
+            recoverer.accept(record, exception);
+            platformDlqPublisher.publish(record, destinationTopic, exception);
+        }, fixedBackOff);
         errorHandler.addNotRetryableExceptions(IllegalArgumentException.class);
         errorHandler.addNotRetryableExceptions(TenantAwareDlqException.class);
         return errorHandler;

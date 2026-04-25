@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kafka-asr.local/schemas/platform.dlq.v1.json",
+  "title": "platform.dlq.v1",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "traceId",
+    "sessionId",
+    "tenantId",
+    "producer",
+    "seq",
+    "ts",
+    "idempotencyKey",
+    "payload"
+  ],
+  "properties": {
+    "eventId": { "type": "string", "minLength": 1 },
+    "eventType": { "const": "platform.dlq" },
+    "eventVersion": { "const": "v1" },
+    "traceId": { "type": "string", "minLength": 1 },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "tenantId": { "type": "string", "minLength": 1 },
+    "userId": { "type": "string", "minLength": 1 },
+    "roomId": { "type": "string" },
+    "producer": { "type": "string", "minLength": 1 },
+    "seq": { "type": "integer", "minimum": 0 },
+    "ts": { "type": "integer", "minimum": 0 },
+    "idempotencyKey": { "type": "string", "minLength": 1 },
+    "payload": {
+      "type": "object",
+      "required": ["service", "sourceTopic", "dlqTopic", "reason", "rawPayload"],
+      "properties": {
+        "service": { "type": "string", "minLength": 1 },
+        "sourceTopic": { "type": "string", "minLength": 1 },
+        "sourcePartition": { "type": "integer", "minimum": 0 },
+        "sourceOffset": { "type": "integer", "minimum": 0 },
+        "sourceTs": { "type": "integer", "minimum": 0 },
+        "dlqTopic": { "type": "string", "minLength": 1 },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "MAX_RETRIES_EXCEEDED",
+            "NON_RETRYABLE",
+            "DESERIALIZATION_FAILED",
+            "UNKNOWN_EVENT_VERSION",
+            "PROCESSING_ERROR"
+          ]
+        },
+        "failureType": { "type": "string", "minLength": 1 },
+        "failureMessage": { "type": "string" },
+        "attempt": { "type": "integer", "minimum": 1 },
+        "originalEventType": { "type": "string", "minLength": 1 },
+        "originalEventVersion": { "type": "string", "minLength": 1 },
+        "replayHint": { "type": "string", "minLength": 1 },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "rawPayload": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -150,6 +150,49 @@ message CommandResultEvent {
   CommandResultPayload payload = 2;
 }
 
+message PlatformAuditPayload {
+  string service = 1;
+  string action = 2;
+  string outcome = 3;
+  string resource_type = 4;
+  string resource_id = 5;
+  string source_topic = 6;
+  string target_topic = 7;
+  string failure_type = 8;
+  string failure_message = 9;
+  string reason_code = 10;
+  int64 occurred_at_ms = 11;
+  string details_json = 12;
+}
+
+message PlatformAuditEvent {
+  EventEnvelope envelope = 1;
+  PlatformAuditPayload payload = 2;
+}
+
+message PlatformDlqPayload {
+  string service = 1;
+  string source_topic = 2;
+  uint32 source_partition = 3;
+  uint64 source_offset = 4;
+  int64 source_ts_ms = 5;
+  string dlq_topic = 6;
+  string reason = 7;
+  string failure_type = 8;
+  string failure_message = 9;
+  uint32 attempt = 10;
+  string original_event_type = 11;
+  string original_event_version = 12;
+  string replay_hint = 13;
+  string headers_json = 14;
+  string raw_payload = 15;
+}
+
+message PlatformDlqEvent {
+  EventEnvelope envelope = 1;
+  PlatformDlqPayload payload = 2;
+}
+
 message WsSessionStart {
   string session_id = 1;
   string tenant_id = 2;

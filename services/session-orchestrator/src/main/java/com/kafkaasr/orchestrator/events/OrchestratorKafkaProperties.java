@@ -30,6 +30,9 @@ public class OrchestratorKafkaProperties {
     private String compensationTopic = "platform.compensation";
 
     @NotBlank
+    private String auditTopic = "platform.audit";
+
+    @NotBlank
     private String producerId = "session-orchestrator";
 
     public String getSessionControlTopic() {
@@ -86,6 +89,14 @@ public class OrchestratorKafkaProperties {
 
     public void setCompensationTopic(String compensationTopic) {
         this.compensationTopic = compensationTopic;
+    }
+
+    public String getAuditTopic() {
+        return auditTopic;
+    }
+
+    public void setAuditTopic(String auditTopic) {
+        this.auditTopic = auditTopic;
     }
 
     public String getProducerId() {

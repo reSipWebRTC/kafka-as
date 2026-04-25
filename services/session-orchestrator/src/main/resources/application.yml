@@ -53,6 +53,7 @@ orchestrator:
     tts-ready-topic: ${ORCHESTRATOR_TTS_READY_TOPIC:tts.ready}
     command-result-topic: ${ORCHESTRATOR_COMMAND_RESULT_TOPIC:command.result}
     compensation-topic: ${ORCHESTRATOR_COMPENSATION_TOPIC:platform.compensation}
+    audit-topic: ${ORCHESTRATOR_AUDIT_TOPIC:platform.audit}
     producer-id: ${ORCHESTRATOR_PRODUCER_ID:session-orchestrator}
   session-store:
     key-prefix: ${ORCHESTRATOR_SESSION_STORE_KEY_PREFIX:orchestrator:session:}

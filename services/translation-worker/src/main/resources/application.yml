@@ -55,6 +55,8 @@ translation:
     idempotency-enabled: ${TRANSLATION_IDEMPOTENCY_ENABLED:true}
     idempotency-ttl-ms: ${TRANSLATION_IDEMPOTENCY_TTL_MS:300000}
     compensation-topic: ${TRANSLATION_COMPENSATION_TOPIC:platform.compensation}
+    audit-topic: ${TRANSLATION_AUDIT_TOPIC:platform.audit}
+    platform-dlq-topic: ${TRANSLATION_PLATFORM_DLQ_TOPIC:platform.dlq}
   engine:
     mode: ${TRANSLATION_ENGINE_MODE:placeholder}
     http:

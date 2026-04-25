@@ -46,6 +46,12 @@ public class TranslationKafkaProperties {
     @NotBlank
     private String compensationTopic = "platform.compensation";
 
+    @NotBlank
+    private String auditTopic = "platform.audit";
+
+    @NotBlank
+    private String platformDlqTopic = "platform.dlq";
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -148,5 +154,21 @@ public class TranslationKafkaProperties {
 
     public void setCompensationTopic(String compensationTopic) {
         this.compensationTopic = compensationTopic;
+    }
+
+    public String getAuditTopic() {
+        return auditTopic;
+    }
+
+    public void setAuditTopic(String auditTopic) {
+        this.auditTopic = auditTopic;
+    }
+
+    public String getPlatformDlqTopic() {
+        return platformDlqTopic;
+    }
+
+    public void setPlatformDlqTopic(String platformDlqTopic) {
+        this.platformDlqTopic = platformDlqTopic;
     }
 }

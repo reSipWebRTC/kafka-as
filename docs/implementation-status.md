@@ -16,12 +16,14 @@
 这条链路已经具备：
 
 - 统一 v1 事件 Envelope
-- 12 个已落地 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.request`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`
+- 14 个已落地 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.request`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`、`platform.audit`、`platform.dlq`
 - 低频控制 API：会话 start/stop、租户策略 get/put/rollback
 - 网关 `audio.frame` 会话级限流/背压保护（`RATE_LIMITED` / `BACKPRESSURE_DROP`）
 - 核心 Kafka 消费链路已落地重试与按源 Topic 的 `.dlq` 死信回退（`asr-worker`、`translation-worker`、`tts-orchestrator`、`command-worker` 已升级到按租户策略驱动重试/DLQ）
+- 核心 Kafka 消费链路已在死信恢复时同步发布统一 `platform.dlq` 事件（兼容保留按源 Topic `.dlq`）
 - 核心 Kafka 消费链路 `idempotencyKey` 判重与重复消息 no-op（含 `command-worker`）
 - 核心 Kafka 消费链路重复失败阈值补偿信号（`ops.compensation -> platform.compensation`，含 `command-worker`）
+- 核心补偿/超时路径已同步发布 `platform.audit` 事件（兼容保留 `platform.compensation`）
 - `session-orchestrator` 查询 `control-plane` 已落地第一版熔断 + 缓存回退（fail-open/fail-closed）
 - `session-orchestrator` 已消费 `asr.partial` / `asr.final` / `translation.result` / `tts.ready` / `command.result` 并写入会话聚合进度快照
 - `session-orchestrator` 已补齐 idle/hard timeout 自动关闭基线（超时触发 `session.control(status=CLOSED)`）与 timeout 补偿信号发布
@@ -112,7 +114,7 @@
 
 ## 4. 当前 Kafka 事件路径
 
-主链路 Topic 当前以 `sessionId` 作为消息 Key；治理事件 `tenant.policy.changed` 使用 `tenantId` 作为 Key。
+主链路 Topic 当前以 `sessionId` 作为消息 Key；治理事件（`tenant.policy.changed` / `platform.audit` / `platform.dlq`）使用 `tenantId` 作为 Key。
 
 | Topic | Producer | Consumer | 说明 |
 | --- | --- | --- | --- |
@@ -128,6 +130,8 @@
 | `tenant.policy.changed` | `control-plane` | `session-orchestrator`、`asr-worker`、`translation-worker`、`tts-orchestrator` | 租户策略变更通知（upsert/rollback 发布，运行时消费刷新已落地；支持 `sourcePolicyVersion` / `targetPolicyVersion` / `distributionRegions` 元数据） |
 | `command.confirm.request` | `speech-gateway` | `command-worker` | 客户端二次确认请求入口（`confirm_token + accept`） |
 | `command.result` | `command-worker` | `speech-gateway`、`tts-orchestrator` | 智能家居命令执行回执；网关下行与 SMART_HOME TTS 路由均已落地 |
+| `platform.audit` | `asr-worker`、`translation-worker`、`tts-orchestrator`、`command-worker`、`speech-gateway`、`session-orchestrator` | 暂无仓库内下游 | 统一审计事件（补偿/超时路径双写；兼容保留 `platform.compensation`） |
+| `platform.dlq` | `asr-worker`、`translation-worker`、`tts-orchestrator`、`command-worker`、`speech-gateway` | 暂无仓库内下游 | 统一死信治理事件（消费失败上报；兼容保留按源 Topic `.dlq`） |
 
 同时，`speech-gateway` 当前也消费以下下行 Topic 并回推 WebSocket：
 
@@ -140,7 +144,7 @@
 
 ## 5. 当前缺口
 
-- `platform.audit` / `platform.dlq` 仍是计划扩展 Topic
+- `platform.audit` / `platform.dlq` 已完成契约冻结并接入核心运行时路径（补偿审计双写 + 消费失败统一上报），后续仍需补齐统一重放运营流程
 - 客户端播放阶段“端侧渲染卡顿”细粒度指标仍待补齐（当前基线已覆盖 `playback start/stall/complete/fallback`）
 - ASR / Translation / TTS 已落地第一版生产联调基线，并补齐仓库内 fault-drill 收口与预发收口入口；但尚未完成真实流量闭环与预发/生产容量实战
 - 对象存储 HA 治理、CDN 区域路由/多级缓存治理、完整补偿编排、自适应熔断/灰度治理，以及压测/告警升级实战证据仍待完善
