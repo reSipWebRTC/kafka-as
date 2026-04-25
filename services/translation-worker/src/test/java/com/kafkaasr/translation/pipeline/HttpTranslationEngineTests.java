@@ -2,8 +2,8 @@ package com.kafkaasr.translation.pipeline;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.kafkaasr.translation.events.AsrFinalEvent;
-import com.kafkaasr.translation.events.AsrFinalPayload;
+import com.kafkaasr.translation.events.TranslationRequestEvent;
+import com.kafkaasr.translation.events.TranslationRequestPayload;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -33,7 +33,7 @@ class HttpTranslationEngineTests {
                 properties,
                 WebClient.builder().exchangeFunction(exchangeFunction));
 
-        TranslationEngine.TranslationResult result = engine.translate(sampleAsrFinalEvent(), "en-US");
+        TranslationEngine.TranslationResult result = engine.translate(sampleTranslationRequestEvent());
 
         assertEquals("hello", result.translatedText());
         assertEquals("zh-CN", result.sourceLang());
@@ -56,7 +56,7 @@ class HttpTranslationEngineTests {
                 properties,
                 WebClient.builder().exchangeFunction(exchangeFunction));
 
-        TranslationEngine.TranslationResult result = engine.translate(sampleAsrFinalEvent(), "en-US");
+        TranslationEngine.TranslationResult result = engine.translate(sampleTranslationRequestEvent());
 
         assertEquals("你好", result.translatedText());
         assertEquals("zh-CN", result.sourceLang());
@@ -76,19 +76,19 @@ class HttpTranslationEngineTests {
         return properties;
     }
 
-    private static AsrFinalEvent sampleAsrFinalEvent() {
-        return new AsrFinalEvent(
-                "evt-in-1",
-                "asr.final",
+    private static TranslationRequestEvent sampleTranslationRequestEvent() {
+        return new TranslationRequestEvent(
+                "evt-req-1",
+                "translation.request",
                 "v1",
                 "trc-1",
                 "sess-1",
                 "tenant-a",
                 "room-1",
-                "asr-worker",
+                "translation-worker",
                 7L,
                 1713744000000L,
-                "sess-1:asr.final:7",
-                new AsrFinalPayload("你好", "zh-CN", 0.9d, true));
+                "sess-1:translation.request:7",
+                new TranslationRequestPayload("你好", "zh-CN", "en-US"));
     }
 }

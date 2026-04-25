@@ -3,8 +3,8 @@ package com.kafkaasr.translation.pipeline;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kafkaasr.translation.events.AsrFinalEvent;
-import com.kafkaasr.translation.events.AsrFinalPayload;
+import com.kafkaasr.translation.events.TranslationRequestEvent;
+import com.kafkaasr.translation.events.TranslationRequestPayload;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,15 +42,16 @@ public class OpenaiTranslationEngine implements TranslationEngine {
     }
 
     @Override
-    public TranslationResult translate(AsrFinalEvent asrFinalEvent, String targetLang) {
-        AsrFinalPayload payload = asrFinalEvent.payload();
+    public TranslationResult translate(TranslationRequestEvent translationRequestEvent) {
+        TranslationRequestPayload payload = translationRequestEvent.payload();
         if (payload == null) {
-            throw new IllegalArgumentException("Missing asr.final payload for session " + asrFinalEvent.sessionId());
+            throw new IllegalArgumentException(
+                    "Missing translation.request payload for session " + translationRequestEvent.sessionId());
         }
 
-        String sourceText = payload.text() == null ? "" : payload.text();
-        String sourceLang = normalizeLanguage(payload.language());
-        String normalizedTargetLang = normalizeLanguage(targetLang);
+        String sourceText = payload.sourceText() == null ? "" : payload.sourceText();
+        String sourceLang = normalizeLanguage(payload.sourceLang());
+        String normalizedTargetLang = normalizeLanguage(payload.targetLang());
         TranslationEngineProperties.Openai config = properties.getOpenai();
 
         String responseBody = webClient
@@ -69,7 +70,7 @@ public class OpenaiTranslationEngine implements TranslationEngine {
                 .timeout(Duration.ofMillis(config.getTimeoutMs()))
                 .block();
 
-        String translatedText = parseTranslatedText(responseBody, asrFinalEvent.sessionId());
+        String translatedText = parseTranslatedText(responseBody, translationRequestEvent.sessionId());
         return new TranslationResult(translatedText, sourceLang, normalizedTargetLang, config.getEngineName());
     }
 

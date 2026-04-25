@@ -1,7 +1,7 @@
 package com.kafkaasr.translation.pipeline;
 
-import com.kafkaasr.translation.events.AsrFinalEvent;
-import com.kafkaasr.translation.events.AsrFinalPayload;
+import com.kafkaasr.translation.events.TranslationRequestEvent;
+import com.kafkaasr.translation.events.TranslationRequestPayload;
 import java.time.Duration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
@@ -32,15 +32,16 @@ public class HttpTranslationEngine implements TranslationEngine {
     }
 
     @Override
-    public TranslationResult translate(AsrFinalEvent asrFinalEvent, String targetLang) {
-        AsrFinalPayload payload = asrFinalEvent.payload();
+    public TranslationResult translate(TranslationRequestEvent translationRequestEvent) {
+        TranslationRequestPayload payload = translationRequestEvent.payload();
         if (payload == null) {
-            throw new IllegalArgumentException("Missing asr.final payload for session " + asrFinalEvent.sessionId());
+            throw new IllegalArgumentException(
+                    "Missing translation.request payload for session " + translationRequestEvent.sessionId());
         }
 
-        String sourceText = payload.text() == null ? "" : payload.text();
-        String sourceLang = normalizeLanguage(payload.language());
-        String normalizedTargetLang = normalizeLanguage(targetLang);
+        String sourceText = payload.sourceText() == null ? "" : payload.sourceText();
+        String sourceLang = normalizeLanguage(payload.sourceLang());
+        String normalizedTargetLang = normalizeLanguage(payload.targetLang());
 
         HttpTranslationResponse response = webClient
                 .post()
@@ -53,10 +54,10 @@ public class HttpTranslationEngine implements TranslationEngine {
                     }
                 })
                 .bodyValue(new HttpTranslationRequest(
-                        asrFinalEvent.sessionId(),
-                        asrFinalEvent.traceId(),
-                        asrFinalEvent.tenantId(),
-                        asrFinalEvent.seq(),
+                        translationRequestEvent.sessionId(),
+                        translationRequestEvent.traceId(),
+                        translationRequestEvent.tenantId(),
+                        translationRequestEvent.seq(),
                         sourceText,
                         sourceLang,
                         normalizedTargetLang))

@@ -175,7 +175,7 @@ flowchart TB
 
 当前基线：
 
-- 已承接 `audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`
+- 已承接 `audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.request`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`
 - 已落地消费侧固定重试、`.dlq` 死信回退、`idempotencyKey` 判重和补偿信号
 - 暂未落地统一重放流程和 Lag 治理文档化闭环
 
@@ -203,7 +203,7 @@ flowchart TB
 
 当前基线：
 
-- 已实现默认 placeholder + 可切换 HTTP/OpenAI 适配的 `asr.final -> translation.result`
+- 已实现默认 placeholder + 可切换 HTTP/OpenAI 适配的两段式链路 `asr.final -> translation.request -> translation.result`
 - 已补齐 OpenAI 第一版生产联调基线（health 探测、并发保护、错误语义映射、引擎级指标）
 - 未实现真实配额/容量治理、术语增强和上下文策略
 

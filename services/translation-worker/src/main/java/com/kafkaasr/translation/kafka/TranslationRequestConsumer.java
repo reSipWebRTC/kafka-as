@@ -2,9 +2,9 @@ package com.kafkaasr.translation.kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kafkaasr.translation.events.AsrFinalEvent;
 import com.kafkaasr.translation.events.TranslationKafkaProperties;
 import com.kafkaasr.translation.events.TranslationRequestEvent;
+import com.kafkaasr.translation.events.TranslationResultEvent;
 import com.kafkaasr.translation.pipeline.TranslationEngineException;
 import com.kafkaasr.translation.pipeline.TranslationPipelineService;
 import com.kafkaasr.translation.policy.TenantReliabilityPolicy;
@@ -19,30 +19,30 @@ import org.springframework.stereotype.Component;
 
 @Component
 @ConditionalOnProperty(name = "translation.kafka.enabled", havingValue = "true", matchIfMissing = true)
-public class AsrFinalConsumer {
+public class TranslationRequestConsumer {
 
-    private static final Logger log = LoggerFactory.getLogger(AsrFinalConsumer.class);
+    private static final Logger log = LoggerFactory.getLogger(TranslationRequestConsumer.class);
 
     private final ObjectMapper objectMapper;
     private final TranslationPipelineService pipelineService;
-    private final TranslationRequestPublisher translationRequestPublisher;
+    private final TranslationResultPublisher translationResultPublisher;
     private final TranslationCompensationPublisher compensationPublisher;
     private final TranslationKafkaProperties kafkaProperties;
     private final TenantReliabilityPolicyResolver reliabilityPolicyResolver;
     private final TimedIdempotencyGuard idempotencyGuard;
     private final MeterRegistry meterRegistry;
 
-    public AsrFinalConsumer(
+    public TranslationRequestConsumer(
             ObjectMapper objectMapper,
             TranslationPipelineService pipelineService,
-            TranslationRequestPublisher translationRequestPublisher,
+            TranslationResultPublisher translationResultPublisher,
             TranslationCompensationPublisher compensationPublisher,
             TranslationKafkaProperties kafkaProperties,
             TenantReliabilityPolicyResolver reliabilityPolicyResolver,
             MeterRegistry meterRegistry) {
         this.objectMapper = objectMapper;
         this.pipelineService = pipelineService;
-        this.translationRequestPublisher = translationRequestPublisher;
+        this.translationResultPublisher = translationResultPublisher;
         this.compensationPublisher = compensationPublisher;
         this.kafkaProperties = kafkaProperties;
         this.reliabilityPolicyResolver = reliabilityPolicyResolver;
@@ -53,28 +53,30 @@ public class AsrFinalConsumer {
     }
 
     @KafkaListener(
-            topics = "#{@translationKafkaProperties.asrFinalTopic}",
-            groupId = "${TRANSLATION_ASR_FINAL_CONSUMER_GROUP_ID:translation-worker-asr-final}")
+            topics = "#{@translationKafkaProperties.translationRequestTopic}",
+            groupId = "${TRANSLATION_REQUEST_CONSUMER_GROUP_ID:translation-worker}")
     public void onMessage(String payload) {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
-            AsrFinalEvent asrFinalEvent = parse(payload);
-            if (idempotencyGuard.isDuplicate(asrFinalEvent.idempotencyKey())) {
+            TranslationRequestEvent translationRequestEvent = parse(payload);
+            if (idempotencyGuard.isDuplicate(translationRequestEvent.idempotencyKey())) {
                 meterRegistry.counter(
-                                "translation.request.messages.total",
+                                "translation.pipeline.messages.total",
                                 "result",
                                 "duplicate",
                                 "code",
                                 "DUPLICATE")
                         .increment();
-                log.debug("Dropped duplicated asr.final event idempotencyKey={}", asrFinalEvent.idempotencyKey());
+                log.debug(
+                        "Dropped duplicated translation.request event idempotencyKey={}",
+                        translationRequestEvent.idempotencyKey());
                 return;
             }
-            TenantReliabilityPolicy reliabilityPolicy = reliabilityPolicyResolver.resolve(asrFinalEvent.tenantId());
-            processWithRetry(asrFinalEvent, payload, reliabilityPolicy);
+            TenantReliabilityPolicy reliabilityPolicy = reliabilityPolicyResolver.resolve(translationRequestEvent.tenantId());
+            processWithRetry(translationRequestEvent, payload, reliabilityPolicy);
         } catch (IllegalArgumentException exception) {
             meterRegistry.counter(
-                            "translation.request.messages.total",
+                            "translation.pipeline.messages.total",
                             "result",
                             "error",
                             "code",
@@ -82,18 +84,18 @@ public class AsrFinalConsumer {
                     .increment();
             throw exception;
         } finally {
-            sample.stop(meterRegistry.timer("translation.request.duration"));
+            sample.stop(meterRegistry.timer("translation.pipeline.duration"));
         }
     }
 
     private void processWithRetry(
-            AsrFinalEvent asrFinalEvent,
+            TranslationRequestEvent translationRequestEvent,
             String payload,
             TenantReliabilityPolicy reliabilityPolicy) {
         int maxAttempts = Math.max(1, reliabilityPolicy.retryMaxAttempts());
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                processOnce(asrFinalEvent);
+                processOnce(translationRequestEvent);
                 return;
             } catch (RuntimeException failure) {
                 boolean retryable = isRetryable(failure);
@@ -102,7 +104,7 @@ public class AsrFinalConsumer {
                     continue;
                 }
                 meterRegistry.counter(
-                                "translation.request.messages.total",
+                                "translation.pipeline.messages.total",
                                 "result",
                                 "error",
                                 "code",
@@ -114,28 +116,28 @@ public class AsrFinalConsumer {
         }
     }
 
-    private void processOnce(AsrFinalEvent asrFinalEvent) {
-        TranslationRequestEvent requestEvent = pipelineService.toTranslationRequestEvent(asrFinalEvent);
-        translationRequestPublisher.publish(requestEvent).block();
-        idempotencyGuard.markProcessed(asrFinalEvent.idempotencyKey());
+    private void processOnce(TranslationRequestEvent translationRequestEvent) {
+        TranslationResultEvent resultEvent = pipelineService.toTranslationResultEvent(translationRequestEvent);
+        translationResultPublisher.publish(resultEvent).block();
+        idempotencyGuard.markProcessed(translationRequestEvent.idempotencyKey());
         meterRegistry.counter(
-                        "translation.request.messages.total",
+                        "translation.pipeline.messages.total",
                         "result",
                         "success",
                         "code",
                         "OK")
                 .increment();
         log.debug(
-                "Published translation.request event sessionId={} seq={}",
-                requestEvent.sessionId(),
-                requestEvent.seq());
+                "Published translation.result event sessionId={} seq={}",
+                resultEvent.sessionId(),
+                resultEvent.seq());
     }
 
-    private AsrFinalEvent parse(String payload) {
+    private TranslationRequestEvent parse(String payload) {
         try {
-            return objectMapper.readValue(payload, AsrFinalEvent.class);
+            return objectMapper.readValue(payload, TranslationRequestEvent.class);
         } catch (JsonProcessingException exception) {
-            throw new IllegalArgumentException("Invalid asr.final payload", exception);
+            throw new IllegalArgumentException("Invalid translation.request payload", exception);
         }
     }
 
@@ -180,8 +182,8 @@ public class AsrFinalConsumer {
             TenantReliabilityPolicy reliabilityPolicy,
             RuntimeException failure) {
         compensationPublisher.publish(
-                kafkaProperties.getAsrFinalTopic(),
-                kafkaProperties.getAsrFinalTopic() + reliabilityPolicy.dlqTopicSuffix(),
+                kafkaProperties.getTranslationRequestTopic(),
+                kafkaProperties.getTranslationRequestTopic() + reliabilityPolicy.dlqTopicSuffix(),
                 payload,
                 failure);
     }

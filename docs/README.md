@@ -25,7 +25,7 @@
 - `speech-gateway` 通过低频 HTTP 调用 `session-orchestrator` 做 start/stop
 - `session-orchestrator` 调用 `control-plane` 获取租户策略，写 Redis 会话状态，并发布 `session.control`
 - `asr-worker` 消费 `audio.ingress.raw` 并发布 `asr.partial` / `asr.final`
-- `translation-worker` 消费 `asr.final` 并发布 `translation.result`
+- `translation-worker` 消费 `asr.final` 发布 `translation.request`，再消费 `translation.request` 发布 `translation.result`
 - `command-worker` 消费 `asr.final`（SMART_HOME）与 `command.confirm.request`，调用 smartHomeNlu 并发布 `command.result`
 - `tts-orchestrator` 按租户 `sessionMode` 分流：消费 `translation.result`（`TRANSLATION`）与 `command.result`（`SMART_HOME`），统一发布 `tts.request` / `tts.chunk` / `tts.ready`
 

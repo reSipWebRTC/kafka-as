@@ -1,10 +1,10 @@
 package com.kafkaasr.translation.pipeline;
 
-import com.kafkaasr.translation.events.AsrFinalEvent;
+import com.kafkaasr.translation.events.TranslationRequestEvent;
 
 public interface TranslationEngine {
 
-    TranslationResult translate(AsrFinalEvent asrFinalEvent, String targetLang);
+    TranslationResult translate(TranslationRequestEvent translationRequestEvent);
 
     record TranslationResult(
             String translatedText,

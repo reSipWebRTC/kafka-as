@@ -16,7 +16,7 @@
 | `speech-gateway` | 已落地骨架 | WebSocket 接入、可配置 WS token 鉴权、Kafka 音频发布、会话 start/stop 转发、会话级限流/背压、Kafka 驱动下行回推（`subtitle.*`/`tts.*`/`session.closed`）、下行 E2E 稳定性基线、客户端可感知时延指标基线（first/final/tts.ready）、客户端播放阶段指标上报（`playback.metric`）与网关指标聚合 | Kafka、`session-orchestrator` |
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布、`asr.partial/asr.final/translation.result/tts.ready/command.result` 聚合、idle/hard timeout 自动关闭与补偿信号基线 | Redis、Kafka、`control-plane` |
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、VAD 静音切段、发布 `asr.partial` / `asr.final`、FunASR 第一版生产联调基线 | Kafka |
-| `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result`，OpenAI 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
+| `translation-worker` | 已落地骨架 | 两段式消费与发布：`asr.final -> translation.request -> translation.result`，默认 placeholder + 可切换 HTTP/OpenAI 翻译适配，OpenAI 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
 | `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`（`TRANSLATION`）与 `command.result`（`SMART_HOME`）、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control`/URL 签名/区域路由/回源回退、cache scope/shard 策略，HTTP synthesis 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
 | `command-worker` | 已落地骨架 | 消费 `asr.final`（仅 `SMART_HOME`）与 `command.confirm.request`、调用 smartHomeNlu `/api/v1/command` + `/api/v1/confirm`、发布 `command.result`、租户策略驱动重试/DLQ、幂等与补偿信号基线 | Kafka、`control-plane`、smartHomeNlu |
 | `control-plane` | 已落地骨架 | 租户策略 HTTP API、可配置 Bearer Token 鉴权/授权（读写 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 鉴权后端切换、JWKS 外部 IAM 校验后端骨架、Redis 存储、版本化 upsert/rollback（支持 `targetVersion` / `distributionRegions`）、策略历史快照、`tenant.policy.changed` 发布 | Redis、Kafka |
@@ -119,11 +119,11 @@
 
 当前已经实现：
 
-- `asr.final` 消费
+- `asr.final` 消费并发布 `translation.request`
 - 默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配入口
 - OpenAI 响应兼容与错误语义加固（content 数组/Responses output 兼容、`error` 与失败 `status` 快速失败）
 - OpenAI 生产联调基线（可配置 health 探测、并发上限保护、错误码语义映射、引擎级指标）
-- `translation.result` 发布
+- `translation.request` 消费并发布 `translation.result`
 - 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
 - 消费 `tenant.policy.changed` 并刷新本地策略缓存
 - `idempotencyKey` 判重与重复失败补偿信号基线
@@ -228,7 +228,7 @@
 ### 内部通信
 
 - `Kafka`
-  当前主异步总线，已落地 11 个 Topic（新增 `tenant.policy.changed`、`command.confirm.request`、`command.result`）。
+  当前主异步总线，已落地 12 个 Topic（新增 `translation.request`、`tenant.policy.changed`、`command.confirm.request`、`command.result`）。
   核心 consumer 已落地 `.dlq` 死信回退、`idempotencyKey` 判重和补偿信号基线；`asr-worker`、`translation-worker`、`tts-orchestrator`、`command-worker` 已升级到租户策略驱动重试/DLQ。
 - `HTTP`
   当前用于 `speech-gateway -> session-orchestrator`、`session-orchestrator -> control-plane` 与 `command-worker -> smartHomeNlu` 调用。

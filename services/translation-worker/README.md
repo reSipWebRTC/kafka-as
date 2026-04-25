@@ -1,6 +1,9 @@
 # translation-worker
 
-`translation-worker` consumes `asr.final` events and produces `translation.result` events.
+`translation-worker` runs a two-stage flow:
+
+- consume `asr.final` and publish `translation.request`
+- consume `translation.request` and publish `translation.result`
 
 Current scope:
 
