@@ -211,6 +211,7 @@
 - `orchestrator.session.start.total` / `orchestrator.session.start.duration`
 - `orchestrator.session.stop.total` / `orchestrator.session.stop.duration`
 - `asr.pipeline.messages.total` / `asr.pipeline.duration`
+- `translation.request.messages.total` / `translation.request.duration`
 - `translation.pipeline.messages.total` / `translation.pipeline.duration`
 - `tts.pipeline.messages.total` / `tts.pipeline.duration`
 - `controlplane.tenant.policy.upsert.total` / `controlplane.tenant.policy.upsert.duration`

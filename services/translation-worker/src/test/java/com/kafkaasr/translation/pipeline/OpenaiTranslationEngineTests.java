@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kafkaasr.translation.events.AsrFinalEvent;
-import com.kafkaasr.translation.events.AsrFinalPayload;
+import com.kafkaasr.translation.events.TranslationRequestEvent;
+import com.kafkaasr.translation.events.TranslationRequestPayload;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -37,7 +37,7 @@ class OpenaiTranslationEngineTests {
                 WebClient.builder().exchangeFunction(exchangeFunction),
                 new ObjectMapper());
 
-        TranslationEngine.TranslationResult result = engine.translate(sampleAsrFinalEvent("zh-CN"), "en-US");
+        TranslationEngine.TranslationResult result = engine.translate(sampleTranslationRequestEvent("zh-CN", "en-US"));
 
         assertEquals("hello world", result.translatedText());
         assertEquals("zh-CN", result.sourceLang());
@@ -60,7 +60,7 @@ class OpenaiTranslationEngineTests {
                 WebClient.builder().exchangeFunction(exchangeFunction),
                 new ObjectMapper());
 
-        TranslationEngine.TranslationResult result = engine.translate(sampleAsrFinalEvent(""), "fr-FR");
+        TranslationEngine.TranslationResult result = engine.translate(sampleTranslationRequestEvent("", "fr-FR"));
 
         assertEquals("bonjour", result.translatedText());
         assertEquals("und", result.sourceLang());
@@ -84,7 +84,7 @@ class OpenaiTranslationEngineTests {
                 WebClient.builder().exchangeFunction(exchangeFunction),
                 new ObjectMapper());
 
-        engine.translate(sampleAsrFinalEvent("zh-CN"), "en-US");
+        engine.translate(sampleTranslationRequestEvent("zh-CN", "en-US"));
         assertNull(capturedRequest.get().headers().getFirst(HttpHeaders.AUTHORIZATION));
     }
 
@@ -102,7 +102,7 @@ class OpenaiTranslationEngineTests {
 
         IllegalStateException exception = assertThrows(
                 IllegalStateException.class,
-                () -> engine.translate(sampleAsrFinalEvent("zh-CN"), "en-US"));
+                () -> engine.translate(sampleTranslationRequestEvent("zh-CN", "en-US")));
         assertTrue(exception.getMessage().contains("Empty OpenAI translated text"));
     }
 
@@ -123,19 +123,19 @@ class OpenaiTranslationEngineTests {
         return properties;
     }
 
-    private static AsrFinalEvent sampleAsrFinalEvent(String sourceLanguage) {
-        return new AsrFinalEvent(
-                "evt-in-1",
-                "asr.final",
+    private static TranslationRequestEvent sampleTranslationRequestEvent(String sourceLanguage, String targetLanguage) {
+        return new TranslationRequestEvent(
+                "evt-req-1",
+                "translation.request",
                 "v1",
                 "trc-1",
                 "sess-1",
                 "tenant-a",
                 "room-1",
-                "asr-worker",
+                "translation-worker",
                 7L,
                 1713744000000L,
-                "sess-1:asr.final:7",
-                new AsrFinalPayload("你好", sourceLanguage, 0.9d, true));
+                "sess-1:translation.request:7",
+                new TranslationRequestPayload("你好", sourceLanguage, targetLanguage));
     }
 }

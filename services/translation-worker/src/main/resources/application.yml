@@ -44,6 +44,7 @@ translation:
   kafka:
     enabled: ${TRANSLATION_KAFKA_ENABLED:true}
     asr-final-topic: ${TRANSLATION_ASR_FINAL_TOPIC:asr.final}
+    translation-request-topic: ${TRANSLATION_REQUEST_TOPIC:translation.request}
     translation-result-topic: ${TRANSLATION_RESULT_TOPIC:translation.result}
     producer-id: ${TRANSLATION_PRODUCER_ID:translation-worker}
     default-target-lang: ${TRANSLATION_DEFAULT_TARGET_LANG:en-US}

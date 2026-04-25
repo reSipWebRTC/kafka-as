@@ -45,7 +45,8 @@
 | `audio.ingress.raw` | `speech-gateway` | `asr-worker` | `sessionId` | 高频音频主链路 |
 | `session.control` | `session-orchestrator` | `speech-gateway` | `sessionId` | 生命周期控制事件，用于 `session.closed` 下行 |
 | `asr.partial` | `asr-worker` | `speech-gateway` | `sessionId` | 中间识别结果，用于 `subtitle.partial` |
-| `asr.final` | `asr-worker` | `translation-worker` | `sessionId` | 当前翻译入口 |
+| `asr.final` | `asr-worker` | `translation-worker`、`command-worker` | `sessionId` | 翻译请求入口与 SMART_HOME 命令入口 |
+| `translation.request` | `translation-worker` | `translation-worker` | `sessionId` | 翻译入队事件（将 ASR 终态与翻译执行解耦） |
 | `translation.result` | `translation-worker` | `tts-orchestrator`、`speech-gateway` | `sessionId` | 当前 TTS 入口，同时用于 `subtitle.final` 下行 |
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | `sessionId` | TTS 编排输出 |
 | `tts.chunk` | `tts-orchestrator` | `speech-gateway` | `sessionId` | TTS 流式音频分片输出，用于 `tts.chunk` 下行 |
@@ -55,7 +56,7 @@
 说明：
 
 - 主链路 Topic 继续按 `sessionId` 发送 Kafka Key，治理事件 `tenant.policy.changed` 使用 `tenantId` 作为 Key
-- `translation-worker` 当前直接消费 `asr.final`，尚未引入独立 `translation.request`
+- `translation-worker` 当前采用两段式治理链路：`asr.final -> translation.request -> translation.result`
 - `tts-orchestrator` 当前会从同一输入事件同步产出 `tts.request`、`tts.chunk`、`tts.ready`
 - `asr-worker`、`translation-worker`、`tts-orchestrator`、`speech-gateway` 下行消费者已接入固定重试 + `<source-topic>.dlq` 死信回退
 - 上述核心消费者均已接入基于 `idempotencyKey` 的 TTL 判重，重复消息按成功路径 no-op
@@ -84,7 +85,6 @@
 | Topic | 说明 | 计划用途 |
 | --- | --- | --- |
 | `audio.vad.segmented` | VAD 切分后的语音段 | 支撑更细粒度 ASR 管线 |
-| `translation.request` | 待翻译文本 | 将翻译入队与 ASR 最终结果解耦 |
 | `platform.audit` | 审计事件 | 配置与治理追踪 |
 | `platform.dlq` | 死信队列 | 补偿与排障 |
 
@@ -210,11 +210,11 @@ FAILED
 1. `speech-gateway` 发布 `audio.ingress.raw`
 2. `session-orchestrator` 发布 `session.control`
 3. `asr-worker` 消费 `audio.ingress.raw` 并产出 `asr.partial` 与 `asr.final`
-4. `translation-worker` 消费 `asr.final` 并发布 `translation.result`
-5. `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`、`tts.chunk`、`tts.ready`
+4. `translation-worker` 消费 `asr.final` 并发布 `translation.request`
+5. `translation-worker` 消费 `translation.request` 并发布 `translation.result`
+6. `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`、`tts.chunk`、`tts.ready`
 6. `control-plane` 在策略 upsert 后发布 `tenant.policy.changed`，运行时服务消费后立即失效本地策略缓存
 
 仍未打通的部分：
 
-- `translation.request`
 - DLQ、补偿和故障恢复链路

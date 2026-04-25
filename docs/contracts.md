@@ -20,7 +20,7 @@
 - WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`、`playback.metric`
 - WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`command.result`、`session.closed`
 - 低频控制 API：会话 start/stop、租户策略 get/put/rollback
-- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`
+- 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.request`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`
 - 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
 - 核心 Kafka consumer 已落地重试与按源 Topic 的 `.dlq` 死信回退；`asr-worker`、`translation-worker`、`tts-orchestrator` 已支持按租户策略驱动重试参数与 DLQ 后缀
 - 核心 Kafka consumer 已落地 `idempotencyKey` 判重（TTL 窗口）与重复消息丢弃
@@ -40,6 +40,7 @@
 新增说明：
 
 - `tts-orchestrator` 已实现 `translation.result` 同步产出 `tts.request`、`tts.chunk`、`tts.ready` 三类事件
+- `translation-worker` 已实现两段式翻译治理链路：`asr.final -> translation.request -> translation.result`
 - `tts.ready.payload.playbackUrl` 已支持按租户映射的区域 CDN 路由，并可在区域路由缺失时回退到 origin URL
 - `control-plane` 已实现 `tenant.policy.changed` 事件发布（upsert/rollback），`session-orchestrator` / `asr-worker` / `translation-worker` / `tts-orchestrator` 已消费该事件用于策略缓存刷新
 - `control-plane` 已实现并冻结回滚编排契约：`POST /api/v1/tenants/{tenantId}/policy:rollback` 支持可选请求体 `targetVersion`、`distributionRegions`；请求体缺失时语义保持为“回滚上一版本”
@@ -108,6 +109,7 @@
 | `session.control` | 会话生命周期控制事件（start/stop 等） | `session.control` | `sessionId` |
 | `asr.partial` | ASR 中间识别结果 | `asr.partial` | `sessionId` |
 | `asr.final` | ASR 最终识别结果 | `asr.final` | `sessionId` |
+| `translation.request` | 待翻译文本请求 | `translation.request` | `sessionId` |
 | `translation.result` | 翻译结果 | `translation.result` | `sessionId` |
 | `tts.request` | TTS 合成请求 | `tts.request` | `sessionId` |
 | `tts.chunk` | TTS 流式音频分片 | `tts.chunk` | `sessionId` |
@@ -224,6 +226,7 @@
   - `api/json-schema/session.control.v1.json`
   - `api/json-schema/asr.partial.v1.json`
   - `api/json-schema/asr.final.v1.json`
+  - `api/json-schema/translation.request.v1.json`
   - `api/json-schema/translation.result.v1.json`
   - `api/json-schema/tts.request.v1.json`
   - `api/json-schema/tts.chunk.v1.json`

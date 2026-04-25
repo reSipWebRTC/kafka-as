@@ -16,7 +16,7 @@
 这条链路已经具备：
 
 - 统一 v1 事件 Envelope
-- 11 个已落地 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`
+- 12 个已落地 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.request`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`
 - 低频控制 API：会话 start/stop、租户策略 get/put/rollback
 - 网关 `audio.frame` 会话级限流/背压保护（`RATE_LIMITED` / `BACKPRESSURE_DROP`）
 - 核心 Kafka 消费链路已落地重试与按源 Topic 的 `.dlq` 死信回退（`asr-worker`、`translation-worker`、`tts-orchestrator`、`command-worker` 已升级到按租户策略驱动重试/DLQ）
@@ -31,6 +31,7 @@
 - `asr-worker` 已补齐会话级 VAD 静音切段基线（命中阈值时发布 `asr.final`）
 - `asr-worker` FunASR 适配已补齐生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
 - `translation-worker` OpenAI 适配已补齐生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
+- `translation-worker` 已补齐两段式翻译治理链路：`asr.final -> translation.request -> translation.result`（含按租户策略驱动重试/DLQ、幂等与补偿）
 - `tts-orchestrator` HTTP synthesis 适配已补齐生产联调基线（health 探测、并发保护、错误语义映射与引擎级指标）
 - `tts-orchestrator` 对象存储/CDN 分发已补齐区域路由与回源回退策略基线（按租户区域映射可选路由，区域缺失可回退 origin URL）
 - `tts-orchestrator` 对象键策略已支持可配置 cache scope（tenant/global）与 shard 前缀，用于缓存命中优化
@@ -60,7 +61,7 @@
 | `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `session.ping` / `audio.frame` / `session.stop` / `command.confirm` / `playback.metric` 路由、`audio.ingress.raw` / `command.confirm.request` Kafka 发布、会话级限流/背压控制、错误下行 `session.error`、Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `tts.chunk` / `tts.ready` / `command.result` / `session.closed` 下行、下行 E2E 稳定性测试基线、客户端可感知时延指标基线（first/final/tts.ready）、客户端播放阶段指标基线（playback start/stall/complete/fallback）、可配置 WS token 鉴权（`Authorization: Bearer` 或 `access_token`） | 外部 IAM/RBAC 集成、更完整的下行聚合策略 |
 | `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、控制面熔断与缓存回退、Redis 会话状态、`session.control` Kafka 发布、会话聚合进度消费（`asr.partial`/`asr.final`/`translation.result`/`tts.ready`/`command.result`）、idle/hard timeout 自动关闭、timeout 补偿信号发布 | 高级补偿编排与结果聚合策略优化 |
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配（含 FunASR v2 响应兼容、health 探测、并发保护、错误语义映射）、按稳定度 + VAD 静音切段分流发布 `asr.partial` / `asr.final`、按租户策略驱动重试/DLQ（含控制面失败回退） | FunASR 真机容量/故障演练、高级上下文与切段策略 |
-| `translation-worker` | `8083` | 消费 `asr.final`、默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容、health 探测、并发保护、错误语义映射）、发布 `translation.result`、按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 真机容量/故障演练、术语治理、上下文增强 |
+| `translation-worker` | `8083` | 消费 `asr.final` 后发布 `translation.request`，再消费 `translation.request` 生成并发布 `translation.result`；默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容、health 探测、并发保护、错误语义映射）；按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 真机容量/故障演练、术语治理、上下文增强 |
 | `tts-orchestrator` | `8084` | 消费 `translation.result`（仅 `sessionMode=TRANSLATION`）与 `command.result`（仅 `sessionMode=SMART_HOME`）、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容、health 探测、并发保护、错误语义映射）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、`tts.ready` 支持可配置 S3/MinIO 上传并回填真实 `playbackUrl`、支持 `cache-control` 与 `expires/sig` URL 签名策略、支持区域 CDN 路由/回源回退与可配置 cache scope/shard 策略、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS 真机容量/故障演练、对象存储高可用治理、CDN 区域路由与高级缓存治理 |
 | `command-worker` | `8086` | 消费 `asr.final`（仅 `sessionMode=SMART_HOME`）与 `command.confirm.request`、调用 smartHomeNlu `/api/v1/command` 与 `/api/v1/confirm`、发布 `command.result`、按租户策略驱动重试/DLQ（含控制面失败回退）、`idempotencyKey` 判重与补偿信号 | smartHomeNlu 真实环境联调、命令执行侧容量/故障演练 |
 | `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、`POST /api/v1/tenants/{tenantId}/policy:rollback`（支持可选 `targetVersion` / `distributionRegions`）、Redis 策略存储、版本化 upsert/rollback、历史快照栈、灰度/回退/可靠性策略字段、可配置 Bearer Token 鉴权与授权（读/写权限 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 切换与 JWKS 外部 IAM 校验后端骨架、鉴权决策/耗时/回退指标（`controlplane.auth.*`）、真实 IAM 对接参数模板与预检工具、external-iam claim 映射与授权矩阵单测、鉴权失败策略 simulated 演练脚本、本地 JWKS + JWT 全链路 simulated 演练脚本、`tenant.policy.changed` 发布（含 `sourcePolicyVersion` / `targetPolicyVersion` / `distributionRegions`） | 外部 IAM/RBAC 提供方联调与生产级运行保障（真实参数、阈值与告警闭环）、持久化数据库、跨区域分发与高级版本编排治理、跨区域分发实际执行链路 |
@@ -118,7 +119,8 @@
 | `audio.ingress.raw` | `speech-gateway` | `asr-worker` | 高频音频主链路 |
 | `session.control` | `session-orchestrator` | 暂无仓库内下游 | 生命周期审计与编排事件 |
 | `asr.partial` | `asr-worker` | `speech-gateway` | 中间识别结果，当前用于 `subtitle.partial` |
-| `asr.final` | `asr-worker` | `translation-worker`、`command-worker` | 翻译入口与 SMART_HOME 命令入口（由租户 `sessionMode` 区分） |
+| `asr.final` | `asr-worker` | `translation-worker`、`command-worker` | 翻译请求入口与 SMART_HOME 命令入口（由租户 `sessionMode` 区分） |
+| `translation.request` | `translation-worker` | `translation-worker` | 翻译入队事件（将 ASR 终态与翻译执行解耦） |
 | `translation.result` | `translation-worker` | `tts-orchestrator`、`speech-gateway` | 当前 TTS 入口，同时用于 `subtitle.final` 下行 |
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | TTS 编排输出，等待真实引擎接入 |
 | `tts.chunk` | `tts-orchestrator` | `speech-gateway` | TTS 分片输出，当前回推到 WebSocket 下行 |
@@ -138,7 +140,7 @@
 
 ## 5. 当前缺口
 
-- `translation.request` 仍是计划扩展 Topic
+- `platform.audit` / `platform.dlq` 仍是计划扩展 Topic
 - 客户端播放阶段“端侧渲染卡顿”细粒度指标仍待补齐（当前基线已覆盖 `playback start/stall/complete/fallback`）
 - ASR / Translation / TTS 已落地第一版生产联调基线，并补齐仓库内 fault-drill 收口与预发收口入口；但尚未完成真实流量闭环与预发/生产容量实战
 - 对象存储 HA 治理、CDN 区域路由/多级缓存治理、完整补偿编排、自适应熔断/灰度治理，以及压测/告警升级实战证据仍待完善

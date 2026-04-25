@@ -15,6 +15,9 @@ public class TranslationKafkaProperties {
     private String asrFinalTopic = "asr.final";
 
     @NotBlank
+    private String translationRequestTopic = "translation.request";
+
+    @NotBlank
     private String translationResultTopic = "translation.result";
 
     @NotBlank
@@ -61,6 +64,14 @@ public class TranslationKafkaProperties {
 
     public String getTranslationResultTopic() {
         return translationResultTopic;
+    }
+
+    public String getTranslationRequestTopic() {
+        return translationRequestTopic;
+    }
+
+    public void setTranslationRequestTopic(String translationRequestTopic) {
+        this.translationRequestTopic = translationRequestTopic;
     }
 
     public void setTranslationResultTopic(String translationResultTopic) {
