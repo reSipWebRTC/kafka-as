@@ -14,12 +14,14 @@ import com.kafkaasr.gateway.ingress.CommandConfirmRequestPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
+import com.kafkaasr.gateway.ws.GatewayClientPlaybackMetrics;
 import com.kafkaasr.gateway.ws.GatewayClientPerceivedMetrics;
 import com.kafkaasr.gateway.ws.GatewayDownlinkPublisher;
 import com.kafkaasr.gateway.ws.GatewaySessionRegistry;
 import com.kafkaasr.gateway.ws.protocol.AudioFrameMessageDecoder;
 import com.kafkaasr.gateway.ws.protocol.CommandConfirmMessageDecoder;
 import com.kafkaasr.gateway.ws.protocol.GatewayMessageRouter;
+import com.kafkaasr.gateway.ws.protocol.PlaybackMetricMessageDecoder;
 import com.kafkaasr.gateway.ws.protocol.SessionPingMessageDecoder;
 import com.kafkaasr.gateway.ws.protocol.SessionStartMessageDecoder;
 import com.kafkaasr.gateway.ws.protocol.SessionStopMessageDecoder;
@@ -122,8 +124,10 @@ class GatewayPipelineLoadHarnessTests {
                 new SessionPingMessageDecoder(OBJECT_MAPPER, validator),
                 new SessionStopMessageDecoder(OBJECT_MAPPER, validator),
                 new CommandConfirmMessageDecoder(OBJECT_MAPPER, validator),
+                new PlaybackMetricMessageDecoder(OBJECT_MAPPER, validator),
                 sessionControlClient,
                 clientPerceivedMetrics,
+                new GatewayClientPlaybackMetrics(meterRegistry),
                 OBJECT_MAPPER,
                 meterRegistry);
 

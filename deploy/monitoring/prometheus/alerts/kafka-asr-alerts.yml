@@ -169,6 +169,80 @@ groups:
           summary: "Gateway client TTS ready p95 latency is critical"
           description: "gateway.client.perceived.duration(stage=tts_ready) p95 > 4.0s for 5m"
 
+      - alert: GatewayClientPlaybackStartP95LatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(gateway_client_playback_duration_seconds_bucket{stage="start"}[5m])
+            )
+          ) > 1.2
+          and
+          sum(
+            rate(gateway_client_playback_duration_seconds_count{stage="start"}[5m])
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          area: experience
+        annotations:
+          summary: "Gateway client playback start p95 latency is high"
+          description: "gateway.client.playback.duration(stage=start) p95 > 1.2s for 10m"
+
+      - alert: GatewayClientPlaybackStartP95LatencyCritical
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(gateway_client_playback_duration_seconds_bucket{stage="start"}[5m])
+            )
+          ) > 2.5
+          and
+          sum(
+            rate(gateway_client_playback_duration_seconds_count{stage="start"}[5m])
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          area: experience
+        annotations:
+          summary: "Gateway client playback start p95 latency is critical"
+          description: "gateway.client.playback.duration(stage=start) p95 > 2.5s for 5m"
+
+      - alert: GatewayClientPlaybackStallRatioHigh
+        expr: |
+          (
+            sum(rate(gateway_client_playback_total{stage="stall",result="recorded"}[5m]))
+            /
+            clamp_min(sum(rate(gateway_client_playback_total{stage="start",result="recorded"}[5m])), 1e-6)
+          ) > 0.20
+          and
+          sum(rate(gateway_client_playback_total{stage="start",result="recorded"}[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          area: experience
+        annotations:
+          summary: "Gateway client playback stall ratio is high"
+          description: "playback stall/start ratio > 0.20 for 10m"
+
+      - alert: GatewayClientPlaybackStallRatioCritical
+        expr: |
+          (
+            sum(rate(gateway_client_playback_total{stage="stall",result="recorded"}[5m]))
+            /
+            clamp_min(sum(rate(gateway_client_playback_total{stage="start",result="recorded"}[5m])), 1e-6)
+          ) > 0.35
+          and
+          sum(rate(gateway_client_playback_total{stage="start",result="recorded"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          area: experience
+        annotations:
+          summary: "Gateway client playback stall ratio is critical"
+          description: "playback stall/start ratio > 0.35 for 5m"
+
       - alert: PipelineErrorRateHigh
         expr: |
           (

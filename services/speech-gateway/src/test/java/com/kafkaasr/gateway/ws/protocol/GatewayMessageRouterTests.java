@@ -3,6 +3,7 @@ package com.kafkaasr.gateway.ws.protocol;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -19,10 +20,13 @@ import com.kafkaasr.gateway.ingress.CommandConfirmRequestPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
+import com.kafkaasr.gateway.ws.GatewayClientPlaybackMetrics;
 import com.kafkaasr.gateway.ws.GatewayClientPerceivedMetrics;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -50,6 +54,7 @@ class GatewayMessageRouterTests {
     private SessionControlClient sessionControlClient;
 
     private GatewayMessageRouter router;
+    private SimpleMeterRegistry meterRegistry;
 
     @BeforeEach
     void setUp() {
@@ -65,7 +70,7 @@ class GatewayMessageRouterTests {
         GatewayFlowControlProperties flowControlProperties = new GatewayFlowControlProperties();
         flowControlProperties.setAudioFrameRateLimitPerSecond(rateLimitPerSecond);
         flowControlProperties.setAudioFrameMaxInflight(maxInflight);
-        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        meterRegistry = new SimpleMeterRegistry();
 
         GatewayMessageRouter gatewayMessageRouter = new GatewayMessageRouter(
                 audioIngressPublisher,
@@ -76,8 +81,10 @@ class GatewayMessageRouterTests {
                 new SessionPingMessageDecoder(objectMapper, validator),
                 new SessionStopMessageDecoder(objectMapper, validator),
                 new CommandConfirmMessageDecoder(objectMapper, validator),
+                new PlaybackMetricMessageDecoder(objectMapper, validator),
                 sessionControlClient,
                 new GatewayClientPerceivedMetrics(meterRegistry),
+                new GatewayClientPlaybackMetrics(meterRegistry),
                 objectMapper,
                 meterRegistry);
 
@@ -259,6 +266,49 @@ class GatewayMessageRouterTests {
                     assertEquals("sess-4", exception.sessionId());
                 })
                 .verify();
+    }
+
+    @Test
+    void routesPlaybackMetricAndRecordsMetrics() {
+        StepVerifier.create(router.route("""
+                {
+                  "type": "playback.metric",
+                  "sessionId": "sess-playback-1",
+                  "seq": 31,
+                  "stage": "start",
+                  "source": "remote",
+                  "durationMs": 240,
+                  "reason": "tts_ready"
+                }
+                """, sessionId -> {
+                }))
+                .verifyComplete();
+
+        Counter playbackCounter = meterRegistry.find("gateway.client.playback.total")
+                .tags(
+                        "stage", "start",
+                        "source", "remote",
+                        "reason", "tts_ready",
+                        "result", "recorded",
+                        "code", "OK")
+                .counter();
+        Timer playbackTimer = meterRegistry.find("gateway.client.playback.duration")
+                .tags("stage", "start", "source", "remote")
+                .timer();
+        Counter wsCounter = meterRegistry.find("gateway.ws.messages.total")
+                .tags("type", "playback.metric", "result", "success", "code", "OK")
+                .counter();
+
+        assertNotNull(playbackCounter);
+        assertNotNull(playbackTimer);
+        assertNotNull(wsCounter);
+        assertEquals(1.0, playbackCounter.count(), 1e-9);
+        assertEquals(1L, playbackTimer.count());
+        assertEquals(1.0, wsCounter.count(), 1e-9);
+        verify(audioIngressPublisher, never()).publishRawFrame(any());
+        verify(commandConfirmRequestPublisher, never()).publish(any());
+        verify(sessionControlClient, never()).startSession(any());
+        verify(sessionControlClient, never()).stopSession(any());
     }
 
     @Test

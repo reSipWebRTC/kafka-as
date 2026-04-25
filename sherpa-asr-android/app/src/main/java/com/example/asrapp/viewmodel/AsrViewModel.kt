@@ -15,6 +15,7 @@ import com.example.asrapp.gateway.GatewayConnectionConfig
 import com.example.asrapp.gateway.SpeechGatewayWsClient
 import com.example.asrapp.gateway.WsCommandConfirm
 import com.example.asrapp.gateway.WsCommandResult
+import com.example.asrapp.gateway.WsPlaybackMetric
 import com.example.asrapp.gateway.WsSessionClosed
 import com.example.asrapp.gateway.WsSessionError
 import com.example.asrapp.gateway.WsSessionStart
@@ -51,6 +52,12 @@ data class CommandInfo(
     val device: String,
     val location: String? = null,
     val description: String = listOfNotNull(action, device, location).joinToString(" ")
+)
+
+data class PendingLocalPlaybackStart(
+    val seq: Long,
+    val triggerAtMs: Long,
+    val reason: String
 )
 
 data class AsrUiState(
@@ -100,6 +107,9 @@ class AsrViewModel(
     private var ttsWarmupJob: Job? = null
     private var localTtsFallbackJob: Job? = null
     private var pendingFallbackSeq: Long? = null
+    private var pendingRemotePlaybackSeq: Long? = null
+    private var pendingRemotePlaybackReadyAtMs: Long? = null
+    private var pendingLocalPlaybackStart: PendingLocalPlaybackStart? = null
 
     private val remoteTtsPlayer = RemoteTtsPlayer(
         onPlaybackStateChanged = { playing ->
@@ -107,10 +117,52 @@ class AsrViewModel(
                 _state.value = _state.value.copy(isRemoteTtsPlaying = playing)
             }
         },
-        onError = { message ->
+        onPlaybackStarted = { seq ->
+            onMain {
+                val readyAt = pendingRemotePlaybackReadyAtMs
+                val durationMs = if (pendingRemotePlaybackSeq == seq && readyAt != null) {
+                    (System.currentTimeMillis() - readyAt).coerceAtLeast(0L)
+                } else {
+                    null
+                }
+                pendingRemotePlaybackSeq = null
+                pendingRemotePlaybackReadyAtMs = null
+                reportPlaybackMetric(
+                    seq = seq,
+                    stage = "start",
+                    source = "remote",
+                    durationMs = durationMs,
+                    reason = "tts_ready"
+                )
+            }
+        },
+        onPlaybackStall = { seq, durationMs ->
+            onMain {
+                reportPlaybackMetric(
+                    seq = seq,
+                    stage = "stall",
+                    source = "remote",
+                    durationMs = durationMs,
+                    reason = "buffering"
+                )
+            }
+        },
+        onPlaybackCompleted = { seq, stallCount, totalStallDurationMs ->
+            onMain {
+                reportPlaybackMetric(
+                    seq = seq,
+                    stage = "complete",
+                    source = "remote",
+                    durationMs = totalStallDurationMs,
+                    stallCount = stallCount,
+                    reason = "completed"
+                )
+            }
+        },
+        onError = { seq, message ->
             onMain {
                 _state.value = _state.value.copy(ttsError = message)
-                fallbackToLocalTtsIfPossible()
+                fallbackToLocalTtsIfPossible("remote_playback_failed", seq)
             }
         }
     )
@@ -249,6 +301,9 @@ class AsrViewModel(
     fun stopTts() {
         localTtsFallbackJob?.cancel()
         pendingFallbackSeq = null
+        pendingRemotePlaybackSeq = null
+        pendingRemotePlaybackReadyAtMs = null
+        pendingLocalPlaybackStart = null
         remoteTtsPlayer.stop()
         ttsPlayer?.stop()
         _state.value = _state.value.copy(
@@ -412,9 +467,11 @@ class AsrViewModel(
         onMain {
             localTtsFallbackJob?.cancel()
             pendingFallbackSeq = null
-            val played = remoteTtsPlayer.play(message.playbackUrl)
+            pendingRemotePlaybackSeq = message.seq
+            pendingRemotePlaybackReadyAtMs = System.currentTimeMillis()
+            val played = remoteTtsPlayer.play(message.playbackUrl, message.seq)
             if (!played) {
-                fallbackToLocalTtsIfPossible()
+                fallbackToLocalTtsIfPossible("remote_init_failed", message.seq)
             }
         }
     }
@@ -422,6 +479,16 @@ class AsrViewModel(
     override fun onSessionClosed(message: WsSessionClosed) {
         if (!belongsToActiveSession(message.sessionId)) return
         onMain {
+            pendingRemotePlaybackSeq?.let { seq ->
+                reportPlaybackMetric(
+                    seq = seq,
+                    stage = "fallback",
+                    source = "local",
+                    reason = "session_closed"
+                )
+            }
+            pendingRemotePlaybackSeq = null
+            pendingRemotePlaybackReadyAtMs = null
             stopListeningInternal(sendStop = false, reason = "session_closed")
             _state.value = _state.value.copy(error = "会话已关闭: ${message.reason}")
         }
@@ -504,6 +571,9 @@ class AsrViewModel(
                 )
             )
         }
+        pendingRemotePlaybackSeq = null
+        pendingRemotePlaybackReadyAtMs = null
+        pendingLocalPlaybackStart = null
         activeSession = null
         pendingStartSession = null
         outboundSeq.set(0L)
@@ -598,12 +668,12 @@ class AsrViewModel(
         localTtsFallbackJob = viewModelScope.launch {
             delay(fallbackDelayMs)
             if (pendingFallbackSeq == commandResult.seq && !remoteTtsPlayer.isPlaying()) {
-                speakText(commandResult.replyText)
+                fallbackToLocalTtsIfPossible("tts_ready_timeout", commandResult.seq)
             }
         }
     }
 
-    private fun fallbackToLocalTtsIfPossible() {
+    private fun fallbackToLocalTtsIfPossible(reason: String, seq: Long? = null) {
         val replyText = _state.value.lastCommandResult?.replyText.orEmpty()
         if (replyText.isBlank()) {
             return
@@ -611,6 +681,19 @@ class AsrViewModel(
         if (!_state.value.isTtsEnabled) {
             return
         }
+        val metricSeq = seq ?: pendingFallbackSeq ?: nextSeq()
+        pendingFallbackSeq = null
+        reportPlaybackMetric(
+            seq = metricSeq,
+            stage = "fallback",
+            source = "local",
+            reason = reason
+        )
+        pendingLocalPlaybackStart = PendingLocalPlaybackStart(
+            seq = metricSeq,
+            triggerAtMs = System.currentTimeMillis(),
+            reason = reason
+        )
         speakText(replyText)
     }
 
@@ -659,6 +742,21 @@ class AsrViewModel(
             tts = tts,
             onPlaybackStateChanged = { speaking ->
                 onMain {
+                    if (speaking) {
+                        val pending = pendingLocalPlaybackStart
+                        if (pending != null) {
+                            val durationMs = (System.currentTimeMillis() - pending.triggerAtMs)
+                                .coerceAtLeast(0L)
+                            reportPlaybackMetric(
+                                seq = pending.seq,
+                                stage = "start",
+                                source = "local",
+                                durationMs = durationMs,
+                                reason = pending.reason
+                            )
+                            pendingLocalPlaybackStart = null
+                        }
+                    }
                     _state.value = _state.value.copy(isSpeakingTts = speaking)
                 }
             },
@@ -673,6 +771,29 @@ class AsrViewModel(
         ).also {
             ttsPlayer = it
         }
+    }
+
+    private fun reportPlaybackMetric(
+        seq: Long,
+        stage: String,
+        source: String,
+        durationMs: Long? = null,
+        stallCount: Int? = null,
+        reason: String? = null
+    ) {
+        val session = activeSession ?: return
+        wsClient?.sendPlaybackMetric(
+            WsPlaybackMetric(
+                sessionId = session.sessionId,
+                seq = seq,
+                stage = stage,
+                source = source,
+                durationMs = durationMs,
+                stallCount = stallCount,
+                reason = reason,
+                traceId = session.traceId
+            )
+        )
     }
 
     private fun loadTtsSettings() {

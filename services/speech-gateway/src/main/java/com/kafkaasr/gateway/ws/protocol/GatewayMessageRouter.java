@@ -12,6 +12,7 @@ import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionControlClientException;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
+import com.kafkaasr.gateway.ws.GatewayClientPlaybackMetrics;
 import com.kafkaasr.gateway.ws.GatewayClientPerceivedMetrics;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -28,6 +29,7 @@ public class GatewayMessageRouter {
     private static final String SESSION_PING_TYPE = "session.ping";
     private static final String SESSION_STOP_TYPE = "session.stop";
     private static final String COMMAND_CONFIRM_TYPE = "command.confirm";
+    private static final String PLAYBACK_METRIC_TYPE = "playback.metric";
     private static final String INVALID_MESSAGE_CODE = "INVALID_MESSAGE";
     private static final String SESSION_NOT_FOUND_CODE = "SESSION_NOT_FOUND";
     private static final String RATE_LIMITED_CODE = "RATE_LIMITED";
@@ -41,8 +43,10 @@ public class GatewayMessageRouter {
     private final SessionPingMessageDecoder sessionPingMessageDecoder;
     private final SessionStopMessageDecoder sessionStopMessageDecoder;
     private final CommandConfirmMessageDecoder commandConfirmMessageDecoder;
+    private final PlaybackMetricMessageDecoder playbackMetricMessageDecoder;
     private final SessionControlClient sessionControlClient;
     private final GatewayClientPerceivedMetrics clientPerceivedMetrics;
+    private final GatewayClientPlaybackMetrics clientPlaybackMetrics;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
     private final Map<String, SessionContext> sessionContexts = new ConcurrentHashMap<>();
@@ -56,8 +60,10 @@ public class GatewayMessageRouter {
             SessionPingMessageDecoder sessionPingMessageDecoder,
             SessionStopMessageDecoder sessionStopMessageDecoder,
             CommandConfirmMessageDecoder commandConfirmMessageDecoder,
+            PlaybackMetricMessageDecoder playbackMetricMessageDecoder,
             SessionControlClient sessionControlClient,
             GatewayClientPerceivedMetrics clientPerceivedMetrics,
+            GatewayClientPlaybackMetrics clientPlaybackMetrics,
             ObjectMapper objectMapper,
             MeterRegistry meterRegistry) {
         this.audioIngressPublisher = audioIngressPublisher;
@@ -68,8 +74,10 @@ public class GatewayMessageRouter {
         this.sessionPingMessageDecoder = sessionPingMessageDecoder;
         this.sessionStopMessageDecoder = sessionStopMessageDecoder;
         this.commandConfirmMessageDecoder = commandConfirmMessageDecoder;
+        this.playbackMetricMessageDecoder = playbackMetricMessageDecoder;
         this.sessionControlClient = sessionControlClient;
         this.clientPerceivedMetrics = clientPerceivedMetrics;
+        this.clientPlaybackMetrics = clientPlaybackMetrics;
         this.objectMapper = objectMapper;
         this.meterRegistry = meterRegistry;
     }
@@ -178,6 +186,12 @@ public class GatewayMessageRouter {
                         request.confirmToken(),
                         request.accept()));
             }
+            case PLAYBACK_METRIC_TYPE -> {
+                PlaybackMetricMessage request = playbackMetricMessageDecoder.decode(rawMessage);
+                sessionBinder.bind(request.sessionId());
+                clientPlaybackMetrics.onPlaybackMetric(request);
+                yield Mono.empty();
+            }
             default -> Mono.error(new MessageValidationException(
                     INVALID_MESSAGE_CODE,
                     "Unsupported message type: " + envelope.type(),
@@ -239,7 +253,7 @@ public class GatewayMessageRouter {
 
     private String normalizeType(String type) {
         return switch (type) {
-            case AUDIO_FRAME_TYPE, SESSION_START_TYPE, SESSION_PING_TYPE, SESSION_STOP_TYPE, COMMAND_CONFIRM_TYPE -> type;
+            case AUDIO_FRAME_TYPE, SESSION_START_TYPE, SESSION_PING_TYPE, SESSION_STOP_TYPE, COMMAND_CONFIRM_TYPE, PLAYBACK_METRIC_TYPE -> type;
             default -> "unsupported";
         };
     }

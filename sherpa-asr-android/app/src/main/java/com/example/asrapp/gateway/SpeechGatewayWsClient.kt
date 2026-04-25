@@ -42,6 +42,7 @@ class SpeechGatewayWsClient(
     private val audioFrameAdapter = moshi.adapter(WsAudioFrame::class.java)
     private val sessionStopAdapter = moshi.adapter(WsSessionStop::class.java)
     private val commandConfirmAdapter = moshi.adapter(WsCommandConfirm::class.java)
+    private val playbackMetricAdapter = moshi.adapter(WsPlaybackMetric::class.java)
 
     private val httpClient = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
@@ -139,6 +140,10 @@ class SpeechGatewayWsClient(
 
     fun sendCommandConfirm(message: WsCommandConfirm): Boolean {
         return sendJson(commandConfirmAdapter.toJson(message))
+    }
+
+    fun sendPlaybackMetric(message: WsPlaybackMetric): Boolean {
+        return sendJson(playbackMetricAdapter.toJson(message))
     }
 
     private fun sendJson(payload: String): Boolean {

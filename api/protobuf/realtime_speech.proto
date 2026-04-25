@@ -171,6 +171,17 @@ message WsCommandConfirm {
   string trace_id = 5;
 }
 
+message WsPlaybackMetric {
+  string session_id = 1;
+  uint64 seq = 2;
+  string stage = 3;
+  string source = 4;
+  uint64 duration_ms = 5;
+  uint32 stall_count = 6;
+  string reason = 7;
+  string trace_id = 8;
+}
+
 message WsClientMessage {
   string type = 1;
   oneof body {
@@ -179,6 +190,7 @@ message WsClientMessage {
     WsSessionPing session_ping = 4;
     WsSessionStop session_stop = 5;
     WsCommandConfirm command_confirm = 6;
+    WsPlaybackMetric playback_metric = 7;
   }
 }
 

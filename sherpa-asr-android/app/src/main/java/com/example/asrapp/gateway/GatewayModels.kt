@@ -9,6 +9,7 @@ object GatewayMessageTypes {
     const val AUDIO_FRAME = "audio.frame"
     const val SESSION_STOP = "session.stop"
     const val COMMAND_CONFIRM = "command.confirm"
+    const val PLAYBACK_METRIC = "playback.metric"
 
     const val SESSION_ERROR = "session.error"
     const val SUBTITLE_PARTIAL = "subtitle.partial"
@@ -54,6 +55,19 @@ data class WsCommandConfirm(
     val seq: Long,
     val confirmToken: String,
     val accept: Boolean,
+    val traceId: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class WsPlaybackMetric(
+    val type: String = GatewayMessageTypes.PLAYBACK_METRIC,
+    val sessionId: String,
+    val seq: Long,
+    val stage: String,
+    val source: String,
+    val durationMs: Long? = null,
+    val stallCount: Int? = null,
+    val reason: String? = null,
     val traceId: String? = null
 )
 
