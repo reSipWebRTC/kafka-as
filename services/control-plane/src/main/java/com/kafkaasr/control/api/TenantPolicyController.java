@@ -2,6 +2,7 @@ package com.kafkaasr.control.api;
 
 import com.kafkaasr.control.service.TenantPolicyService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
@@ -34,6 +36,13 @@ public class TenantPolicyController {
     @GetMapping("/{tenantId}/policy")
     public Mono<TenantPolicyResponse> getPolicy(@PathVariable @NotBlank String tenantId) {
         return tenantPolicyService.getTenantPolicy(tenantId);
+    }
+
+    @GetMapping("/{tenantId}/policy:distribution-status")
+    public Mono<TenantPolicyDistributionStatusResponse> getPolicyDistributionStatus(
+            @PathVariable @NotBlank String tenantId,
+            @RequestParam @Min(1) long policyVersion) {
+        return tenantPolicyService.getPolicyDistributionStatus(tenantId, policyVersion);
     }
 
     @PostMapping("/{tenantId}/policy:rollback")

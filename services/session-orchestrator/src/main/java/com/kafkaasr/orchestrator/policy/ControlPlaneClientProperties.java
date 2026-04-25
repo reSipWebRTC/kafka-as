@@ -26,6 +26,9 @@ public class ControlPlaneClientProperties {
 
     private boolean fallbackFailOpen = false;
     private String policyChangedTopic = "tenant.policy.changed";
+    private String policyDistributionResultTopic = "tenant.policy.distribution.result";
+    private String distributionRegion = "local";
+    private String distributionProducerId = "session-orchestrator";
 
     public String getBaseUrl() {
         return baseUrl;
@@ -81,5 +84,29 @@ public class ControlPlaneClientProperties {
 
     public void setPolicyChangedTopic(String policyChangedTopic) {
         this.policyChangedTopic = policyChangedTopic;
+    }
+
+    public String getPolicyDistributionResultTopic() {
+        return policyDistributionResultTopic;
+    }
+
+    public void setPolicyDistributionResultTopic(String policyDistributionResultTopic) {
+        this.policyDistributionResultTopic = policyDistributionResultTopic;
+    }
+
+    public String getDistributionRegion() {
+        return distributionRegion;
+    }
+
+    public void setDistributionRegion(String distributionRegion) {
+        this.distributionRegion = distributionRegion;
+    }
+
+    public String getDistributionProducerId() {
+        return distributionProducerId;
+    }
+
+    public void setDistributionProducerId(String distributionProducerId) {
+        this.distributionProducerId = distributionProducerId;
     }
 }

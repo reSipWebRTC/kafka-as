@@ -48,6 +48,9 @@ asr:
     policy-cache-ttl: ${ASR_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
     fallback-fail-open: ${ASR_CONTROL_PLANE_FALLBACK_FAIL_OPEN:true}
     policy-changed-topic: ${ASR_CONTROL_PLANE_POLICY_CHANGED_TOPIC:tenant.policy.changed}
+    policy-distribution-result-topic: ${ASR_CONTROL_PLANE_POLICY_DISTRIBUTION_RESULT_TOPIC:tenant.policy.distribution.result}
+    distribution-region: ${ASR_CONTROL_PLANE_DISTRIBUTION_REGION:local}
+    distribution-producer-id: ${ASR_CONTROL_PLANE_DISTRIBUTION_PRODUCER_ID:asr-worker}
   kafka:
     enabled: ${ASR_KAFKA_ENABLED:true}
     audio-ingress-topic: ${ASR_AUDIO_INGRESS_TOPIC:audio.ingress.raw}

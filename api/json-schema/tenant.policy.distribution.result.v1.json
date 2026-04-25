@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kafka-asr.local/schemas/tenant.policy.distribution.result.v1.json",
+  "title": "tenant.policy.distribution.result.v1",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "traceId",
+    "sessionId",
+    "tenantId",
+    "producer",
+    "seq",
+    "ts",
+    "idempotencyKey",
+    "payload"
+  ],
+  "properties": {
+    "eventId": { "type": "string", "minLength": 1 },
+    "eventType": { "const": "tenant.policy.distribution.result" },
+    "eventVersion": { "const": "v1" },
+    "traceId": { "type": "string", "minLength": 1 },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "tenantId": { "type": "string", "minLength": 1 },
+    "userId": { "type": "string", "minLength": 1 },
+    "roomId": { "type": "string" },
+    "producer": { "type": "string", "minLength": 1 },
+    "seq": { "type": "integer", "minimum": 0 },
+    "ts": { "type": "integer", "minimum": 0 },
+    "idempotencyKey": { "type": "string", "minLength": 1 },
+    "payload": {
+      "type": "object",
+      "required": [
+        "tenantId",
+        "policyVersion",
+        "operation",
+        "service",
+        "status",
+        "appliedAtMs",
+        "sourceEventId"
+      ],
+      "properties": {
+        "tenantId": { "type": "string", "minLength": 1 },
+        "policyVersion": { "type": "integer", "minimum": 1 },
+        "operation": {
+          "type": "string",
+          "enum": ["CREATED", "UPDATED", "ROLLED_BACK", "ROLLED_BACK_TO_VERSION"]
+        },
+        "service": { "type": "string", "minLength": 1 },
+        "region": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": ["APPLIED", "FAILED", "IGNORED"]
+        },
+        "reasonCode": { "type": "string", "minLength": 1 },
+        "reasonMessage": { "type": "string", "minLength": 1 },
+        "appliedAtMs": { "type": "integer", "minimum": 0 },
+        "sourceEventId": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": { "const": "FAILED" }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["reasonCode"]
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

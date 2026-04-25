@@ -123,6 +123,24 @@ message TenantPolicyChangedEvent {
   TenantPolicyChangedPayload payload = 2;
 }
 
+message TenantPolicyDistributionResultPayload {
+  string tenant_id = 1;
+  uint64 policy_version = 2;
+  string operation = 3;
+  string service = 4;
+  string region = 5;
+  string status = 6;
+  string reason_code = 7;
+  string reason_message = 8;
+  int64 applied_at_ms = 9;
+  string source_event_id = 10;
+}
+
+message TenantPolicyDistributionResultEvent {
+  EventEnvelope envelope = 1;
+  TenantPolicyDistributionResultPayload payload = 2;
+}
+
 message CommandConfirmRequestPayload {
   string confirm_token = 1;
   bool accept = 2;

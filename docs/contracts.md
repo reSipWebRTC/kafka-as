@@ -19,7 +19,7 @@
 
 - WebSocket 上行：`session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`、`playback.metric`
 - WebSocket 下行：`session.error`、`subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`command.result`、`session.closed`
-- 低频控制 API：会话 start/stop、租户策略 get/put/rollback
+- 低频控制 API：会话 start/stop、租户策略 get/put/rollback、策略分发状态查询
 - 事件 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.request`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`、`command.confirm.request`、`command.result`、`platform.audit`、`platform.dlq`
 - 网关 `audio.frame` 会话级限流与背压保护（错误码：`RATE_LIMITED`、`BACKPRESSURE_DROP`）
 - 核心 Kafka consumer 已落地重试与按源 Topic 的 `.dlq` 死信回退；`asr-worker`、`translation-worker`、`tts-orchestrator` 已支持按租户策略驱动重试参数与 DLQ 后缀
@@ -47,6 +47,7 @@
 - `control-plane` 已实现 `tenant.policy.changed` 事件发布（upsert/rollback），`session-orchestrator` / `asr-worker` / `translation-worker` / `tts-orchestrator` 已消费该事件用于策略缓存刷新
 - `control-plane` 已实现并冻结回滚编排契约：`POST /api/v1/tenants/{tenantId}/policy:rollback` 支持可选请求体 `targetVersion`、`distributionRegions`；请求体缺失时语义保持为“回滚上一版本”
 - `tenant.policy.changed` 已实现并冻结编排元数据扩展：`sourcePolicyVersion`、`targetPolicyVersion`、`distributionRegions`（均为可选字段，向后兼容）
+- `tenant.policy.distribution.result` 已实现运行时发布与 `control-plane` 聚合消费，支持查询 API：`GET /api/v1/tenants/{tenantId}/policy:distribution-status?policyVersion=<n>`
 
 已冻结并分阶段落地：
 
@@ -117,6 +118,7 @@
 | `tts.chunk` | TTS 流式音频分片 | `tts.chunk` | `sessionId` |
 | `tts.ready` | TTS 回放就绪事件 | `tts.ready` | `sessionId` |
 | `tenant.policy.changed` | 租户策略变更通知（`control-plane` 发布，运行时服务消费刷新） | `tenant.policy.changed` | `tenantId` |
+| `tenant.policy.distribution.result` | 运行时策略分发执行回执（运行时服务发布，`control-plane` 聚合） | `tenant.policy.distribution.result` | `tenantId` |
 | `command.confirm.request` | 客户端确认请求（`confirm_token + accept`） | `command.confirm.request` | `sessionId` |
 | `command.result` | 智能家居命令执行结果/确认要求回执 | `command.result` | `sessionId` |
 | `platform.audit` | 治理审计事件（配置变更、补偿、关键策略动作） | `platform.audit` | `tenantId` |
@@ -130,6 +132,8 @@
 - 治理事件（`tenant.policy.changed` / `platform.audit` / `platform.dlq`）没有真实会话上下文时，`sessionId` 使用合成值（建议 `governance::<tenantId>`）
 - 治理事件 `tenant.policy.changed.payload.operation` 当前取值：`CREATED`、`UPDATED`、`ROLLED_BACK`、`ROLLED_BACK_TO_VERSION`
 - 当 `operation=ROLLED_BACK_TO_VERSION` 时，`sourcePolicyVersion` 与 `targetPolicyVersion` 必填
+- 治理事件 `tenant.policy.distribution.result` 契约已冻结，`payload.status` 当前取值：`APPLIED`、`FAILED`、`IGNORED`
+- 当 `tenant.policy.distribution.result.payload.status=FAILED` 时，`reasonCode` 必填
 
 完整 JSON Schema 与 Protobuf 见第 8 节。
 
@@ -198,6 +202,18 @@
 - 若指定 `targetVersion` 不存在，返回 `TENANT_POLICY_VERSION_NOT_FOUND`
 - 若指定 `targetVersion` 非法（如 `>=` 当前版本），返回 `TENANT_POLICY_ROLLBACK_VERSION_INVALID`
 
+### 5.4 Control-Plane 分发执行状态查询 API（v1）
+
+路径：
+
+- `GET /api/v1/tenants/{tenantId}/policy:distribution-status?policyVersion=<n>`
+
+响应语义：
+
+- 返回指定 `tenantId + policyVersion` 在各运行时服务的执行回执聚合结果
+- `overallStatus` 取值：`PENDING`、`APPLIED`、`FAILED`、`IGNORED`、`PARTIAL`
+- `overallPass=true` 仅在 `overallStatus=APPLIED` 时成立
+
 ## 6. 错误码（v1）
 
 | 错误码 | 含义 |
@@ -237,6 +253,7 @@
   - `api/json-schema/tts.chunk.v1.json`
   - `api/json-schema/tts.ready.v1.json`
   - `api/json-schema/tenant.policy.changed.v1.json`
+  - `api/json-schema/tenant.policy.distribution.result.v1.json`
   - `api/json-schema/command.confirm.request.v1.json`
   - `api/json-schema/command.result.v1.json`
   - `api/json-schema/platform.audit.v1.json`

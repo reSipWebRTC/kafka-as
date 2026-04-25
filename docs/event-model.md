@@ -88,12 +88,14 @@
 | Topic | 说明 | 计划用途 | 当前状态 |
 | --- | --- | --- | --- |
 | `audio.vad.segmented` | VAD 切分后的语音段 | 支撑更细粒度 ASR 管线 | 规划中 |
+| `tenant.policy.distribution.result` | 策略分发执行回执 | 运行时服务执行结果回传与 control-plane 聚合 | 已实现（运行时发布 + control-plane 聚合查询） |
 | `platform.audit` | 审计事件 | 配置与治理追踪 | 已实现（补偿路径审计双写） |
 | `platform.dlq` | 统一死信治理事件 | 补偿与排障 | 已实现（消费失败统一上报） |
 
 说明：
 
 - `platform.audit` / `platform.dlq` 已新增 JSON Schema 与 Protobuf 契约并接入核心运行时路径。
+- `tenant.policy.distribution.result` 已接入运行时发布与 control-plane 聚合消费，支持查询 API `GET /api/v1/tenants/{tenantId}/policy:distribution-status?policyVersion=<n>`。
 - 为兼容旧链路，现有 `<source-topic>.dlq` 与 `platform.compensation` 行为保持不变（并行双写）。
 
 补充说明：
@@ -221,6 +223,7 @@ FAILED
 5. `translation-worker` 消费 `translation.request` 并发布 `translation.result`
 6. `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request`、`tts.chunk`、`tts.ready`
 6. `control-plane` 在策略 upsert 后发布 `tenant.policy.changed`，运行时服务消费后立即失效本地策略缓存
+7. 运行时服务发布 `tenant.policy.distribution.result`，`control-plane` 聚合并支持按 `tenantId + policyVersion` 查询
 
 仍待深化的部分：
 

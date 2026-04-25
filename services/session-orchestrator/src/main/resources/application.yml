@@ -74,3 +74,6 @@ orchestrator:
     policy-cache-ttl: ${ORCHESTRATOR_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
     fallback-fail-open: ${ORCHESTRATOR_CONTROL_PLANE_FALLBACK_FAIL_OPEN:false}
     policy-changed-topic: ${ORCHESTRATOR_CONTROL_PLANE_POLICY_CHANGED_TOPIC:tenant.policy.changed}
+    policy-distribution-result-topic: ${ORCHESTRATOR_CONTROL_PLANE_POLICY_DISTRIBUTION_RESULT_TOPIC:tenant.policy.distribution.result}
+    distribution-region: ${ORCHESTRATOR_CONTROL_PLANE_DISTRIBUTION_REGION:local}
+    distribution-producer-id: ${ORCHESTRATOR_CONTROL_PLANE_DISTRIBUTION_PRODUCER_ID:session-orchestrator}

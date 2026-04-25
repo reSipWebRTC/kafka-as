@@ -149,6 +149,55 @@ class TenantPolicyControllerTests {
     }
 
     @Test
+    void getDistributionStatusReturnsAggregatedResult() {
+        TenantPolicyDistributionStatusResponse response = new TenantPolicyDistributionStatusResponse(
+                "tenant-api-a",
+                3L,
+                true,
+                "APPLIED",
+                2,
+                1713745000000L,
+                java.util.List.of(
+                        new TenantPolicyDistributionStatusItem(
+                                "asr-worker",
+                                "local",
+                                "APPLIED",
+                                null,
+                                null,
+                                1713745000000L,
+                                "evt-src-1",
+                                "evt-res-1",
+                                "asr-worker",
+                                1713745000000L),
+                        new TenantPolicyDistributionStatusItem(
+                                "translation-worker",
+                                "local",
+                                "APPLIED",
+                                null,
+                                null,
+                                1713745000010L,
+                                "evt-src-1",
+                                "evt-res-2",
+                                "translation-worker",
+                                1713745000010L)));
+        when(tenantPolicyService.getPolicyDistributionStatus("tenant-api-a", 3L))
+                .thenReturn(Mono.just(response));
+
+        webTestClient.get()
+                .uri("/api/v1/tenants/tenant-api-a/policy:distribution-status?policyVersion=3")
+                .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.tenantId").isEqualTo("tenant-api-a")
+                .jsonPath("$.policyVersion").isEqualTo(3)
+                .jsonPath("$.overallPass").isEqualTo(true)
+                .jsonPath("$.overallStatus").isEqualTo("APPLIED")
+                .jsonPath("$.resultCount").isEqualTo(2)
+                .jsonPath("$.results[0].service").isEqualTo("asr-worker");
+    }
+
+    @Test
     void rollbackPolicyReturnsRolledBackVersion() {
         TenantPolicyResponse rollbackResponse = new TenantPolicyResponse(
                 "tenant-api-a",

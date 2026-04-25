@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.kafkaasr.control.api.TenantPolicyRollbackRequest;
 import com.kafkaasr.control.api.TenantPolicyUpsertRequest;
+import com.kafkaasr.control.distribution.TenantPolicyDistributionExecutionState;
+import com.kafkaasr.control.distribution.TenantPolicyDistributionStatusRepository;
 import com.kafkaasr.control.events.ControlKafkaProperties;
 import com.kafkaasr.control.events.TenantPolicyChangedEvent;
 import com.kafkaasr.control.events.TenantPolicyChangedPublisher;
@@ -28,11 +30,13 @@ import reactor.test.StepVerifier;
 class TenantPolicyServiceTests {
 
     private RecordingPolicyChangedPublisher policyChangedPublisher;
+    private InMemoryDistributionStatusRepository distributionStatusRepository;
     private TenantPolicyService service;
 
     @BeforeEach
     void setUp() {
         policyChangedPublisher = new RecordingPolicyChangedPublisher();
+        distributionStatusRepository = new InMemoryDistributionStatusRepository();
 
         ControlKafkaProperties kafkaProperties = new ControlKafkaProperties();
         kafkaProperties.setProducerId("control-plane");
@@ -40,6 +44,7 @@ class TenantPolicyServiceTests {
 
         service = new TenantPolicyService(
                 new InMemoryTenantPolicyRepository(),
+                distributionStatusRepository,
                 policyChangedPublisher,
                 kafkaProperties,
                 Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC),
@@ -230,6 +235,72 @@ class TenantPolicyServiceTests {
                     assertEquals("TENANT_POLICY_NOT_FOUND", exception.code());
                 })
                 .verify();
+    }
+
+    @Test
+    void getDistributionStatusReturnsAppliedWhenAllServicesApplied() {
+        distributionStatusRepository.save(new TenantPolicyDistributionExecutionState(
+                "tenant-a",
+                3L,
+                "asr-worker",
+                "local",
+                "APPLIED",
+                null,
+                null,
+                1713744003000L,
+                "evt-src-1",
+                "evt-res-1",
+                "asr-worker",
+                1713744003000L));
+        distributionStatusRepository.save(new TenantPolicyDistributionExecutionState(
+                "tenant-a",
+                3L,
+                "translation-worker",
+                "local",
+                "APPLIED",
+                null,
+                null,
+                1713744003001L,
+                "evt-src-1",
+                "evt-res-2",
+                "translation-worker",
+                1713744003001L));
+
+        StepVerifier.create(service.getPolicyDistributionStatus("tenant-a", 3L))
+                .assertNext(response -> {
+                    assertEquals("tenant-a", response.tenantId());
+                    assertEquals(3L, response.policyVersion());
+                    assertEquals(true, response.overallPass());
+                    assertEquals("APPLIED", response.overallStatus());
+                    assertEquals(2, response.resultCount());
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void getDistributionStatusReturnsFailedWhenAnyServiceFailed() {
+        distributionStatusRepository.save(new TenantPolicyDistributionExecutionState(
+                "tenant-b",
+                4L,
+                "asr-worker",
+                "local",
+                "FAILED",
+                "APPLY_FAILED",
+                "timeout",
+                1713744004000L,
+                "evt-src-2",
+                "evt-res-3",
+                "asr-worker",
+                1713744004000L));
+
+        StepVerifier.create(service.getPolicyDistributionStatus("tenant-b", 4L))
+                .assertNext(response -> {
+                    assertEquals(false, response.overallPass());
+                    assertEquals("FAILED", response.overallStatus());
+                    assertEquals(1, response.resultCount());
+                    assertEquals("APPLY_FAILED", response.results().getFirst().reasonCode());
+                })
+                .verifyComplete();
     }
 
     @Test
@@ -528,6 +599,7 @@ class TenantPolicyServiceTests {
 
         TenantPolicyService isolatedService = new TenantPolicyService(
                 repository,
+                distributionStatusRepository,
                 policyChangedPublisher,
                 new ControlKafkaProperties(),
                 Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC),
@@ -671,6 +743,30 @@ class TenantPolicyServiceTests {
 
         public void setFailPublishing(boolean failPublishing) {
             this.failPublishing = failPublishing;
+        }
+    }
+
+    private static final class InMemoryDistributionStatusRepository implements TenantPolicyDistributionStatusRepository {
+
+        private final Map<String, TenantPolicyDistributionExecutionState> states = new HashMap<>();
+
+        @Override
+        public void save(TenantPolicyDistributionExecutionState state) {
+            states.put(key(state.tenantId(), state.policyVersion(), state.service(), state.region()), state);
+        }
+
+        @Override
+        public List<TenantPolicyDistributionExecutionState> findByTenantAndPolicyVersion(String tenantId, long policyVersion) {
+            return states.values().stream()
+                    .filter(state -> tenantId.equals(state.tenantId()) && policyVersion == state.policyVersion())
+                    .sorted(java.util.Comparator
+                            .comparing(TenantPolicyDistributionExecutionState::service)
+                            .thenComparing(TenantPolicyDistributionExecutionState::region))
+                    .toList();
+        }
+
+        private String key(String tenantId, long policyVersion, String service, String region) {
+            return tenantId + ":" + policyVersion + ":" + service + ":" + region;
         }
     }
 }
