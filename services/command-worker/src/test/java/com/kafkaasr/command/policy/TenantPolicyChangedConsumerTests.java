@@ -1,4 +1,4 @@
-package com.kafkaasr.tts.policy;
+package com.kafkaasr.command.policy;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -19,7 +19,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 class TenantPolicyChangedConsumerTests {
 
     @Mock
-    private TenantReliabilityPolicyResolver policyResolver;
+    private TenantRoutingPolicyResolver policyResolver;
+
     @Mock
     private KafkaTemplate<String, String> kafkaTemplate;
 
@@ -27,7 +28,7 @@ class TenantPolicyChangedConsumerTests {
 
     @BeforeEach
     void setUp() {
-        TtsControlPlaneProperties properties = new TtsControlPlaneProperties();
+        CommandControlPlaneProperties properties = new CommandControlPlaneProperties();
         consumer = new TenantPolicyChangedConsumer(
                 new ObjectMapper(),
                 policyResolver,

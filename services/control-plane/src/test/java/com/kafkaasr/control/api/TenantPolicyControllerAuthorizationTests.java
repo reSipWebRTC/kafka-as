@@ -55,6 +55,29 @@ class TenantPolicyControllerAuthorizationTests {
     }
 
     @Test
+    void scopedReaderCanGetDistributionStatusInTenantScope() {
+        TenantPolicyDistributionStatusResponse response = new TenantPolicyDistributionStatusResponse(
+                "tenant-a",
+                3L,
+                false,
+                "PENDING",
+                0,
+                1713745000000L,
+                java.util.List.of());
+        org.mockito.Mockito.when(tenantPolicyService.getPolicyDistributionStatus("tenant-a", 3L))
+                .thenReturn(Mono.just(response));
+
+        webTestClient.get()
+                .uri("/api/v1/tenants/tenant-a/policy:distribution-status?policyVersion=3")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer viewer-tenant-a")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.tenantId").isEqualTo("tenant-a")
+                .jsonPath("$.policyVersion").isEqualTo(3);
+    }
+
+    @Test
     void scopedReaderCannotWrite() {
         webTestClient.put()
                 .uri("/api/v1/tenants/tenant-a/policy")

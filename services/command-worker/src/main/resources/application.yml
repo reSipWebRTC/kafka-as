@@ -68,3 +68,6 @@ command:
     policy-cache-ttl: ${COMMAND_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
     fallback-fail-open: ${COMMAND_CONTROL_PLANE_FALLBACK_FAIL_OPEN:true}
     policy-changed-topic: ${COMMAND_CONTROL_PLANE_POLICY_CHANGED_TOPIC:tenant.policy.changed}
+    policy-distribution-result-topic: ${COMMAND_CONTROL_PLANE_POLICY_DISTRIBUTION_RESULT_TOPIC:tenant.policy.distribution.result}
+    distribution-region: ${COMMAND_CONTROL_PLANE_DISTRIBUTION_REGION:local}
+    distribution-producer-id: ${COMMAND_CONTROL_PLANE_DISTRIBUTION_PRODUCER_ID:command-worker}

@@ -20,6 +20,9 @@ public class AsrControlPlaneProperties {
 
     private boolean fallbackFailOpen = true;
     private String policyChangedTopic = "tenant.policy.changed";
+    private String policyDistributionResultTopic = "tenant.policy.distribution.result";
+    private String distributionRegion = "local";
+    private String distributionProducerId = "asr-worker";
 
     public boolean isEnabled() {
         return enabled;
@@ -67,5 +70,29 @@ public class AsrControlPlaneProperties {
 
     public void setPolicyChangedTopic(String policyChangedTopic) {
         this.policyChangedTopic = policyChangedTopic;
+    }
+
+    public String getPolicyDistributionResultTopic() {
+        return policyDistributionResultTopic;
+    }
+
+    public void setPolicyDistributionResultTopic(String policyDistributionResultTopic) {
+        this.policyDistributionResultTopic = policyDistributionResultTopic;
+    }
+
+    public String getDistributionRegion() {
+        return distributionRegion;
+    }
+
+    public void setDistributionRegion(String distributionRegion) {
+        this.distributionRegion = distributionRegion;
+    }
+
+    public String getDistributionProducerId() {
+        return distributionProducerId;
+    }
+
+    public void setDistributionProducerId(String distributionProducerId) {
+        this.distributionProducerId = distributionProducerId;
     }
 }

@@ -1,8 +1,12 @@
 package com.kafkaasr.control.service;
 
+import com.kafkaasr.control.api.TenantPolicyDistributionStatusItem;
+import com.kafkaasr.control.api.TenantPolicyDistributionStatusResponse;
 import com.kafkaasr.control.api.TenantPolicyResponse;
 import com.kafkaasr.control.api.TenantPolicyRollbackRequest;
 import com.kafkaasr.control.api.TenantPolicyUpsertRequest;
+import com.kafkaasr.control.distribution.TenantPolicyDistributionExecutionState;
+import com.kafkaasr.control.distribution.TenantPolicyDistributionStatusRepository;
 import com.kafkaasr.control.events.ControlKafkaProperties;
 import com.kafkaasr.control.events.TenantPolicyChangedEvent;
 import com.kafkaasr.control.events.TenantPolicyChangedPayload;
@@ -39,8 +43,14 @@ public class TenantPolicyService {
     private static final String OPERATION_UPDATED = "UPDATED";
     private static final String OPERATION_ROLLED_BACK = "ROLLED_BACK";
     private static final String OPERATION_ROLLED_BACK_TO_VERSION = "ROLLED_BACK_TO_VERSION";
+    private static final String DISTRIBUTION_STATUS_PENDING = "PENDING";
+    private static final String DISTRIBUTION_STATUS_APPLIED = "APPLIED";
+    private static final String DISTRIBUTION_STATUS_FAILED = "FAILED";
+    private static final String DISTRIBUTION_STATUS_IGNORED = "IGNORED";
+    private static final String DISTRIBUTION_STATUS_PARTIAL = "PARTIAL";
 
     private final TenantPolicyRepository tenantPolicyRepository;
+    private final TenantPolicyDistributionStatusRepository distributionStatusRepository;
     private final TenantPolicyChangedPublisher tenantPolicyChangedPublisher;
     private final ControlKafkaProperties kafkaProperties;
     private final Clock clock;
@@ -49,19 +59,28 @@ public class TenantPolicyService {
     @Autowired
     public TenantPolicyService(
             TenantPolicyRepository tenantPolicyRepository,
+            TenantPolicyDistributionStatusRepository distributionStatusRepository,
             TenantPolicyChangedPublisher tenantPolicyChangedPublisher,
             ControlKafkaProperties kafkaProperties,
             MeterRegistry meterRegistry) {
-        this(tenantPolicyRepository, tenantPolicyChangedPublisher, kafkaProperties, Clock.systemUTC(), meterRegistry);
+        this(
+                tenantPolicyRepository,
+                distributionStatusRepository,
+                tenantPolicyChangedPublisher,
+                kafkaProperties,
+                Clock.systemUTC(),
+                meterRegistry);
     }
 
     TenantPolicyService(
             TenantPolicyRepository tenantPolicyRepository,
+            TenantPolicyDistributionStatusRepository distributionStatusRepository,
             TenantPolicyChangedPublisher tenantPolicyChangedPublisher,
             ControlKafkaProperties kafkaProperties,
             Clock clock,
             MeterRegistry meterRegistry) {
         this.tenantPolicyRepository = tenantPolicyRepository;
+        this.distributionStatusRepository = distributionStatusRepository;
         this.tenantPolicyChangedPublisher = tenantPolicyChangedPublisher;
         this.kafkaProperties = kafkaProperties;
         this.clock = clock;
@@ -221,6 +240,67 @@ public class TenantPolicyService {
             return Mono.error(exception);
         } finally {
             sample.stop(meterRegistry.timer("controlplane.tenant.policy.get.duration"));
+        }
+    }
+
+    public Mono<TenantPolicyDistributionStatusResponse> getPolicyDistributionStatus(String tenantId, long policyVersion) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            validateTenantId(tenantId);
+            if (policyVersion <= 0) {
+                throw ControlPlaneException.invalidMessage("policyVersion must be >= 1", tenantId);
+            }
+
+            List<TenantPolicyDistributionExecutionState> states =
+                    distributionStatusRepository.findByTenantAndPolicyVersion(tenantId, policyVersion);
+            if (states == null) {
+                states = List.of();
+            }
+            String overallStatus = resolveDistributionOverallStatus(states);
+            boolean overallPass = DISTRIBUTION_STATUS_APPLIED.equals(overallStatus);
+            long queriedAtMs = nowMs();
+
+            List<TenantPolicyDistributionStatusItem> items = states.stream()
+                    .map(state -> new TenantPolicyDistributionStatusItem(
+                            state.service(),
+                            state.region(),
+                            state.status(),
+                            state.reasonCode(),
+                            state.reasonMessage(),
+                            state.appliedAtMs(),
+                            state.sourceEventId(),
+                            state.eventId(),
+                            state.producer(),
+                            state.updatedTsMs()))
+                    .toList();
+
+            meterRegistry.counter(
+                            "controlplane.tenant.policy.distribution.status.get.total",
+                            "result",
+                            overallStatus.toLowerCase(Locale.ROOT),
+                            "code",
+                            "OK")
+                    .increment();
+
+            return Mono.just(new TenantPolicyDistributionStatusResponse(
+                    tenantId,
+                    policyVersion,
+                    overallPass,
+                    overallStatus,
+                    items.size(),
+                    queriedAtMs,
+                    items));
+        } catch (RuntimeException exception) {
+            meterRegistry.counter(
+                            "controlplane.tenant.policy.distribution.status.get.total",
+                            "result",
+                            "error",
+                            "code",
+                            normalizeErrorCode(exception))
+                    .increment();
+            return Mono.error(exception);
+        } finally {
+            sample.stop(meterRegistry.timer("controlplane.tenant.policy.distribution.status.get.duration"));
         }
     }
 
@@ -401,6 +481,28 @@ public class TenantPolicyService {
             throw ControlPlaneException.tenantPolicyVersionNotFound(tenantId, requestedTargetVersion);
         }
         return target;
+    }
+
+    private String resolveDistributionOverallStatus(List<TenantPolicyDistributionExecutionState> states) {
+        if (states == null || states.isEmpty()) {
+            return DISTRIBUTION_STATUS_PENDING;
+        }
+
+        boolean hasFailed = states.stream().anyMatch(state -> DISTRIBUTION_STATUS_FAILED.equals(state.status()));
+        if (hasFailed) {
+            return DISTRIBUTION_STATUS_FAILED;
+        }
+
+        boolean allApplied = states.stream().allMatch(state -> DISTRIBUTION_STATUS_APPLIED.equals(state.status()));
+        if (allApplied) {
+            return DISTRIBUTION_STATUS_APPLIED;
+        }
+
+        boolean allIgnored = states.stream().allMatch(state -> DISTRIBUTION_STATUS_IGNORED.equals(state.status()));
+        if (allIgnored) {
+            return DISTRIBUTION_STATUS_IGNORED;
+        }
+        return DISTRIBUTION_STATUS_PARTIAL;
     }
 
     private String normalizeErrorCode(Throwable throwable) {

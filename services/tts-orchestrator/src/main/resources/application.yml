@@ -48,6 +48,9 @@ tts:
     policy-cache-ttl: ${TTS_CONTROL_PLANE_POLICY_CACHE_TTL:30s}
     fallback-fail-open: ${TTS_CONTROL_PLANE_FALLBACK_FAIL_OPEN:true}
     policy-changed-topic: ${TTS_CONTROL_PLANE_POLICY_CHANGED_TOPIC:tenant.policy.changed}
+    policy-distribution-result-topic: ${TTS_CONTROL_PLANE_POLICY_DISTRIBUTION_RESULT_TOPIC:tenant.policy.distribution.result}
+    distribution-region: ${TTS_CONTROL_PLANE_DISTRIBUTION_REGION:local}
+    distribution-producer-id: ${TTS_CONTROL_PLANE_DISTRIBUTION_PRODUCER_ID:tts-orchestrator}
   kafka:
     enabled: ${TTS_KAFKA_ENABLED:true}
     translation-result-topic: ${TTS_TRANSLATION_RESULT_TOPIC:translation.result}

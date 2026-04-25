@@ -12,6 +12,9 @@ public class ControlKafkaProperties {
     private String policyChangedTopic = "tenant.policy.changed";
 
     @NotBlank
+    private String policyDistributionResultTopic = "tenant.policy.distribution.result";
+
+    @NotBlank
     private String producerId = "control-plane";
 
     public String getPolicyChangedTopic() {
@@ -28,5 +31,13 @@ public class ControlKafkaProperties {
 
     public void setProducerId(String producerId) {
         this.producerId = producerId;
+    }
+
+    public String getPolicyDistributionResultTopic() {
+        return policyDistributionResultTopic;
+    }
+
+    public void setPolicyDistributionResultTopic(String policyDistributionResultTopic) {
+        this.policyDistributionResultTopic = policyDistributionResultTopic;
     }
 }

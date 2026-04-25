@@ -9,8 +9,11 @@ public class TenantPolicyStoreProperties {
     private String backend = "redis";
     private String keyPrefix = "control:tenant-policy:";
     private String historyKeyPrefix = "control:tenant-policy:history:";
+    private String distributionStatusKeyPrefix = "control:tenant-policy-distribution:status:";
+    private String distributionStatusIndexPrefix = "control:tenant-policy-distribution:index:";
     private String jdbcCurrentTable = "control_tenant_policy_current";
     private String jdbcHistoryTable = "control_tenant_policy_history";
+    private String jdbcDistributionStatusTable = "control_tenant_policy_distribution_status";
     private Duration ttl = Duration.ofHours(12);
     private int historyMaxEntries = 20;
 
@@ -60,6 +63,30 @@ public class TenantPolicyStoreProperties {
 
     public void setJdbcHistoryTable(String jdbcHistoryTable) {
         this.jdbcHistoryTable = jdbcHistoryTable;
+    }
+
+    public String getDistributionStatusKeyPrefix() {
+        return distributionStatusKeyPrefix;
+    }
+
+    public void setDistributionStatusKeyPrefix(String distributionStatusKeyPrefix) {
+        this.distributionStatusKeyPrefix = distributionStatusKeyPrefix;
+    }
+
+    public String getDistributionStatusIndexPrefix() {
+        return distributionStatusIndexPrefix;
+    }
+
+    public void setDistributionStatusIndexPrefix(String distributionStatusIndexPrefix) {
+        this.distributionStatusIndexPrefix = distributionStatusIndexPrefix;
+    }
+
+    public String getJdbcDistributionStatusTable() {
+        return jdbcDistributionStatusTable;
+    }
+
+    public void setJdbcDistributionStatusTable(String jdbcDistributionStatusTable) {
+        this.jdbcDistributionStatusTable = jdbcDistributionStatusTable;
     }
 
     public int getHistoryMaxEntries() {
