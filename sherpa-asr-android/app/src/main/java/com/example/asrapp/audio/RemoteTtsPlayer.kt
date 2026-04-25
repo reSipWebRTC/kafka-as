@@ -7,7 +7,8 @@ import android.util.Log
 class RemoteTtsPlayer(
     private val onPlaybackStateChanged: (Boolean) -> Unit,
     private val onPlaybackStarted: (Long) -> Unit,
-    private val onPlaybackStall: (Long, Long) -> Unit,
+    private val onPlaybackStallStarted: (Long) -> Unit,
+    private val onPlaybackStallEnded: (Long, Long) -> Unit,
     private val onPlaybackCompleted: (Long, Int, Long) -> Unit,
     private val onError: (Long?, String) -> Unit
 ) {
@@ -63,6 +64,7 @@ class RemoteTtsPlayer(
                         MediaPlayer.MEDIA_INFO_BUFFERING_START -> {
                             if (bufferingStartedAtMs == null) {
                                 bufferingStartedAtMs = System.currentTimeMillis()
+                                onPlaybackStallStarted(seq)
                             }
                         }
 
@@ -73,7 +75,7 @@ class RemoteTtsPlayer(
                                 bufferingStartedAtMs = null
                                 stallCount += 1
                                 totalStallDurationMs += durationMs
-                                onPlaybackStall(seq, durationMs)
+                                onPlaybackStallEnded(seq, durationMs)
                             }
                         }
                     }
