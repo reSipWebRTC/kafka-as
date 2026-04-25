@@ -10,6 +10,7 @@ public record AudioIngressRawEvent(
         String traceId,
         String sessionId,
         String tenantId,
+        String userId,
         String roomId,
         String producer,
         long seq,

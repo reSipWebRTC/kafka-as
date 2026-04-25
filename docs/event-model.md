@@ -19,6 +19,7 @@
   "traceId": "trc_123",
   "sessionId": "sess_456",
   "tenantId": "tenant_a",
+  "userId": "user_001",
   "roomId": "room_789",
   "producer": "speech-gateway",
   "seq": 1024,
@@ -37,7 +38,7 @@
 
 ## 3. 当前已实现 Topic
 
-截至 `2026-04-23`，仓库里已经落地并有代码/测试支撑的 Topic 如下：
+截至 `2026-04-25`，仓库里已经落地并有代码/测试支撑的 Topic 如下：
 
 | Topic | Producer | Consumer | Key | 说明 |
 | --- | --- | --- | --- | --- |
@@ -60,7 +61,23 @@
 - 上述核心消费者均已接入基于 `idempotencyKey` 的 TTL 判重，重复消息按成功路径 no-op
 - 上述核心消费者在重复失败达到阈值后会发出 `ops.compensation` 信号到 `platform.compensation`
 
-## 4. 计划扩展 Topic
+## 4. 已冻结并分阶段落地 Topic
+
+以下 Topic 契约已在 `api/json-schema` 与 `api/protobuf` 冻结，当前为分阶段落地状态：
+
+| Topic | Producer | Consumer | Key | 说明 |
+| --- | --- | --- | --- | --- |
+| `command.confirm.request` | `speech-gateway` | `command-worker` | `sessionId` | 客户端二次确认请求（`confirm_token + accept`） |
+| `command.result` | `command-worker` | `speech-gateway`、`tts-orchestrator` | `sessionId` | 智能家居命令执行回执（含 `confirm_required`） |
+
+当前状态：
+
+- `speech-gateway` 已完成 `command.confirm.request` 发布与 `command.result` 消费下发
+- `command-worker` 已完成 `asr.final` / `command.confirm.request` 消费、smartHomeNlu 调用与 `command.result` 发布（含重试/DLQ/幂等/补偿）
+- `tts-orchestrator` 已完成 `command.result` 消费并按 `sessionMode=SMART_HOME` 产出 `tts.request` / `tts.chunk` / `tts.ready`
+- `tts-orchestrator` 对 `translation.result` 已按租户 `sessionMode` 分流：`TRANSLATION` 处理，`SMART_HOME` 忽略
+
+## 5. 计划扩展 Topic
 
 以下 Topic 仍然属于目标架构的一部分，但当前未在仓库实现中落地：
 
@@ -76,10 +93,11 @@
 补充说明：
 
 - `tenant.policy.changed` 的 JSON Schema / Protobuf 契约、`control-plane` 发布以及运行时服务消费刷新均已落地。
+- `command.confirm.request` 与 `command.result` 的 JSON Schema / Protobuf 契约已冻结。
 
-## 5. 分区与顺序策略
+## 6. 分区与顺序策略
 
-### 5.1 分区键
+### 6.1 分区键
 
 默认优先使用：
 
@@ -97,7 +115,7 @@
 - `languagePair`
 - `roomId`
 
-### 5.2 顺序边界
+### 6.2 顺序边界
 
 系统只保证：
 
@@ -111,7 +129,7 @@
 
 因此编排层必须按业务语义而不是按消息到达时间推进状态。
 
-## 6. 事件消费语义
+## 7. 事件消费语义
 
 ### 幂等
 
@@ -156,7 +174,7 @@
 - 事件版本不兼容
 - 下游依赖持续不可用
 
-## 7. 状态机建议
+## 8. 状态机建议
 
 建议会话状态最少包含：
 
@@ -178,14 +196,14 @@ FAILED
 - 网关和 Worker 不直接跨层修改全局会话状态
 - 每次切换都应记录事件、时间戳和责任服务
 
-## 8. 版本演进策略
+## 9. 版本演进策略
 
 - 事件体必须带 `eventVersion`
 - Producer 只能做向后兼容演进
 - Consumer 对未知字段保持忽略，对未知版本执行保护性失败
 - 跨服务大改优先使用双写或多版本并行过渡
 
-## 9. 当前最小事件闭环
+## 10. 当前最小事件闭环
 
 当前仓库已具备的事件闭环如下：
 

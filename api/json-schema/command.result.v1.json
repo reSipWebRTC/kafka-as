@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kafka-asr.local/schemas/command.result.v1.json",
+  "title": "command.result.v1",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "traceId",
+    "sessionId",
+    "tenantId",
+    "producer",
+    "seq",
+    "ts",
+    "idempotencyKey",
+    "payload"
+  ],
+  "properties": {
+    "eventId": { "type": "string", "minLength": 1 },
+    "eventType": { "const": "command.result" },
+    "eventVersion": { "const": "v1" },
+    "traceId": { "type": "string", "minLength": 1 },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "tenantId": { "type": "string", "minLength": 1 },
+    "userId": { "type": "string", "minLength": 1 },
+    "roomId": { "type": "string" },
+    "producer": { "type": "string", "minLength": 1 },
+    "seq": { "type": "integer", "minimum": 0 },
+    "ts": { "type": "integer", "minimum": 0 },
+    "idempotencyKey": { "type": "string", "minLength": 1 },
+    "payload": {
+      "type": "object",
+      "required": ["status", "code", "replyText", "retryable"],
+      "properties": {
+        "status": { "type": "string", "minLength": 1 },
+        "code": { "type": "string", "minLength": 1 },
+        "replyText": { "type": "string" },
+        "ttsText": { "type": "string" },
+        "retryable": { "type": "boolean" },
+        "confirmToken": { "type": "string", "minLength": 1 },
+        "expiresInSec": { "type": "integer", "minimum": 1 },
+        "intent": { "type": "string", "minLength": 1 },
+        "subIntent": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

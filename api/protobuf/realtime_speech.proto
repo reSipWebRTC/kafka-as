@@ -18,6 +18,7 @@ message EventEnvelope {
   uint64 seq = 9;
   int64 ts_ms = 10;
   string idempotency_key = 11;
+  string user_id = 12;
 }
 
 message AudioIngressRawPayload {
@@ -111,6 +112,33 @@ message TenantPolicyChangedEvent {
   TenantPolicyChangedPayload payload = 2;
 }
 
+message CommandConfirmRequestPayload {
+  string confirm_token = 1;
+  bool accept = 2;
+}
+
+message CommandConfirmRequestEvent {
+  EventEnvelope envelope = 1;
+  CommandConfirmRequestPayload payload = 2;
+}
+
+message CommandResultPayload {
+  string status = 1;
+  string code = 2;
+  string reply_text = 3;
+  string tts_text = 4;
+  bool retryable = 5;
+  string confirm_token = 6;
+  uint32 expires_in_sec = 7;
+  string intent = 8;
+  string sub_intent = 9;
+}
+
+message CommandResultEvent {
+  EventEnvelope envelope = 1;
+  CommandResultPayload payload = 2;
+}
+
 message WsSessionStart {
   string session_id = 1;
   string tenant_id = 2;
@@ -135,6 +163,14 @@ message WsSessionStop {
   string session_id = 1;
 }
 
+message WsCommandConfirm {
+  string session_id = 1;
+  uint64 seq = 2;
+  string confirm_token = 3;
+  bool accept = 4;
+  string trace_id = 5;
+}
+
 message WsClientMessage {
   string type = 1;
   oneof body {
@@ -142,6 +178,7 @@ message WsClientMessage {
     WsAudioFrame audio_frame = 3;
     WsSessionPing session_ping = 4;
     WsSessionStop session_stop = 5;
+    WsCommandConfirm command_confirm = 6;
   }
 }
 
@@ -168,6 +205,17 @@ message WsSessionClosed {
   string reason = 2;
 }
 
+message WsCommandResult {
+  string session_id = 1;
+  uint64 seq = 2;
+  string status = 3;
+  string code = 4;
+  string reply_text = 5;
+  bool retryable = 6;
+  string confirm_token = 7;
+  uint32 expires_in_sec = 8;
+}
+
 message WsServerMessage {
   string type = 1;
   oneof body {
@@ -175,5 +223,6 @@ message WsServerMessage {
     WsSubtitleFinal subtitle_final = 3;
     WsSessionError session_error = 4;
     WsSessionClosed session_closed = 5;
+    WsCommandResult command_result = 6;
   }
 }

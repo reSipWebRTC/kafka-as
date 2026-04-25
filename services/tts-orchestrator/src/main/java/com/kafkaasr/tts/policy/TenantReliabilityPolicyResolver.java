@@ -83,7 +83,8 @@ public class TenantReliabilityPolicyResolver {
         return new TenantReliabilityPolicy(
                 kafkaProperties.getRetryMaxAttempts(),
                 kafkaProperties.getRetryBackoffMs(),
-                kafkaProperties.getDlqTopicSuffix());
+                kafkaProperties.getDlqTopicSuffix(),
+                TenantReliabilityPolicy.SESSION_MODE_TRANSLATION);
     }
 
     public void invalidateTenant(String tenantId) {
@@ -123,10 +124,14 @@ public class TenantReliabilityPolicyResolver {
         String dlqTopicSuffix = response.dlqTopicSuffix() == null || response.dlqTopicSuffix().isBlank()
                 ? defaults.dlqTopicSuffix()
                 : response.dlqTopicSuffix();
+        String sessionMode = response.sessionMode() == null || response.sessionMode().isBlank()
+                ? defaults.sessionMode()
+                : response.sessionMode();
         return new TenantReliabilityPolicy(
                 retryMaxAttempts,
                 retryBackoffMs,
-                dlqTopicSuffix);
+                dlqTopicSuffix,
+                sessionMode);
     }
 
     private long resolveCacheTtlMs(ControlPlaneTenantPolicyResponse response) {

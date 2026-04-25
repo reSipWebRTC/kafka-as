@@ -166,6 +166,7 @@ class TenantPolicyControllerAuthorizationTests {
                 200,
                 2000,
                 true,
+                "TRANSLATION",
                 true,
                 20,
                 true,

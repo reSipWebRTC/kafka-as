@@ -2,6 +2,7 @@ package com.kafkaasr.tts.kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kafkaasr.tts.events.CommandResultEvent;
 import com.kafkaasr.tts.events.TtsKafkaProperties;
 import com.kafkaasr.tts.events.TtsReadyEvent;
 import com.kafkaasr.tts.events.TtsReadyPayload;
@@ -70,7 +71,7 @@ public class TranslationResultConsumer {
     public void onMessage(String payload) {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
-            TranslationResultEvent translationResultEvent = parse(payload);
+            TranslationResultEvent translationResultEvent = parseTranslationResult(payload);
             if (idempotencyGuard.isDuplicate(translationResultEvent.idempotencyKey())) {
                 meterRegistry.counter(
                                 "tts.pipeline.messages.total",
@@ -84,7 +85,72 @@ public class TranslationResultConsumer {
                 return;
             }
             TenantReliabilityPolicy reliabilityPolicy = reliabilityPolicyResolver.resolve(translationResultEvent.tenantId());
-            processWithRetry(translationResultEvent, payload, reliabilityPolicy);
+            if (reliabilityPolicy.isSmartHomeMode()) {
+                meterRegistry.counter(
+                                "tts.pipeline.messages.total",
+                                "result",
+                                "ignored",
+                                "code",
+                                "NON_TRANSLATION_MODE")
+                        .increment();
+                log.debug("Ignored translation.result for SMART_HOME tenant tenantId={}", translationResultEvent.tenantId());
+                return;
+            }
+            processWithRetry(
+                    () -> processTranslationOnce(translationResultEvent),
+                    kafkaProperties.getTranslationResultTopic(),
+                    payload,
+                    reliabilityPolicy);
+        } catch (IllegalArgumentException exception) {
+            meterRegistry.counter(
+                            "tts.pipeline.messages.total",
+                            "result",
+                            "error",
+                            "code",
+                            "INVALID_PAYLOAD")
+                    .increment();
+            throw exception;
+        } finally {
+            sample.stop(meterRegistry.timer("tts.pipeline.duration"));
+        }
+    }
+
+    @KafkaListener(
+            topics = "${tts.kafka.command-result-topic:command.result}",
+            groupId = "${TTS_COMMAND_RESULT_CONSUMER_GROUP_ID:tts-orchestrator-command-result}")
+    public void onCommandResultMessage(String payload) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            CommandResultEvent commandResultEvent = parseCommandResult(payload);
+            if (idempotencyGuard.isDuplicate(commandResultEvent.idempotencyKey())) {
+                meterRegistry.counter(
+                                "tts.pipeline.messages.total",
+                                "result",
+                                "duplicate",
+                                "code",
+                                "DUPLICATE")
+                        .increment();
+                log.debug("Dropped duplicated command.result event idempotencyKey={}",
+                        commandResultEvent.idempotencyKey());
+                return;
+            }
+            TenantReliabilityPolicy reliabilityPolicy = reliabilityPolicyResolver.resolve(commandResultEvent.tenantId());
+            if (!reliabilityPolicy.isSmartHomeMode()) {
+                meterRegistry.counter(
+                                "tts.pipeline.messages.total",
+                                "result",
+                                "ignored",
+                                "code",
+                                "NON_SMART_HOME")
+                        .increment();
+                log.debug("Ignored command.result for non-SMART_HOME tenant tenantId={}", commandResultEvent.tenantId());
+                return;
+            }
+            processWithRetry(
+                    () -> processCommandResultOnce(commandResultEvent),
+                    kafkaProperties.getCommandResultTopic(),
+                    payload,
+                    reliabilityPolicy);
         } catch (IllegalArgumentException exception) {
             meterRegistry.counter(
                             "tts.pipeline.messages.total",
@@ -100,13 +166,14 @@ public class TranslationResultConsumer {
     }
 
     private void processWithRetry(
-            TranslationResultEvent translationResultEvent,
+            Runnable processOnceAction,
+            String sourceTopic,
             String payload,
             TenantReliabilityPolicy reliabilityPolicy) {
         int maxAttempts = Math.max(1, reliabilityPolicy.retryMaxAttempts());
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                processOnce(translationResultEvent);
+                processOnceAction.run();
                 return;
             } catch (RuntimeException failure) {
                 boolean retryable = isRetryable(failure);
@@ -121,15 +188,19 @@ public class TranslationResultConsumer {
                                 "code",
                                 normalizeErrorCode(failure))
                         .increment();
-                recordFailureAndCompensate(payload, reliabilityPolicy, failure);
+                recordFailureAndCompensate(sourceTopic, payload, reliabilityPolicy, failure);
                 throw wrapForDlq(reliabilityPolicy.dlqTopicSuffix(), failure);
             }
         }
     }
 
-    private void processOnce(TranslationResultEvent translationResultEvent) {
+    private void processTranslationOnce(TranslationResultEvent translationResultEvent) {
         TtsRequestPipelineService.PipelineOutput pipelineOutput = pipelineService.toPipelineEvents(translationResultEvent);
-        TtsReadyEvent readyEvent = enrichReadyEventWithStoragePlaybackUrl(pipelineOutput, translationResultEvent);
+        TtsReadyEvent readyEvent = enrichReadyEventWithStoragePlaybackUrl(
+                pipelineOutput,
+                translationResultEvent.tenantId(),
+                translationResultEvent.sessionId(),
+                translationResultEvent.seq());
         ttsRequestPublisher.publish(pipelineOutput.requestEvent()).block();
         ttsChunkPublisher.publish(pipelineOutput.chunkEvent()).block();
         ttsReadyPublisher.publish(readyEvent).block();
@@ -147,9 +218,35 @@ public class TranslationResultConsumer {
                 pipelineOutput.requestEvent().seq());
     }
 
+    private void processCommandResultOnce(CommandResultEvent commandResultEvent) {
+        TtsRequestPipelineService.PipelineOutput pipelineOutput = pipelineService.toPipelineEvents(commandResultEvent);
+        TtsReadyEvent readyEvent = enrichReadyEventWithStoragePlaybackUrl(
+                pipelineOutput,
+                commandResultEvent.tenantId(),
+                commandResultEvent.sessionId(),
+                commandResultEvent.seq());
+        ttsRequestPublisher.publish(pipelineOutput.requestEvent()).block();
+        ttsChunkPublisher.publish(pipelineOutput.chunkEvent()).block();
+        ttsReadyPublisher.publish(readyEvent).block();
+        idempotencyGuard.markProcessed(commandResultEvent.idempotencyKey());
+        meterRegistry.counter(
+                        "tts.pipeline.messages.total",
+                        "result",
+                        "success",
+                        "code",
+                        "OK")
+                .increment();
+        log.debug(
+                "Published tts.request/tts.chunk/tts.ready events from command.result sessionId={} seq={}",
+                pipelineOutput.requestEvent().sessionId(),
+                pipelineOutput.requestEvent().seq());
+    }
+
     private TtsReadyEvent enrichReadyEventWithStoragePlaybackUrl(
             TtsRequestPipelineService.PipelineOutput pipelineOutput,
-            TranslationResultEvent translationResultEvent) {
+            String tenantId,
+            String sessionId,
+            long seq) {
         byte[] audioBytes;
         try {
             audioBytes = Base64.getDecoder().decode(pipelineOutput.chunkEvent().payload().audioBase64());
@@ -159,9 +256,9 @@ public class TranslationResultConsumer {
 
         TtsObjectStorageUploader.UploadResult uploadResult = storageUploader.upload(
                 new TtsObjectStorageUploader.UploadRequest(
-                        translationResultEvent.tenantId(),
-                        translationResultEvent.sessionId(),
-                        translationResultEvent.seq(),
+                        tenantId,
+                        sessionId,
+                        seq,
                         pipelineOutput.readyEvent().payload().cacheKey(),
                         pipelineOutput.chunkEvent().payload().codec(),
                         audioBytes,
@@ -187,11 +284,19 @@ public class TranslationResultConsumer {
                         pipelineOutput.readyEvent().payload().cacheKey()));
     }
 
-    private TranslationResultEvent parse(String payload) {
+    private TranslationResultEvent parseTranslationResult(String payload) {
         try {
             return objectMapper.readValue(payload, TranslationResultEvent.class);
         } catch (JsonProcessingException exception) {
             throw new IllegalArgumentException("Invalid translation.result payload", exception);
+        }
+    }
+
+    private CommandResultEvent parseCommandResult(String payload) {
+        try {
+            return objectMapper.readValue(payload, CommandResultEvent.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalArgumentException("Invalid command.result payload", exception);
         }
     }
 
@@ -232,12 +337,13 @@ public class TranslationResultConsumer {
     }
 
     private void recordFailureAndCompensate(
+            String sourceTopic,
             String payload,
             TenantReliabilityPolicy reliabilityPolicy,
             RuntimeException failure) {
         compensationPublisher.publish(
-                kafkaProperties.getTranslationResultTopic(),
-                kafkaProperties.getTranslationResultTopic() + reliabilityPolicy.dlqTopicSuffix(),
+                sourceTopic,
+                sourceTopic + reliabilityPolicy.dlqTopicSuffix(),
                 payload,
                 failure);
     }

@@ -51,6 +51,7 @@ tts:
   kafka:
     enabled: ${TTS_KAFKA_ENABLED:true}
     translation-result-topic: ${TTS_TRANSLATION_RESULT_TOPIC:translation.result}
+    command-result-topic: ${TTS_COMMAND_RESULT_TOPIC:command.result}
     tts-request-topic: ${TTS_REQUEST_TOPIC:tts.request}
     tts-chunk-topic: ${TTS_CHUNK_TOPIC:tts.chunk}
     tts-ready-topic: ${TTS_READY_TOPIC:tts.ready}

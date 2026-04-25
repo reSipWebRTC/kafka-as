@@ -14,17 +14,19 @@
 - 会话内有序、状态外置、事件驱动
 - 数据面与控制面分离
 
-## 当前实现基线（2026-04-23）
+## 当前实现基线（2026-04-25）
 
 当前仓库已经具备一条可运行的模块化骨架链路：
 
-- `speech-gateway` 通过 `/ws/audio` 接收 `session.start`、`audio.frame`、`session.stop`
-- `speech-gateway` 直接发布 `audio.ingress.raw` 到 Kafka
+- `speech-gateway` 通过 `/ws/audio` 接收 `session.start`、`session.ping`、`audio.frame`、`session.stop`、`command.confirm`
+- `speech-gateway` 直接发布 `audio.ingress.raw` / `command.confirm.request` 到 Kafka
+- `speech-gateway` 消费 `command.result` 并回推 WebSocket 下行
 - `speech-gateway` 通过低频 HTTP 调用 `session-orchestrator` 做 start/stop
 - `session-orchestrator` 调用 `control-plane` 获取租户策略，写 Redis 会话状态，并发布 `session.control`
 - `asr-worker` 消费 `audio.ingress.raw` 并发布 `asr.partial` / `asr.final`
 - `translation-worker` 消费 `asr.final` 并发布 `translation.result`
-- `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request` / `tts.chunk` / `tts.ready`
+- `command-worker` 消费 `asr.final`（SMART_HOME）与 `command.confirm.request`，调用 smartHomeNlu 并发布 `command.result`
+- `tts-orchestrator` 按租户 `sessionMode` 分流：消费 `translation.result`（`TRANSLATION`）与 `command.result`（`SMART_HOME`），统一发布 `tts.request` / `tts.chunk` / `tts.ready`
 
 当前详细实现状态见 [implementation-status.md](implementation-status.md)。
 
