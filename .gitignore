@@ -48,3 +48,8 @@ smartHomeNlu/ha-mcp/
 
 # Large local model artifacts (keep local, do not track in git)
 sherpa-asr-android/app/src/main/assets/asr/encoder.int8.onnx
+sherpa-asr-android/app/src/main/assets/asr/*.onnx
+sherpa-asr-android/app/src/main/assets/tts/
+sherpa-asr-android/app/src/main/assets/vad/
+sherpa-asr-android/app/libs/*.zip
+sherpa-asr-android/app/libs/*.aar
