@@ -258,3 +258,25 @@ tools/preprod-drill-closure.sh
 2. 至少一组真实地址和认证方式已提供。
 3. 测试租户 / 样本 / 执行窗口已明确。
 4. 我已经把对应命令、模板和产物路径整理出来。
+
+## 9. 本地准真实收口基线（simulated）
+
+最近一次本地准真实收口（`2026-04-26`）使用如下命令：
+
+```bash
+source tools/local-functional-test-env.sh
+tools/loadtest-alert-closure.sh
+tools/fault-drill-closure.sh
+PREPROD_AUTH_DRILL_REQUIRED=1 \
+PREPROD_AUTH_DRILL_COMMAND="tools/control-plane-jwks-jwt-drill.sh" \
+tools/preprod-drill-closure.sh
+```
+
+说明：
+
+1. 该基线是 simulated/mock 证据，不依赖外部 IAM 与真实 Alertmanager。
+2. 默认使用 `PREPROD_SKIP_ALERT_CAPTURE=1`，恢复阶段标记为 `recoveryPass=true (skipped)`。
+3. 验收报告路径固定在：
+   - `build/reports/loadtest/gateway-pipeline-loadtest-aggregate.json`
+   - `build/reports/fault-drill/fault-drill-closure.json`
+   - `build/reports/preprod-drill/preprod-drill-closure.json`
