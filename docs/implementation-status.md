@@ -57,6 +57,7 @@
 - 已补齐 external-iam claim 映射与授权矩阵单测（读/写权限、租户范围、拒绝原因）
 - 已补齐控制面鉴权失败策略 simulated 演练脚本（`tools/control-plane-auth-failure-drill.sh`）：覆盖 JWKS 不可用/超时分类、hybrid fallback、指标与告警规则校验
 - 已补齐本地 JWKS + JWT 全链路 simulated 演练脚本（`tools/control-plane-jwks-jwt-drill.sh`）：覆盖 `external-iam` JWT 校验链路与 `hybrid` fallback 行为
+- 已完成一轮本地 Phase 1 准真实收口刷新（`2026-04-26`）：`tools/loadtest-alert-closure.sh`、`tools/fault-drill-closure.sh`、`tools/preprod-drill-closure.sh`（`PREPROD_AUTH_DRILL_COMMAND=tools/control-plane-jwks-jwt-drill.sh`、`PREPROD_SKIP_ALERT_CAPTURE=1`）均为 `overallPass=true`，报告位于 `build/reports/loadtest`、`build/reports/fault-drill`、`build/reports/preprod-drill`
 - Android 客户端示例已切换 WS 命令流主链路（`sherpa-asr-android`）：`session.start/audio.frame/session.stop/command.confirm/playback.metric` 上行与 `command.result/tts.ready` 下行，支持 `tts.ready` 优先与本地 TTS 回退，并上报播放阶段指标（start/stall.begin/stall.end/complete/fallback，兼容 stall）
 - 全仓测试与 `tools/verify.sh` 校验基线
 
