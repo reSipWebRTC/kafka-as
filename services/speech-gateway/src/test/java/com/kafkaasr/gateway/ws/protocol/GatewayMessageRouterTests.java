@@ -14,6 +14,9 @@ import com.kafkaasr.gateway.flow.GatewayAudioFrameFlowController;
 import com.kafkaasr.gateway.flow.GatewayFlowControlProperties;
 import com.kafkaasr.gateway.ingress.AudioFrameIngressCommand;
 import com.kafkaasr.gateway.ingress.AudioIngressPublisher;
+import com.kafkaasr.gateway.ingress.CommandConfirmIngressCommand;
+import com.kafkaasr.gateway.ingress.CommandExecuteResultIngressCommand;
+import com.kafkaasr.gateway.ingress.CommandIngressPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionStartCommand;
 import com.kafkaasr.gateway.session.SessionStopCommand;
@@ -43,6 +46,9 @@ class GatewayMessageRouterTests {
     @Mock
     private SessionControlClient sessionControlClient;
 
+    @Mock
+    private CommandIngressPublisher commandIngressPublisher;
+
     private GatewayMessageRouter router;
 
     @BeforeEach
@@ -62,16 +68,21 @@ class GatewayMessageRouterTests {
 
         GatewayMessageRouter gatewayMessageRouter = new GatewayMessageRouter(
                 audioIngressPublisher,
+                commandIngressPublisher,
                 new GatewayAudioFrameFlowController(flowControlProperties, clock),
                 new AudioFrameMessageDecoder(objectMapper, validator),
                 new SessionStartMessageDecoder(objectMapper, validator),
                 new SessionPingMessageDecoder(objectMapper, validator),
                 new SessionStopMessageDecoder(objectMapper, validator),
+                new CommandConfirmMessageDecoder(objectMapper, validator),
+                new CommandExecuteResultMessageDecoder(objectMapper, validator),
                 sessionControlClient,
                 objectMapper,
                 new SimpleMeterRegistry());
 
         lenient().when(audioIngressPublisher.publishRawFrame(any())).thenReturn(Mono.empty());
+        lenient().when(commandIngressPublisher.publishCommandConfirm(any())).thenReturn(Mono.empty());
+        lenient().when(commandIngressPublisher.publishCommandExecuteResult(any())).thenReturn(Mono.empty());
         lenient().when(sessionControlClient.startSession(any())).thenReturn(Mono.empty());
         lenient().when(sessionControlClient.stopSession(any())).thenReturn(Mono.empty());
 
@@ -107,6 +118,7 @@ class GatewayMessageRouterTests {
                   "tenantId": "tenant-a",
                   "sourceLang": "zh-CN",
                   "targetLang": "en-US",
+                  "userId": "usr-2",
                   "traceId": "trc-1"
                 }
                 """, sessionId -> {
@@ -124,6 +136,67 @@ class GatewayMessageRouterTests {
         assertEquals("trc-1", command.traceId());
 
         verify(audioIngressPublisher, never()).publishRawFrame(any());
+    }
+
+    @Test
+    void routesCommandConfirmToIngressPublisher() {
+        StepVerifier.create(router.route("""
+                {
+                  "type": "command.confirm",
+                  "sessionId": "sess-8",
+                  "seq": 42,
+                  "confirmToken": "cfm-42",
+                  "accept": true,
+                  "traceId": "trc-cfm",
+                  "executionId": "exec-42"
+                }
+                """, sessionId -> {
+                }))
+                .verifyComplete();
+
+        ArgumentCaptor<CommandConfirmIngressCommand> commandCaptor = ArgumentCaptor.forClass(CommandConfirmIngressCommand.class);
+        verify(commandIngressPublisher).publishCommandConfirm(commandCaptor.capture());
+
+        CommandConfirmIngressCommand command = commandCaptor.getValue();
+        assertEquals("sess-8", command.sessionId());
+        assertEquals(42L, command.seq());
+        assertEquals("cfm-42", command.confirmToken());
+        assertEquals(true, command.accept());
+        assertEquals("trc-cfm", command.traceId());
+        assertEquals("exec-42", command.executionId());
+    }
+
+    @Test
+    void routesCommandExecuteResultToIngressPublisher() {
+        StepVerifier.create(router.route("""
+                {
+                  "type": "command.execute.result",
+                  "sessionId": "sess-9",
+                  "seq": 43,
+                  "executionId": "exec-43",
+                  "status": "ok",
+                  "code": "OK",
+                  "replyText": "success",
+                  "retryable": false,
+                  "traceId": "trc-res"
+                }
+                """, sessionId -> {
+                }))
+                .verifyComplete();
+
+        ArgumentCaptor<CommandExecuteResultIngressCommand> commandCaptor =
+                ArgumentCaptor.forClass(CommandExecuteResultIngressCommand.class);
+        verify(commandIngressPublisher).publishCommandExecuteResult(commandCaptor.capture());
+
+        CommandExecuteResultIngressCommand command = commandCaptor.getValue();
+        assertEquals("sess-9", command.sessionId());
+        assertEquals(43L, command.seq());
+        assertEquals("exec-43", command.executionId());
+        assertEquals("ok", command.status());
+        assertEquals("OK", command.code());
+        assertEquals("success", command.replyText());
+        assertEquals(false, command.retryable());
+        assertEquals("trc-res", command.traceId());
     }
 
     @Test

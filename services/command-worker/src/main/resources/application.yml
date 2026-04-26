@@ -1,0 +1,72 @@
+spring:
+  application:
+    name: command-worker
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      group-id: ${COMMAND_CONSUMER_GROUP_ID:command-worker}
+      auto-offset-reset: latest
+      enable-auto-commit: false
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+server:
+  port: 8086
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      service: ${spring.application.name}
+      env: ${OBS_ENV:local}
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.10}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  pattern:
+    level: "%5p [service=${spring.application.name:-unknown},traceId=%X{traceId:-},spanId=%X{spanId:-}]"
+
+command:
+  state-store:
+    provider: ${COMMAND_STATE_STORE_PROVIDER:memory}
+    key-prefix: ${COMMAND_STATE_STORE_KEY_PREFIX:command:execution:}
+    ttl: ${COMMAND_STATE_STORE_TTL:12h}
+  kafka:
+    enabled: ${COMMAND_KAFKA_ENABLED:true}
+    asr-final-topic: ${COMMAND_ASR_FINAL_TOPIC:asr.final}
+    command-confirm-request-topic: ${COMMAND_CONFIRM_REQUEST_TOPIC:command.confirm.request}
+    command-execute-result-topic: ${COMMAND_EXECUTE_RESULT_TOPIC:command.execute.result}
+    command-dispatch-topic: ${COMMAND_DISPATCH_TOPIC:command.dispatch}
+    command-result-topic: ${COMMAND_RESULT_TOPIC:command.result}
+    producer-id: ${COMMAND_PRODUCER_ID:command-worker}
+    execution-mode: ${COMMAND_EXECUTION_MODE:CLIENT_BRIDGE}
+    default-confirm-required: ${COMMAND_DEFAULT_CONFIRM_REQUIRED:true}
+    default-max-confirm-rounds: ${COMMAND_DEFAULT_MAX_CONFIRM_ROUNDS:2}
+    dispatch-expires-in-sec: ${COMMAND_DISPATCH_EXPIRES_IN_SEC:30}
+    default-intent: ${COMMAND_DEFAULT_INTENT:CONTROL}
+    default-sub-intent: ${COMMAND_DEFAULT_SUB_INTENT:SMART_HOME}
+    smart-home-tenant-allowlist: ${COMMAND_SMARTHOME_TENANT_ALLOWLIST:}
+    retry-max-attempts: ${COMMAND_RETRY_MAX_ATTEMPTS:3}
+    retry-backoff-ms: ${COMMAND_RETRY_BACKOFF_MS:200}
+    dlq-topic-suffix: ${COMMAND_DLQ_TOPIC_SUFFIX:.dlq}
+    compensation-topic: ${COMMAND_COMPENSATION_TOPIC:platform.compensation}
+    idempotency-enabled: ${COMMAND_IDEMPOTENCY_ENABLED:true}
+    idempotency-ttl-ms: ${COMMAND_IDEMPOTENCY_TTL_MS:300000}

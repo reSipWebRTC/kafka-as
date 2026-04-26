@@ -1,5 +1,7 @@
 package com.kafkaasr.tts.pipeline;
 
+import com.kafkaasr.tts.events.CommandResultEvent;
+import com.kafkaasr.tts.events.CommandResultPayload;
 import com.kafkaasr.tts.events.TtsChunkEvent;
 import com.kafkaasr.tts.events.TtsChunkPayload;
 import com.kafkaasr.tts.events.TtsKafkaProperties;
@@ -8,6 +10,7 @@ import com.kafkaasr.tts.events.TtsReadyPayload;
 import com.kafkaasr.tts.events.TtsRequestEvent;
 import com.kafkaasr.tts.events.TtsRequestPayload;
 import com.kafkaasr.tts.events.TranslationResultEvent;
+import com.kafkaasr.tts.events.TranslationResultPayload;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -23,6 +26,7 @@ import org.springframework.stereotype.Service;
 public class TtsRequestPipelineService {
 
     private static final String INPUT_EVENT_TYPE = "translation.result";
+    private static final String INPUT_COMMAND_RESULT_EVENT_TYPE = "command.result";
     private static final String OUTPUT_REQUEST_EVENT_TYPE = "tts.request";
     private static final String OUTPUT_CHUNK_EVENT_TYPE = "tts.chunk";
     private static final String OUTPUT_READY_EVENT_TYPE = "tts.ready";
@@ -32,6 +36,7 @@ public class TtsRequestPipelineService {
 
     private final VoicePolicy voicePolicy;
     private final TtsSynthesisEngine synthesisEngine;
+    private final CommandResultSpeechTemplateRenderer commandResultSpeechTemplateRenderer;
     private final TtsKafkaProperties kafkaProperties;
     private final Clock clock;
 
@@ -39,23 +44,30 @@ public class TtsRequestPipelineService {
     public TtsRequestPipelineService(
             VoicePolicy voicePolicy,
             TtsSynthesisEngine synthesisEngine,
+            CommandResultSpeechTemplateRenderer commandResultSpeechTemplateRenderer,
             TtsKafkaProperties kafkaProperties) {
-        this(voicePolicy, synthesisEngine, kafkaProperties, Clock.systemUTC());
+        this(voicePolicy, synthesisEngine, commandResultSpeechTemplateRenderer, kafkaProperties, Clock.systemUTC());
     }
 
     TtsRequestPipelineService(
             VoicePolicy voicePolicy,
             TtsSynthesisEngine synthesisEngine,
+            CommandResultSpeechTemplateRenderer commandResultSpeechTemplateRenderer,
             TtsKafkaProperties kafkaProperties,
             Clock clock) {
         this.voicePolicy = voicePolicy;
         this.synthesisEngine = synthesisEngine;
+        this.commandResultSpeechTemplateRenderer = commandResultSpeechTemplateRenderer;
         this.kafkaProperties = kafkaProperties;
         this.clock = clock;
     }
 
     public TtsRequestEvent toTtsRequestEvent(TranslationResultEvent translationResultEvent) {
         return toPipelineEvents(translationResultEvent).requestEvent();
+    }
+
+    public TtsRequestEvent toTtsRequestEvent(CommandResultEvent commandResultEvent) {
+        return toPipelineEvents(commandResultEvent).requestEvent();
     }
 
     public PipelineOutput toPipelineEvents(TranslationResultEvent translationResultEvent) {
@@ -162,6 +174,12 @@ public class TtsRequestPipelineService {
         return new PipelineOutput(requestEvent, chunkEvent, readyEvent);
     }
 
+    public PipelineOutput toPipelineEvents(CommandResultEvent commandResultEvent) {
+        validateCommandResultEvent(commandResultEvent);
+        TranslationResultEvent syntheticEvent = toSyntheticTranslationResultEvent(commandResultEvent);
+        return toPipelineEvents(syntheticEvent);
+    }
+
     private void validateTranslationResultEvent(TranslationResultEvent translationResultEvent) {
         if (translationResultEvent == null) {
             throw new IllegalArgumentException("translation.result event must not be null");
@@ -181,6 +199,57 @@ public class TtsRequestPipelineService {
         if (translationResultEvent.payload() == null) {
             throw new IllegalArgumentException("payload is required");
         }
+    }
+
+    private void validateCommandResultEvent(CommandResultEvent commandResultEvent) {
+        if (commandResultEvent == null) {
+            throw new IllegalArgumentException("command.result event must not be null");
+        }
+        if (!INPUT_COMMAND_RESULT_EVENT_TYPE.equals(commandResultEvent.eventType())) {
+            throw new IllegalArgumentException("Unsupported command.result eventType: " + commandResultEvent.eventType());
+        }
+        if (commandResultEvent.sessionId() == null || commandResultEvent.sessionId().isBlank()) {
+            throw new IllegalArgumentException("sessionId is required");
+        }
+        if (commandResultEvent.traceId() == null || commandResultEvent.traceId().isBlank()) {
+            throw new IllegalArgumentException("traceId is required");
+        }
+        if (commandResultEvent.tenantId() == null || commandResultEvent.tenantId().isBlank()) {
+            throw new IllegalArgumentException("tenantId is required");
+        }
+        if (commandResultEvent.payload() == null) {
+            throw new IllegalArgumentException("payload is required");
+        }
+        if (commandResultEvent.payload().status() == null || commandResultEvent.payload().status().isBlank()) {
+            throw new IllegalArgumentException("payload.status is required");
+        }
+        if (commandResultEvent.payload().code() == null || commandResultEvent.payload().code().isBlank()) {
+            throw new IllegalArgumentException("payload.code is required");
+        }
+    }
+
+    private TranslationResultEvent toSyntheticTranslationResultEvent(CommandResultEvent commandResultEvent) {
+        CommandResultPayload payload = commandResultEvent.payload();
+        String language = normalizeLanguage(kafkaProperties.getCommandResultDefaultLanguage());
+        String text = commandResultSpeechTemplateRenderer.render(commandResultEvent);
+        return new TranslationResultEvent(
+                commandResultEvent.eventId(),
+                INPUT_EVENT_TYPE,
+                commandResultEvent.eventVersion(),
+                commandResultEvent.traceId(),
+                commandResultEvent.sessionId(),
+                commandResultEvent.tenantId(),
+                commandResultEvent.roomId(),
+                commandResultEvent.producer(),
+                commandResultEvent.seq(),
+                commandResultEvent.ts(),
+                commandResultEvent.idempotencyKey(),
+                new TranslationResultPayload(
+                        payload.replyText(),
+                        text,
+                        language,
+                        language,
+                        "command-result-template"));
     }
 
     private String normalizeText(String translatedText, String sourceText) {

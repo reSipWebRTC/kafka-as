@@ -11,7 +11,7 @@
 - 第一批核心事件类型与字段
 - 错误码与版本演进规则
 
-## 1.1 当前实现注记（2026-04-24）
+## 1.1 当前实现注记（2026-04-26）
 
 本文件仍然是外部行为的权威定义，但当前仓库只实现了其中一部分。
 
@@ -44,6 +44,12 @@
 - `control-plane` 已实现并冻结回滚编排契约：`POST /api/v1/tenants/{tenantId}/policy:rollback` 支持可选请求体 `targetVersion`、`distributionRegions`；请求体缺失时语义保持为“回滚上一版本”
 - `tenant.policy.changed` 已实现并冻结编排元数据扩展：`sourcePolicyVersion`、`targetPolicyVersion`、`distributionRegions`（均为可选字段，向后兼容）
 
+已冻结并进入分阶段实现（契约先行）：
+
+- 统一事件 Envelope `userId` 与 `session.start.userId` 已落地；`SMART_HOME` 模式要求提供
+- `tenant.policy.changed.payload.sessionMode`（`TRANSLATION`/`SMART_HOME`）已落地
+- `command.*` 契约已冻结并完成网关编解码 + Kafka 转发 + `command-worker` 编排状态机；`command-worker -> smartHomeNlu` 内网真实执行仍待后续补齐
+
 ## 2. 主数据路径（冻结）
 
 统一规定如下：
@@ -67,6 +73,7 @@
   "sessionId": "sess_456",
   "tenantId": "tenant_a",
   "roomId": "room_789",
+  "userId": "usr_001",
   "producer": "speech-gateway",
   "seq": 1024,
   "ts": 1710000000000,
@@ -81,6 +88,7 @@
 - `eventVersion` 当前冻结为 `v1`。
 - `sessionId + seq` 是会话内顺序与幂等核心键。
 - `idempotencyKey` 必须可被下游持久化判重。
+- `userId` 在 `SMART_HOME` 模式必须提供；其他模式建议提供以便审计与追踪。
 
 ## 4. 第一批冻结事件
 
@@ -94,6 +102,10 @@
 | `tts.request` | TTS 合成请求 | `tts.request` | `sessionId` |
 | `tts.chunk` | TTS 流式音频分片 | `tts.chunk` | `sessionId` |
 | `tts.ready` | TTS 回放就绪事件 | `tts.ready` | `sessionId` |
+| `command.dispatch` | 后端下发给客户端的命令执行指令 | `command.dispatch` | `sessionId` |
+| `command.execute.result` | 客户端回传命令执行结果 | `command.execute.result` | `sessionId` |
+| `command.confirm.request` | 客户端确认回执事件 | `command.confirm.request` | `sessionId` |
+| `command.result` | 命令最终结果（供 UI/TTS/审计消费） | `command.result` | `sessionId` |
 | `tenant.policy.changed` | 租户策略变更通知（`control-plane` 发布，运行时服务消费刷新） | `tenant.policy.changed` | `tenantId` |
 
 当前实现语义（`asr-worker`）：
@@ -104,6 +116,17 @@
 - 治理事件 `tenant.policy.changed.payload.operation` 当前取值：`CREATED`、`UPDATED`、`ROLLED_BACK`、`ROLLED_BACK_TO_VERSION`
 - 当 `operation=ROLLED_BACK_TO_VERSION` 时，`sourcePolicyVersion` 与 `targetPolicyVersion` 必填
 
+冻结语义（`CLIENT_BRIDGE` 契约收口）：
+
+- `command.dispatch` 用于“云端编排、客户端执行”场景，必须携带 `executionMode=CLIENT_BRIDGE`、`executionId`、`commandText`、`confirmRequired`、`confirmRound`、`maxConfirmRounds`
+- `command.confirm.request` 用于确认闭环回执，必须携带 `executionMode=CLIENT_BRIDGE`、`executionId`、`confirmToken`、`accept`、`confirmRound`；拒绝时可带 `rejectReason`
+- `command.execute.result` 由客户端执行后上报，必须携带 `executionMode=CLIENT_BRIDGE`、`executionId`、`status`、`code`、`replyText`、`retryable`；失败/超时时可带 `errorCode`，拒绝类结果可带 `rejectReason`
+- `command.result` 为平台统一终态事件，对 UI/TTS/审计公开，字段与 `command.execute.result` 对齐并补充 `maxConfirmRounds`
+- `tts-orchestrator` 支持消费 `command.result`，按状态模板化生成播报文案并继续发布 `tts.request`、`tts.chunk`、`tts.ready`
+- `status` 取值冻结为：`ok`、`confirm_required`、`failed`、`cancelled`、`timeout`
+- `rejectReason` 取值冻结为：`USER_REJECTED`、`NO_INPUT_TIMEOUT`、`INTENT_MISMATCH`、`CLIENT_ABORTED`、`POLICY_DENY`、`OTHER`
+- `errorCode` 取值冻结为：`NLU_UNREACHABLE`、`NLU_TIMEOUT`、`NLU_BAD_REQUEST`、`DEVICE_OFFLINE`、`DEVICE_EXECUTION_FAILED`、`CLIENT_EXECUTION_FAILED`、`CLIENT_NETWORK_ERROR`、`INTERNAL_ERROR`
+
 完整 JSON Schema 与 Protobuf 见第 8 节。
 
 ## 5. WebSocket 协议（v1）
@@ -112,16 +135,20 @@
 
 | `type` | 说明 | 关键字段 |
 | --- | --- | --- |
-| `session.start` | 开始会话 | `sessionId` `tenantId` `sourceLang` `targetLang` |
+| `session.start` | 开始会话 | `sessionId` `tenantId` `sourceLang` `targetLang` `userId` |
 | `audio.frame` | 音频分片 | `sessionId` `seq` `audioBase64` `codec` `sampleRate` |
 | `session.ping` | 心跳 | `sessionId` `ts` |
 | `session.stop` | 主动结束 | `sessionId` |
+| `command.confirm` | 命令确认回执上行 | `sessionId` `seq` `executionId` `executionMode` `confirmToken` `accept` `confirmRound` `rejectReason?` `traceId` |
+| `command.execute.result` | 客户端命令执行结果上行 | `sessionId` `seq` `executionId` `executionMode` `status` `code` `replyText` `retryable` `confirmRound?` `rejectReason?` `errorCode?` `traceId` |
 
 当前实现说明：
 
 - `speech-gateway` 当前已接受 `session.start`、`session.ping`、`audio.frame`、`session.stop`
 - 当 `gateway.auth.enabled=true` 时，`/ws/audio` 需要携带合法 token（`Authorization: Bearer <token>` 或 query 参数 `access_token`）
 - token 缺失/非法时，网关会下发 `session.error(code=AUTH_INVALID_TOKEN)` 并关闭连接
+- `command.confirm`、`command.execute.result` 已在 `speech-gateway` 落地编解码与 Kafka 转发
+- `executionMode`、`confirmRound`、`rejectReason`、`errorCode` 字段已完成契约冻结，生产强校验将在后续阶段启用
 
 ### 5.2 服务端下行消息
 
@@ -131,6 +158,8 @@
 | `subtitle.final` | 最终字幕 | `sessionId` `seq` `text` |
 | `tts.chunk` | TTS 音频分片下行 | `sessionId` `seq` `audioBase64` `codec` `sampleRate` `chunkSeq` `lastChunk` |
 | `tts.ready` | TTS 回放就绪下行 | `sessionId` `seq` `playbackUrl` `codec` `sampleRate` `durationMs` `cacheKey` |
+| `command.dispatch` | 客户端执行命令下发 | `sessionId` `seq` `executionId` `executionMode` `commandText` `intent` `subIntent` `confirmRequired` `confirmRound` `maxConfirmRounds` `confirmToken?` `expiresInSec?` `traceId` |
+| `command.result` | 命令执行终态下行 | `sessionId` `seq` `executionId` `executionMode` `status` `code` `replyText` `retryable` `confirmRound?` `maxConfirmRounds?` `confirmToken?` `rejectReason?` `errorCode?` `expiresInSec?` |
 | `session.error` | 错误信息 | `sessionId` `code` `message` |
 | `session.closed` | 会话关闭 | `sessionId` `reason` |
 
@@ -138,6 +167,10 @@
 
 - `session.error` 已由 `speech-gateway` 落地，用于协议校验和控制面错误
 - `subtitle.partial`、`subtitle.final`、`tts.chunk`、`tts.ready`、`session.closed` 已通过 Kafka 下游事件回推到 WebSocket 客户端
+- `command.dispatch`、`command.result` 已在 `speech-gateway` 落地下行消费与 WebSocket 推送
+- `command.result -> tts.request -> tts.ready` 已在 `tts-orchestrator` 落地（成功与失败/取消分支均可播报）
+- `command-worker` 已实现 `asr.final -> command.dispatch`、`command.confirm.request` / `command.execute.result -> command.result` 编排
+- `command-worker` 执行上下文已支持 `memory/redis` 可切换存储（默认 `memory`，`redis` 为可选）
 
 ### 5.3 Control-Plane 回滚编排 API（v1）
 
@@ -165,6 +198,14 @@
 - 若指定 `targetVersion` 不存在，返回 `TENANT_POLICY_VERSION_NOT_FOUND`
 - 若指定 `targetVersion` 非法（如 `>=` 当前版本），返回 `TENANT_POLICY_ROLLBACK_VERSION_INVALID`
 
+### 5.4 Control-Plane 策略模型扩展（v1）
+
+租户策略新增字段（已实现并冻结）：
+
+- `sessionMode`：`TRANSLATION`（默认）或 `SMART_HOME`
+- 当 `sessionMode=SMART_HOME` 时，`session.start.userId` 必填
+- 运行时服务可基于 `tenant.policy.changed.payload.sessionMode` 做动态策略切换
+
 ## 6. 错误码（v1）
 
 | 错误码 | 含义 |
@@ -178,6 +219,17 @@
 | `BACKPRESSURE_DROP` | 背压触发丢弃 |
 | `ASR_TIMEOUT` | ASR 处理超时 |
 | `TRANSLATION_TIMEOUT` | 翻译处理超时 |
+| `POLICY_CONFIRM_REQUIRED` | 命令触发策略要求二次确认 |
+| `CONFIRM_TOKEN_EXPIRED` | 确认令牌过期 |
+| `COMMAND_REJECTED` | 用户或策略拒绝命令执行 |
+| `COMMAND_CONFIRM_TIMEOUT` | 命令确认阶段超时 |
+| `NLU_UNREACHABLE` | 内网 NLU 服务不可达 |
+| `NLU_TIMEOUT` | 内网 NLU 服务超时 |
+| `NLU_BAD_REQUEST` | 发送给内网 NLU 的请求非法 |
+| `DEVICE_OFFLINE` | 目标设备离线或不可达 |
+| `DEVICE_EXECUTION_FAILED` | 设备执行失败 |
+| `CLIENT_EXECUTION_FAILED` | 客户端执行桥接失败 |
+| `CLIENT_NETWORK_ERROR` | 客户端到内网链路网络错误 |
 | `TENANT_POLICY_VERSION_NOT_FOUND` | 控制面指定回滚版本不存在 |
 | `TENANT_POLICY_ROLLBACK_VERSION_INVALID` | 控制面指定回滚版本非法（超前、等于当前或不允许） |
 | `INTERNAL_ERROR` | 服务内部异常 |
@@ -199,7 +251,18 @@
   - `api/json-schema/asr.partial.v1.json`
   - `api/json-schema/asr.final.v1.json`
   - `api/json-schema/translation.result.v1.json`
+  - `api/json-schema/command.dispatch.v1.json`
+  - `api/json-schema/command.execute.result.v1.json`
+  - `api/json-schema/command.confirm.request.v1.json`
+  - `api/json-schema/command.result.v1.json`
   - `api/json-schema/tts.request.v1.json`
   - `api/json-schema/tts.chunk.v1.json`
   - `api/json-schema/tts.ready.v1.json`
   - `api/json-schema/tenant.policy.changed.v1.json`
+
+## 9. 迁移说明（v1 -> v1+contract）
+
+1. 旧客户端（只发送 `session.start/audio.frame/session.stop`）在 `TRANSLATION` 租户可继续兼容。
+2. `SMART_HOME` 租户需要升级客户端：`session.start.userId` 必填，并实现 `command.dispatch`/`command.execute.result` 处理。
+3. `SMART_HOME` 新链路需要携带 `executionMode=CLIENT_BRIDGE`，并按契约传递 `confirmRound`、`rejectReason`、`errorCode`（按状态可选）。
+4. Consumer 对新增字段与新增消息类型应遵循保护性失败策略：未知字段忽略，未知消息类型返回 `INVALID_MESSAGE` 并审计。

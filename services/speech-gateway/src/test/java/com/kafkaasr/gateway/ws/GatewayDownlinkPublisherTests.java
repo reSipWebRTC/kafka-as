@@ -116,6 +116,59 @@ class GatewayDownlinkPublisherTests {
     }
 
     @Test
+    void publishesCommandDispatchPayload() {
+        when(sessionRegistry.emitToSession(eq("sess-1"), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(Mono.empty());
+
+        StepVerifier.create(publisher.publishCommandDispatch(
+                        "sess-1",
+                        21L,
+                        "exec-21",
+                        "打开客厅灯",
+                        "CONTROL",
+                        "LIGHT_ON",
+                        true,
+                        "cfm-21",
+                        30,
+                        "trc-21"))
+                .verifyComplete();
+
+        ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+        verify(sessionRegistry).emitToSession(eq("sess-1"), payloadCaptor.capture());
+        String payload = payloadCaptor.getValue();
+        assertTrue(payload.contains("\"type\":\"command.dispatch\""));
+        assertTrue(payload.contains("\"executionId\":\"exec-21\""));
+        assertTrue(payload.contains("\"confirmRequired\":true"));
+        assertTrue(payload.contains("\"confirmToken\":\"cfm-21\""));
+    }
+
+    @Test
+    void publishesCommandResultPayload() {
+        when(sessionRegistry.emitToSession(eq("sess-1"), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(Mono.empty());
+
+        StepVerifier.create(publisher.publishCommandResult(
+                        "sess-1",
+                        22L,
+                        "exec-22",
+                        "ok",
+                        "OK",
+                        "已执行",
+                        false,
+                        "",
+                        0))
+                .verifyComplete();
+
+        ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+        verify(sessionRegistry).emitToSession(eq("sess-1"), payloadCaptor.capture());
+        String payload = payloadCaptor.getValue();
+        assertTrue(payload.contains("\"type\":\"command.result\""));
+        assertTrue(payload.contains("\"executionId\":\"exec-22\""));
+        assertTrue(payload.contains("\"status\":\"ok\""));
+        assertTrue(payload.contains("\"code\":\"OK\""));
+    }
+
+    @Test
     void ignoresBlankSessionId() {
         StepVerifier.create(publisher.publishSubtitleFinal("", 1L, "ignored"))
                 .verifyComplete();

@@ -18,6 +18,7 @@ message EventEnvelope {
   uint64 seq = 9;
   int64 ts_ms = 10;
   string idempotency_key = 11;
+  string user_id = 12;
 }
 
 message AudioIngressRawPayload {
@@ -104,6 +105,7 @@ message TenantPolicyChangedPayload {
   uint64 source_policy_version = 5;
   uint64 target_policy_version = 6;
   repeated string distribution_regions = 7;
+  string session_mode = 8;
 }
 
 message TenantPolicyChangedEvent {
@@ -111,11 +113,85 @@ message TenantPolicyChangedEvent {
   TenantPolicyChangedPayload payload = 2;
 }
 
+message CommandDispatchPayload {
+  string execution_id = 1;
+  string command_text = 2;
+  string intent = 3;
+  string sub_intent = 4;
+  bool confirm_required = 5;
+  string confirm_token = 6;
+  uint32 expires_in_sec = 7;
+  string trace_id = 8;
+  string execution_mode = 9;
+  uint32 confirm_round = 10;
+  uint32 max_confirm_rounds = 11;
+}
+
+message CommandDispatchEvent {
+  EventEnvelope envelope = 1;
+  CommandDispatchPayload payload = 2;
+}
+
+message CommandExecuteResultPayload {
+  string execution_id = 1;
+  string status = 2;
+  string code = 3;
+  string reply_text = 4;
+  bool retryable = 5;
+  string confirm_token = 6;
+  string trace_id = 7;
+  string execution_mode = 8;
+  uint32 confirm_round = 9;
+  string reject_reason = 10;
+  string error_code = 11;
+}
+
+message CommandExecuteResultEvent {
+  EventEnvelope envelope = 1;
+  CommandExecuteResultPayload payload = 2;
+}
+
+message CommandConfirmRequestPayload {
+  string execution_id = 1;
+  string confirm_token = 2;
+  bool accept = 3;
+  string trace_id = 4;
+  string execution_mode = 5;
+  uint32 confirm_round = 6;
+  string reject_reason = 7;
+}
+
+message CommandConfirmRequestEvent {
+  EventEnvelope envelope = 1;
+  CommandConfirmRequestPayload payload = 2;
+}
+
+message CommandResultPayload {
+  string execution_id = 1;
+  string status = 2;
+  string code = 3;
+  string reply_text = 4;
+  bool retryable = 5;
+  string confirm_token = 6;
+  uint32 expires_in_sec = 7;
+  string execution_mode = 8;
+  uint32 confirm_round = 9;
+  uint32 max_confirm_rounds = 10;
+  string reject_reason = 11;
+  string error_code = 12;
+}
+
+message CommandResultEvent {
+  EventEnvelope envelope = 1;
+  CommandResultPayload payload = 2;
+}
+
 message WsSessionStart {
   string session_id = 1;
   string tenant_id = 2;
   string source_lang = 3;
   string target_lang = 4;
+  string user_id = 5;
 }
 
 message WsAudioFrame {
@@ -135,6 +211,32 @@ message WsSessionStop {
   string session_id = 1;
 }
 
+message WsCommandConfirm {
+  string session_id = 1;
+  uint64 seq = 2;
+  string confirm_token = 3;
+  bool accept = 4;
+  string trace_id = 5;
+  string execution_mode = 6;
+  uint32 confirm_round = 7;
+  string reject_reason = 8;
+}
+
+message WsCommandExecuteResult {
+  string session_id = 1;
+  uint64 seq = 2;
+  string execution_id = 3;
+  string status = 4;
+  string code = 5;
+  string reply_text = 6;
+  bool retryable = 7;
+  string trace_id = 8;
+  string execution_mode = 9;
+  uint32 confirm_round = 10;
+  string reject_reason = 11;
+  string error_code = 12;
+}
+
 message WsClientMessage {
   string type = 1;
   oneof body {
@@ -142,6 +244,8 @@ message WsClientMessage {
     WsAudioFrame audio_frame = 3;
     WsSessionPing session_ping = 4;
     WsSessionStop session_stop = 5;
+    WsCommandConfirm command_confirm = 6;
+    WsCommandExecuteResult command_execute_result = 7;
   }
 }
 
@@ -168,6 +272,39 @@ message WsSessionClosed {
   string reason = 2;
 }
 
+message WsCommandDispatch {
+  string session_id = 1;
+  uint64 seq = 2;
+  string execution_id = 3;
+  string command_text = 4;
+  string intent = 5;
+  string sub_intent = 6;
+  bool confirm_required = 7;
+  string confirm_token = 8;
+  uint32 expires_in_sec = 9;
+  string trace_id = 10;
+  string execution_mode = 11;
+  uint32 confirm_round = 12;
+  uint32 max_confirm_rounds = 13;
+}
+
+message WsCommandResult {
+  string session_id = 1;
+  uint64 seq = 2;
+  string execution_id = 3;
+  string status = 4;
+  string code = 5;
+  string reply_text = 6;
+  bool retryable = 7;
+  string confirm_token = 8;
+  uint32 expires_in_sec = 9;
+  string execution_mode = 10;
+  uint32 confirm_round = 11;
+  uint32 max_confirm_rounds = 12;
+  string reject_reason = 13;
+  string error_code = 14;
+}
+
 message WsServerMessage {
   string type = 1;
   oneof body {
@@ -175,5 +312,7 @@ message WsServerMessage {
     WsSubtitleFinal subtitle_final = 3;
     WsSessionError session_error = 4;
     WsSessionClosed session_closed = 5;
+    WsCommandDispatch command_dispatch = 6;
+    WsCommandResult command_result = 7;
   }
 }

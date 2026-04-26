@@ -133,6 +133,10 @@ if env_file.exists():
 ordering_pairs = [
     ("ALERT_GATEWAY_WS_ERROR_RATIO_WARNING", "ALERT_GATEWAY_WS_ERROR_RATIO_CRITICAL"),
     ("ALERT_DOWNLINK_ERROR_RATIO_WARNING", "ALERT_DOWNLINK_ERROR_RATIO_CRITICAL"),
+    ("ALERT_COMMAND_DISPATCH_SUCCESS_RATIO_CRITICAL", "ALERT_COMMAND_DISPATCH_SUCCESS_RATIO_WARNING"),
+    ("ALERT_COMMAND_CONFIRM_TIMEOUT_RATIO_WARNING", "ALERT_COMMAND_CONFIRM_TIMEOUT_RATIO_CRITICAL"),
+    ("ALERT_COMMAND_EXECUTION_FAILURE_RATIO_WARNING", "ALERT_COMMAND_EXECUTION_FAILURE_RATIO_CRITICAL"),
+    ("ALERT_COMMAND_E2E_P95_SECONDS_WARNING", "ALERT_COMMAND_E2E_P95_SECONDS_CRITICAL"),
     ("ALERT_PIPELINE_ERROR_RATIO_WARNING", "ALERT_PIPELINE_ERROR_RATIO_CRITICAL"),
     ("ALERT_PIPELINE_P95_SECONDS_WARNING", "ALERT_PIPELINE_P95_SECONDS_CRITICAL"),
     ("ALERT_KAFKA_LAG_WARNING", "ALERT_KAFKA_LAG_CRITICAL"),
@@ -161,6 +165,21 @@ for warning_key, critical_key in ordering_pairs:
             "FAIL",
             f"non-numeric values: warning={warning_raw} critical={critical_raw}",
         )
+        continue
+
+    if warning_key == "ALERT_COMMAND_DISPATCH_SUCCESS_RATIO_CRITICAL":
+        if warning_value < critical_value:
+            add_check(
+                f"env:ordering:{warning_key}->{critical_key}",
+                "PASS",
+                f"critical({warning_value}) < warning({critical_value})",
+            )
+        else:
+            add_check(
+                f"env:ordering:{warning_key}->{critical_key}",
+                "FAIL",
+                f"critical({warning_value}) must be < warning({critical_value})",
+            )
         continue
 
     if critical_value > warning_value:
@@ -230,6 +249,14 @@ required_alerts = {
     "GatewayWsErrorRateCritical",
     "DownlinkErrorRateHigh",
     "DownlinkErrorRateCritical",
+    "CommandDispatchSuccessRateLow",
+    "CommandDispatchSuccessRateCritical",
+    "CommandConfirmTimeoutRateHigh",
+    "CommandConfirmTimeoutRateCritical",
+    "CommandExecutionFailureRateHigh",
+    "CommandExecutionFailureRateCritical",
+    "CommandPipelineE2EP95LatencyHigh",
+    "CommandPipelineE2EP95LatencyCritical",
     "PipelineErrorRateHigh",
     "PipelineErrorRateCritical",
     "KafkaConsumerLagHigh",

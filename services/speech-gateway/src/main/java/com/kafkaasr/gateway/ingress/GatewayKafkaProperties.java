@@ -14,6 +14,12 @@ public class GatewayKafkaProperties {
     private String audioIngressTopic = "audio.ingress.raw";
 
     @NotBlank
+    private String commandConfirmRequestTopic = "command.confirm.request";
+
+    @NotBlank
+    private String commandExecuteResultTopic = "command.execute.result";
+
+    @NotBlank
     private String tenantId = "tenant-default";
 
     @NotBlank
@@ -29,6 +35,22 @@ public class GatewayKafkaProperties {
 
     public void setAudioIngressTopic(String audioIngressTopic) {
         this.audioIngressTopic = audioIngressTopic;
+    }
+
+    public String getCommandConfirmRequestTopic() {
+        return commandConfirmRequestTopic;
+    }
+
+    public void setCommandConfirmRequestTopic(String commandConfirmRequestTopic) {
+        this.commandConfirmRequestTopic = commandConfirmRequestTopic;
+    }
+
+    public String getCommandExecuteResultTopic() {
+        return commandExecuteResultTopic;
+    }
+
+    public void setCommandExecuteResultTopic(String commandExecuteResultTopic) {
+        this.commandExecuteResultTopic = commandExecuteResultTopic;
     }
 
     public String getTenantId() {

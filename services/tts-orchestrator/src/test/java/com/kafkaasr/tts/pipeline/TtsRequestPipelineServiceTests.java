@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.kafkaasr.tts.events.TtsKafkaProperties;
+import com.kafkaasr.tts.events.CommandResultEvent;
+import com.kafkaasr.tts.events.CommandResultPayload;
 import com.kafkaasr.tts.events.TranslationResultEvent;
 import com.kafkaasr.tts.events.TranslationResultPayload;
 import java.time.Clock;
@@ -13,6 +15,9 @@ import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
 class TtsRequestPipelineServiceTests {
+
+    private static final CommandResultSpeechTemplateRenderer COMMAND_RENDERER =
+            new CommandResultSpeechTemplateRenderer();
 
     @Test
     void mapsTranslationResultToTtsPipelineEvents() {
@@ -33,6 +38,7 @@ class TtsRequestPipelineServiceTests {
         TtsRequestPipelineService service = new TtsRequestPipelineService(
                 voicePolicy,
                 synthesisEngine,
+                COMMAND_RENDERER,
                 properties,
                 Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
 
@@ -100,6 +106,7 @@ class TtsRequestPipelineServiceTests {
                         input.language(),
                         input.voice(),
                         input.stream()),
+                COMMAND_RENDERER,
                 properties,
                 Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
 
@@ -132,6 +139,7 @@ class TtsRequestPipelineServiceTests {
                         input.language(),
                         input.voice(),
                         input.stream()),
+                COMMAND_RENDERER,
                 new TtsKafkaProperties(),
                 Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
 
@@ -168,6 +176,7 @@ class TtsRequestPipelineServiceTests {
                         "en-GB",
                         "en-GB-neural-b",
                         false),
+                COMMAND_RENDERER,
                 properties,
                 Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
 
@@ -191,5 +200,68 @@ class TtsRequestPipelineServiceTests {
         assertEquals("en-GB", out.requestEvent().payload().language());
         assertEquals("en-GB-neural-b", out.requestEvent().payload().voice());
         assertEquals(false, out.requestEvent().payload().stream());
+    }
+
+    @Test
+    void mapsCommandResultToTtsPipelineEventsWithTemplateFallback() {
+        TtsKafkaProperties properties = new TtsKafkaProperties();
+        properties.setProducerId("tts-orchestrator");
+        properties.setDefaultVoice("zh-CN-standard-A");
+        properties.setCommandResultDefaultLanguage("zh-CN");
+        properties.setTtsReadyPlaybackUrlPrefix("https://cdn.local/tts");
+
+        TtsRequestPipelineService service = new TtsRequestPipelineService(
+                (event, language, defaultVoice) -> defaultVoice,
+                (event, input) -> new TtsSynthesisEngine.SynthesisPlan(
+                        input.text(),
+                        input.language(),
+                        input.voice(),
+                        input.stream()),
+                COMMAND_RENDERER,
+                properties,
+                Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
+
+        CommandResultEvent input = new CommandResultEvent(
+                "evt-cmd-1",
+                "command.result",
+                "v1",
+                "trc-cmd-1",
+                "sess-cmd-1",
+                "tenant-a",
+                null,
+                "usr-1",
+                "command-worker",
+                12L,
+                1713744000000L,
+                "sess-cmd-1:command.result:12",
+                new CommandResultPayload(
+                        "exec-1",
+                        "CLIENT_BRIDGE",
+                        "cancelled",
+                        "COMMAND_CONFIRM_TIMEOUT",
+                        "",
+                        false,
+                        2,
+                        3,
+                        "cfm-1",
+                        "NO_INPUT_TIMEOUT",
+                        null,
+                        30,
+                        "CONTROL",
+                        "power_off"));
+
+        TtsRequestPipelineService.PipelineOutput out = service.toPipelineEvents(input);
+
+        assertEquals("tts.request", out.requestEvent().eventType());
+        assertEquals("sess-cmd-1", out.requestEvent().sessionId());
+        assertEquals("tenant-a", out.requestEvent().tenantId());
+        assertEquals(12L, out.requestEvent().seq());
+        assertEquals("zh-CN", out.requestEvent().payload().language());
+        assertEquals("zh-CN-standard-A", out.requestEvent().payload().voice());
+        assertEquals("确认超时，操作已取消。", out.requestEvent().payload().text());
+        assertEquals("tts.ready", out.readyEvent().eventType());
+        assertEquals(
+                "https://cdn.local/tts/" + out.requestEvent().payload().cacheKey() + ".wav",
+                out.readyEvent().payload().playbackUrl());
     }
 }

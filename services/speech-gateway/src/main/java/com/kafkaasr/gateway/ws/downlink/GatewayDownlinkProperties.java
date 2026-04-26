@@ -29,6 +29,12 @@ public class GatewayDownlinkProperties {
     @NotBlank
     private String ttsReadyTopic = "tts.ready";
 
+    @NotBlank
+    private String commandDispatchTopic = "command.dispatch";
+
+    @NotBlank
+    private String commandResultTopic = "command.result";
+
     @Min(1)
     private int retryMaxAttempts = 3;
 
@@ -100,6 +106,22 @@ public class GatewayDownlinkProperties {
 
     public void setTtsReadyTopic(String ttsReadyTopic) {
         this.ttsReadyTopic = ttsReadyTopic;
+    }
+
+    public String getCommandDispatchTopic() {
+        return commandDispatchTopic;
+    }
+
+    public void setCommandDispatchTopic(String commandDispatchTopic) {
+        this.commandDispatchTopic = commandDispatchTopic;
+    }
+
+    public String getCommandResultTopic() {
+        return commandResultTopic;
+    }
+
+    public void setCommandResultTopic(String commandResultTopic) {
+        this.commandResultTopic = commandResultTopic;
     }
 
     public int getRetryMaxAttempts() {

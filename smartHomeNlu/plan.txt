@@ -1,0 +1,111 @@
+    
+      当前状态说明
+
+  - 已实现“兜底路 Qwen 远程调用”。
+  - 还未实现“主路 TinyBERT ONNX”和/api/v1/nlu/parse新接口（下一步可以继续做）。
+
+  1. 继续做主路 runtime/nlu_main_onnx.py
+  2. 加 POST /api/v1/nlu/parse 调试接口
+  3. 接入 NLUResult schema 校验与错误码
+
+intent/sub_intent/slot
+
+    codex --dangerously-bypass-approvals-and-sandbox
+   
+    export HOMEASSISTANT_URL=http://127.0.0.1:8123
+    export HOMEASSISTANT_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyMThhZjFmMjZjNDU0MjNlOWUxNDExN2JkYzdhOTI3NyIsImlhdCI6MTc3NTYyOTUwOSwiZXhwIjoyMDkwOTg5NTA5fQ.5d-1v-Rnx5jXJgtYENaQsBQ4WfxPNEV8QwTFJOIYT8Y
+    uv run ha-mcp-web
+  
+  export SMARTHOME_HA_CONTROL_MODE=ha_mcp
+  export SMARTHOME_HA_MCP_URL=http://127.0.0.1:8086/mcp
+  uvicorn runtime.server:app --host 0.0.0.0 --port 8000
+  
+  ssh-add ~/.ssh/id_ed25519 密码：123456
+  
+   建议这样落地：
+
+  1. 规则层只接收“高确定性命中”
+     intent/sub_intent 明确且关键槽位齐全才通过；否则直接进 TinyBERT。
+  2. TinyBERT 做主模型
+     如果 confidence 低于阈值（如 <0.80）或关键槽位缺失，就转 Qwen。
+  3. Qwen 做兜底
+     要求严格 JSON 输出（schema 校验 + 意图白名单映射）。
+  4. 执行前再做“关键槽位门禁”
+     例如 set_temperature 至少要有 device_type/target + value，不满足就澄清，不执行。
+  5. 全流程打路由日志
+     记录 route=rule|tinybert|qwen|clarify，方便回溯。
+     
+    
+pinyin matching
+
+如果你同意，我下一步可以继续把 hot_words_config.json 里的 connectors 也接入批处理切分器，让“并且/然后/还有/把”分句更稳。
+
+可改进方向
+
+  1. 扩充词表 — 至少覆盖 top 2000 常用汉字（特别是"内/外/平/方/米/9"等），重新训练
+  2. 输入端去噪 — ONNX 前加轻量清洗，去掉连续无意义重复字符（"哦阿国家哦阿机构..."），只保留最后有语义的片段
+  3. 训练数据增强 — 加入 ASR 噪声扰动的样本，让 BIO tagger 学会在 [UNK] 旁边仍保持 span 连续性
+  4. 模型容量 — 342KB 对噪声鲁棒性不够，考虑 5-10MB 的 MiniLM 或 6-layer TinyBERT
+
+  方向 2（输入端去噪）改动最小、见效最快，因为不改模型就能提升 slot 质量。要从哪个方向入手？
+  
+  优化整个项目，去掉中间不需要的步骤。注意，模型解析放到最后，中间的可以去掉
+
+  
+  # NLU 输出（标准 JSON）
+  {
+    "intent": "CONTROL",
+    "sub_intent": "adjust_brightness",
+    "slots": {
+      "device_type": "灯",
+      "location": "客厅",
+      "attribute": "亮度",
+      "value": "50",
+      "value_unit": "%"
+    },
+    "confidence": 0.94
+  } NLU返回格式，但是 {
+        "index": 6,
+        "text": "打开二楼的社等",
+        "code": "OK",
+        "status": "clarify",
+        "nlu": {
+          "route": "fallback",
+          "route_stage": "qwen",
+          "model_version": "nlu-fallback-qwen-v1",
+          "need_clarify": true,
+          "threshold": {
+            "rule_pass": 0.88,
+            "main_pass": 0.85,
+            "fallback_trigger": 0.6,
+            "clarify_trigger": 0.65
+          },
+          "intent_json": {
+            "intent": "QUERY",
+            "sub_intent": "query_status",
+            "slots": {
+              "location": "二楼"
+            },
+            "confidence": 0.95
+          }                                                                                                                                                                    ,>      
+        }                                   
+
+很多字段丢了？先分析
+
+❯ 规则引擎解析出 动作，位置，设备，属性(值，单位)，任意组合，但是必须大于等于2个特性才算解析成功。    
+
+
+可改进方向
+
+  1. 扩充词表 — 至少覆盖 top 2000 常用汉字（特别是"内/外/平/方/米/9"等），重新训练
+  2. 输入端去噪 — ONNX 前加轻量清洗，去掉连续无意义重复字符（"哦阿国家哦阿机构..."），只保留最后有语义的片段
+  3. 训练数据增强 — 加入 ASR 噪声扰动的样本，让 BIO tagger 学会在 [UNK] 旁边仍保持 span 连续性
+  4. 模型容量 — 342KB 对噪声鲁棒性不够，考虑 5-10MB 的 MiniLM 或 6-layer TinyBERT
+
+  方向 2（输入端去噪）改动最小、见效最快，因为不改模型就能提升 slot 质量。要从哪个方向入手？     
+  
+  
+ 2026/04/07  
+  如果你希望这类多指令在高置信度下直接执行，我可以再把确认策略放宽一版。
+                                                                  [ ==== ]
+

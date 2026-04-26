@@ -6,6 +6,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.gateway.flow.GatewayAudioFrameFlowController;
 import com.kafkaasr.gateway.ingress.AudioFrameIngressCommand;
 import com.kafkaasr.gateway.ingress.AudioIngressPublisher;
+import com.kafkaasr.gateway.ingress.CommandConfirmIngressCommand;
+import com.kafkaasr.gateway.ingress.CommandExecuteResultIngressCommand;
+import com.kafkaasr.gateway.ingress.CommandIngressPublisher;
 import com.kafkaasr.gateway.session.SessionControlClient;
 import com.kafkaasr.gateway.session.SessionControlClientException;
 import com.kafkaasr.gateway.session.SessionStartCommand;
@@ -22,36 +25,47 @@ public class GatewayMessageRouter {
     private static final String SESSION_START_TYPE = "session.start";
     private static final String SESSION_PING_TYPE = "session.ping";
     private static final String SESSION_STOP_TYPE = "session.stop";
+    private static final String COMMAND_CONFIRM_TYPE = "command.confirm";
+    private static final String COMMAND_EXECUTE_RESULT_TYPE = "command.execute.result";
     private static final String INVALID_MESSAGE_CODE = "INVALID_MESSAGE";
     private static final String RATE_LIMITED_CODE = "RATE_LIMITED";
     private static final String BACKPRESSURE_DROP_CODE = "BACKPRESSURE_DROP";
 
     private final AudioIngressPublisher audioIngressPublisher;
+    private final CommandIngressPublisher commandIngressPublisher;
     private final GatewayAudioFrameFlowController flowController;
     private final AudioFrameMessageDecoder audioFrameMessageDecoder;
     private final SessionStartMessageDecoder sessionStartMessageDecoder;
     private final SessionPingMessageDecoder sessionPingMessageDecoder;
     private final SessionStopMessageDecoder sessionStopMessageDecoder;
+    private final CommandConfirmMessageDecoder commandConfirmMessageDecoder;
+    private final CommandExecuteResultMessageDecoder commandExecuteResultMessageDecoder;
     private final SessionControlClient sessionControlClient;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
 
     public GatewayMessageRouter(
             AudioIngressPublisher audioIngressPublisher,
+            CommandIngressPublisher commandIngressPublisher,
             GatewayAudioFrameFlowController flowController,
             AudioFrameMessageDecoder audioFrameMessageDecoder,
             SessionStartMessageDecoder sessionStartMessageDecoder,
             SessionPingMessageDecoder sessionPingMessageDecoder,
             SessionStopMessageDecoder sessionStopMessageDecoder,
+            CommandConfirmMessageDecoder commandConfirmMessageDecoder,
+            CommandExecuteResultMessageDecoder commandExecuteResultMessageDecoder,
             SessionControlClient sessionControlClient,
             ObjectMapper objectMapper,
             MeterRegistry meterRegistry) {
         this.audioIngressPublisher = audioIngressPublisher;
+        this.commandIngressPublisher = commandIngressPublisher;
         this.flowController = flowController;
         this.audioFrameMessageDecoder = audioFrameMessageDecoder;
         this.sessionStartMessageDecoder = sessionStartMessageDecoder;
         this.sessionPingMessageDecoder = sessionPingMessageDecoder;
         this.sessionStopMessageDecoder = sessionStopMessageDecoder;
+        this.commandConfirmMessageDecoder = commandConfirmMessageDecoder;
+        this.commandExecuteResultMessageDecoder = commandExecuteResultMessageDecoder;
         this.sessionControlClient = sessionControlClient;
         this.objectMapper = objectMapper;
         this.meterRegistry = meterRegistry;
@@ -123,6 +137,16 @@ public class GatewayMessageRouter {
                         request.traceId(),
                         request.reason()));
             }
+            case COMMAND_CONFIRM_TYPE -> {
+                CommandConfirmIngressCommand request = commandConfirmMessageDecoder.decode(rawMessage);
+                sessionBinder.bind(request.sessionId());
+                yield commandIngressPublisher.publishCommandConfirm(request);
+            }
+            case COMMAND_EXECUTE_RESULT_TYPE -> {
+                CommandExecuteResultIngressCommand request = commandExecuteResultMessageDecoder.decode(rawMessage);
+                sessionBinder.bind(request.sessionId());
+                yield commandIngressPublisher.publishCommandExecuteResult(request);
+            }
             default -> Mono.error(new MessageValidationException(
                     INVALID_MESSAGE_CODE,
                     "Unsupported message type: " + envelope.type(),
@@ -184,7 +208,12 @@ public class GatewayMessageRouter {
 
     private String normalizeType(String type) {
         return switch (type) {
-            case AUDIO_FRAME_TYPE, SESSION_START_TYPE, SESSION_PING_TYPE, SESSION_STOP_TYPE -> type;
+            case AUDIO_FRAME_TYPE,
+                    SESSION_START_TYPE,
+                    SESSION_PING_TYPE,
+                    SESSION_STOP_TYPE,
+                    COMMAND_CONFIRM_TYPE,
+                    COMMAND_EXECUTE_RESULT_TYPE -> type;
             default -> "unsupported";
         };
     }

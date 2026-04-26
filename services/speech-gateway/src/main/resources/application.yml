@@ -48,6 +48,8 @@ gateway:
   kafka:
     enabled: ${GATEWAY_KAFKA_ENABLED:true}
     audio-ingress-topic: ${GATEWAY_AUDIO_INGRESS_TOPIC:audio.ingress.raw}
+    command-confirm-request-topic: ${GATEWAY_COMMAND_CONFIRM_REQUEST_TOPIC:command.confirm.request}
+    command-execute-result-topic: ${GATEWAY_COMMAND_EXECUTE_RESULT_TOPIC:command.execute.result}
     tenant-id: ${GATEWAY_TENANT_ID:tenant-default}
     producer-id: ${GATEWAY_PRODUCER_ID:speech-gateway}
     channels: ${GATEWAY_AUDIO_CHANNELS:1}
@@ -63,6 +65,8 @@ gateway:
     session-control-topic: ${GATEWAY_DOWNLINK_SESSION_CONTROL_TOPIC:session.control}
     tts-chunk-topic: ${GATEWAY_DOWNLINK_TTS_CHUNK_TOPIC:tts.chunk}
     tts-ready-topic: ${GATEWAY_DOWNLINK_TTS_READY_TOPIC:tts.ready}
+    command-dispatch-topic: ${GATEWAY_DOWNLINK_COMMAND_DISPATCH_TOPIC:command.dispatch}
+    command-result-topic: ${GATEWAY_DOWNLINK_COMMAND_RESULT_TOPIC:command.result}
     retry-max-attempts: ${GATEWAY_DOWNLINK_RETRY_MAX_ATTEMPTS:3}
     retry-backoff-ms: ${GATEWAY_DOWNLINK_RETRY_BACKOFF_MS:200}
     dlq-topic-suffix: ${GATEWAY_DOWNLINK_DLQ_TOPIC_SUFFIX:.dlq}

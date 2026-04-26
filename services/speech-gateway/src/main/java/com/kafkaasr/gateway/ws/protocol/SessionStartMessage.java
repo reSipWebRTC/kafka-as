@@ -8,5 +8,6 @@ public record SessionStartMessage(
         @NotBlank String tenantId,
         @NotBlank String sourceLang,
         @NotBlank String targetLang,
+        @NotBlank String userId,
         String traceId) {
 }

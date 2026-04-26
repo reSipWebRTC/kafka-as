@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kafkaasr.gateway.ws.protocol.SessionClosedResponse;
 import com.kafkaasr.gateway.ws.protocol.SubtitleFinalResponse;
 import com.kafkaasr.gateway.ws.protocol.SubtitlePartialResponse;
+import com.kafkaasr.gateway.ws.protocol.CommandDispatchResponse;
+import com.kafkaasr.gateway.ws.protocol.CommandResultResponse;
 import com.kafkaasr.gateway.ws.protocol.TtsChunkResponse;
 import com.kafkaasr.gateway.ws.protocol.TtsReadyResponse;
 import org.springframework.stereotype.Component;
@@ -19,6 +21,8 @@ public class GatewayDownlinkPublisher {
     private static final String SESSION_CLOSED_TYPE = "session.closed";
     private static final String TTS_CHUNK_TYPE = "tts.chunk";
     private static final String TTS_READY_TYPE = "tts.ready";
+    private static final String COMMAND_DISPATCH_TYPE = "command.dispatch";
+    private static final String COMMAND_RESULT_TYPE = "command.result";
 
     private final ObjectMapper objectMapper;
     private final GatewaySessionRegistry sessionRegistry;
@@ -90,6 +94,54 @@ public class GatewayDownlinkPublisher {
                 sampleRate,
                 durationMs,
                 coalesceText(cacheKey)));
+    }
+
+    public Mono<Void> publishCommandDispatch(
+            String sessionId,
+            long seq,
+            String executionId,
+            String commandText,
+            String intent,
+            String subIntent,
+            boolean confirmRequired,
+            String confirmToken,
+            int expiresInSec,
+            String traceId) {
+        return publishToSession(sessionId, new CommandDispatchResponse(
+                COMMAND_DISPATCH_TYPE,
+                sessionId,
+                seq,
+                coalesceText(executionId),
+                coalesceText(commandText),
+                coalesceText(intent),
+                coalesceText(subIntent),
+                confirmRequired,
+                coalesceText(confirmToken),
+                expiresInSec,
+                coalesceText(traceId)));
+    }
+
+    public Mono<Void> publishCommandResult(
+            String sessionId,
+            long seq,
+            String executionId,
+            String status,
+            String code,
+            String replyText,
+            boolean retryable,
+            String confirmToken,
+            int expiresInSec) {
+        return publishToSession(sessionId, new CommandResultResponse(
+                COMMAND_RESULT_TYPE,
+                sessionId,
+                seq,
+                coalesceText(executionId),
+                coalesceText(status),
+                coalesceText(code),
+                coalesceText(replyText),
+                retryable,
+                coalesceText(confirmToken),
+                expiresInSec));
     }
 
     private Mono<Void> publishToSession(String sessionId, Object payload) {

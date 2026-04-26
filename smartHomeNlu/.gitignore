@@ -1,0 +1,47 @@
+ha-mcp/
+
+# Local runtime/cache artifacts
+.venv/
+.pytest_cache/
+.runtime_local/
+__pycache__/
+
+# Python cache
+*.pyc
+
+# Test/runtime artifacts
+*.log
+.coverage
+
+# Local doc exports
+docs/*.zip
+
+# Android build intermediates and Gradle cache
+**/.gradle/
+**/build/
+**/.cxx/
+**/.externalNativeBuild/
+**/captures/
+**/outputs/
+**/intermediates/
+**/generated/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# ML model artifacts
+models/
+model/
+checkpoints/
+*.onnx
+*.tflite
+*.pt
+*.pth
+*.bin
+*.gguf
+*.safetensors
+*.ckpt
+*.pb
+*.h5

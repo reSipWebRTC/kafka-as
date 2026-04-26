@@ -14,6 +14,11 @@ public class TtsKafkaProperties {
     @NotBlank
     private String translationResultTopic = "translation.result";
 
+    private boolean commandResultEnabled = true;
+
+    @NotBlank
+    private String commandResultTopic = "command.result";
+
     @NotBlank
     private String ttsRequestTopic = "tts.request";
 
@@ -28,6 +33,9 @@ public class TtsKafkaProperties {
 
     @NotBlank
     private String defaultVoice = "voice-default";
+
+    @NotBlank
+    private String commandResultDefaultLanguage = "zh-CN";
 
     private boolean streamEnabled = true;
 
@@ -73,6 +81,22 @@ public class TtsKafkaProperties {
         this.translationResultTopic = translationResultTopic;
     }
 
+    public boolean isCommandResultEnabled() {
+        return commandResultEnabled;
+    }
+
+    public void setCommandResultEnabled(boolean commandResultEnabled) {
+        this.commandResultEnabled = commandResultEnabled;
+    }
+
+    public String getCommandResultTopic() {
+        return commandResultTopic;
+    }
+
+    public void setCommandResultTopic(String commandResultTopic) {
+        this.commandResultTopic = commandResultTopic;
+    }
+
     public String getTtsRequestTopic() {
         return ttsRequestTopic;
     }
@@ -111,6 +135,14 @@ public class TtsKafkaProperties {
 
     public void setDefaultVoice(String defaultVoice) {
         this.defaultVoice = defaultVoice;
+    }
+
+    public String getCommandResultDefaultLanguage() {
+        return commandResultDefaultLanguage;
+    }
+
+    public void setCommandResultDefaultLanguage(String commandResultDefaultLanguage) {
+        this.commandResultDefaultLanguage = commandResultDefaultLanguage;
     }
 
     public boolean isStreamEnabled() {

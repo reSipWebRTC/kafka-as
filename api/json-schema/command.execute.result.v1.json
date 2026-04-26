@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kafka-asr.local/schemas/command.execute.result.v1.json",
+  "title": "command.execute.result.v1",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "traceId",
+    "sessionId",
+    "tenantId",
+    "producer",
+    "seq",
+    "ts",
+    "idempotencyKey",
+    "payload"
+  ],
+  "properties": {
+    "eventId": { "type": "string", "minLength": 1 },
+    "eventType": { "const": "command.execute.result" },
+    "eventVersion": { "const": "v1" },
+    "traceId": { "type": "string", "minLength": 1 },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "tenantId": { "type": "string", "minLength": 1 },
+    "roomId": { "type": "string" },
+    "userId": { "type": "string", "minLength": 1 },
+    "producer": { "type": "string", "minLength": 1 },
+    "seq": { "type": "integer", "minimum": 0 },
+    "ts": { "type": "integer", "minimum": 0 },
+    "idempotencyKey": { "type": "string", "minLength": 1 },
+    "payload": {
+      "type": "object",
+      "required": ["executionId", "executionMode", "status", "code", "replyText", "retryable"],
+      "properties": {
+        "executionId": { "type": "string", "minLength": 1 },
+        "executionMode": { "type": "string", "enum": ["CLIENT_BRIDGE"] },
+        "status": {
+          "type": "string",
+          "enum": ["ok", "confirm_required", "failed", "cancelled", "timeout"]
+        },
+        "code": { "type": "string", "minLength": 1 },
+        "replyText": { "type": "string" },
+        "retryable": { "type": "boolean" },
+        "confirmRound": { "type": "integer", "minimum": 1 },
+        "confirmToken": { "type": "string", "minLength": 1 },
+        "rejectReason": {
+          "type": "string",
+          "enum": [
+            "USER_REJECTED",
+            "NO_INPUT_TIMEOUT",
+            "INTENT_MISMATCH",
+            "CLIENT_ABORTED",
+            "POLICY_DENY",
+            "OTHER"
+          ]
+        },
+        "errorCode": {
+          "type": "string",
+          "enum": [
+            "NLU_UNREACHABLE",
+            "NLU_TIMEOUT",
+            "NLU_BAD_REQUEST",
+            "DEVICE_OFFLINE",
+            "DEVICE_EXECUTION_FAILED",
+            "CLIENT_EXECUTION_FAILED",
+            "CLIENT_NETWORK_ERROR",
+            "INTERNAL_ERROR"
+          ]
+        },
+        "traceId": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -69,6 +69,136 @@ groups:
           summary: "Gateway downlink error ratio is critical"
           description: "gateway.downlink.messages.total error ratio > {{ALERT_DOWNLINK_ERROR_RATIO_CRITICAL}} for {{ALERT_DOWNLINK_ERROR_FOR_CRITICAL}}"
 
+      - alert: CommandDispatchSuccessRateLow
+        expr: |
+          (
+            sum(rate(gateway_downlink_messages_total{type="command.dispatch",result="success"}[5m]))
+            /
+            clamp_min(sum(rate(gateway_downlink_messages_total{type="command.dispatch"}[5m])), 1e-6)
+          ) < {{ALERT_COMMAND_DISPATCH_SUCCESS_RATIO_WARNING}}
+          and
+          sum(rate(gateway_downlink_messages_total{type="command.dispatch"}[5m])) > {{ALERT_COMMAND_DISPATCH_MIN_RPS_WARNING}}
+        for: {{ALERT_COMMAND_DISPATCH_FOR_WARNING}}
+        labels:
+          severity: warning
+          area: gateway
+        annotations:
+          summary: "Command dispatch downlink success ratio is low"
+          description: "command.dispatch success ratio < {{ALERT_COMMAND_DISPATCH_SUCCESS_RATIO_WARNING}} for {{ALERT_COMMAND_DISPATCH_FOR_WARNING}}"
+
+      - alert: CommandDispatchSuccessRateCritical
+        expr: |
+          (
+            sum(rate(gateway_downlink_messages_total{type="command.dispatch",result="success"}[5m]))
+            /
+            clamp_min(sum(rate(gateway_downlink_messages_total{type="command.dispatch"}[5m])), 1e-6)
+          ) < {{ALERT_COMMAND_DISPATCH_SUCCESS_RATIO_CRITICAL}}
+          and
+          sum(rate(gateway_downlink_messages_total{type="command.dispatch"}[5m])) > {{ALERT_COMMAND_DISPATCH_MIN_RPS_CRITICAL}}
+        for: {{ALERT_COMMAND_DISPATCH_FOR_CRITICAL}}
+        labels:
+          severity: critical
+          area: gateway
+        annotations:
+          summary: "Command dispatch downlink success ratio is critical"
+          description: "command.dispatch success ratio < {{ALERT_COMMAND_DISPATCH_SUCCESS_RATIO_CRITICAL}} for {{ALERT_COMMAND_DISPATCH_FOR_CRITICAL}}"
+
+      - alert: CommandConfirmTimeoutRateHigh
+        expr: |
+          (
+            sum(rate(command_pipeline_result_total{outcome="confirm_timeout"}[5m]))
+            /
+            clamp_min(sum(rate(command_pipeline_result_total[5m])), 1e-6)
+          ) > {{ALERT_COMMAND_CONFIRM_TIMEOUT_RATIO_WARNING}}
+          and
+          sum(rate(command_pipeline_result_total[5m])) > {{ALERT_COMMAND_CONFIRM_TIMEOUT_MIN_RPS_WARNING}}
+        for: {{ALERT_COMMAND_CONFIRM_TIMEOUT_FOR_WARNING}}
+        labels:
+          severity: warning
+          area: command
+        annotations:
+          summary: "Command confirm-timeout ratio is high"
+          description: "command.pipeline.result.total confirm_timeout ratio > {{ALERT_COMMAND_CONFIRM_TIMEOUT_RATIO_WARNING}} for {{ALERT_COMMAND_CONFIRM_TIMEOUT_FOR_WARNING}}"
+
+      - alert: CommandConfirmTimeoutRateCritical
+        expr: |
+          (
+            sum(rate(command_pipeline_result_total{outcome="confirm_timeout"}[5m]))
+            /
+            clamp_min(sum(rate(command_pipeline_result_total[5m])), 1e-6)
+          ) > {{ALERT_COMMAND_CONFIRM_TIMEOUT_RATIO_CRITICAL}}
+          and
+          sum(rate(command_pipeline_result_total[5m])) > {{ALERT_COMMAND_CONFIRM_TIMEOUT_MIN_RPS_CRITICAL}}
+        for: {{ALERT_COMMAND_CONFIRM_TIMEOUT_FOR_CRITICAL}}
+        labels:
+          severity: critical
+          area: command
+        annotations:
+          summary: "Command confirm-timeout ratio is critical"
+          description: "command.pipeline.result.total confirm_timeout ratio > {{ALERT_COMMAND_CONFIRM_TIMEOUT_RATIO_CRITICAL}} for {{ALERT_COMMAND_CONFIRM_TIMEOUT_FOR_CRITICAL}}"
+
+      - alert: CommandExecutionFailureRateHigh
+        expr: |
+          (
+            sum(rate(command_pipeline_result_total{outcome="execution_failed"}[5m]))
+            /
+            clamp_min(sum(rate(command_pipeline_result_total[5m])), 1e-6)
+          ) > {{ALERT_COMMAND_EXECUTION_FAILURE_RATIO_WARNING}}
+          and
+          sum(rate(command_pipeline_result_total[5m])) > {{ALERT_COMMAND_EXECUTION_FAILURE_MIN_RPS_WARNING}}
+        for: {{ALERT_COMMAND_EXECUTION_FAILURE_FOR_WARNING}}
+        labels:
+          severity: warning
+          area: command
+        annotations:
+          summary: "Command execution failure ratio is high"
+          description: "command.pipeline.result.total execution_failed ratio > {{ALERT_COMMAND_EXECUTION_FAILURE_RATIO_WARNING}} for {{ALERT_COMMAND_EXECUTION_FAILURE_FOR_WARNING}}"
+
+      - alert: CommandExecutionFailureRateCritical
+        expr: |
+          (
+            sum(rate(command_pipeline_result_total{outcome="execution_failed"}[5m]))
+            /
+            clamp_min(sum(rate(command_pipeline_result_total[5m])), 1e-6)
+          ) > {{ALERT_COMMAND_EXECUTION_FAILURE_RATIO_CRITICAL}}
+          and
+          sum(rate(command_pipeline_result_total[5m])) > {{ALERT_COMMAND_EXECUTION_FAILURE_MIN_RPS_CRITICAL}}
+        for: {{ALERT_COMMAND_EXECUTION_FAILURE_FOR_CRITICAL}}
+        labels:
+          severity: critical
+          area: command
+        annotations:
+          summary: "Command execution failure ratio is critical"
+          description: "command.pipeline.result.total execution_failed ratio > {{ALERT_COMMAND_EXECUTION_FAILURE_RATIO_CRITICAL}} for {{ALERT_COMMAND_EXECUTION_FAILURE_FOR_CRITICAL}}"
+
+      - alert: CommandPipelineE2EP95LatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(command_pipeline_e2e_duration_seconds_bucket[5m]))
+          ) > {{ALERT_COMMAND_E2E_P95_SECONDS_WARNING}}
+        for: {{ALERT_COMMAND_E2E_P95_FOR_WARNING}}
+        labels:
+          severity: warning
+          area: command
+        annotations:
+          summary: "Command pipeline end-to-end p95 latency is high"
+          description: "command.pipeline.e2e.duration p95 > {{ALERT_COMMAND_E2E_P95_SECONDS_WARNING}}s for {{ALERT_COMMAND_E2E_P95_FOR_WARNING}}"
+
+      - alert: CommandPipelineE2EP95LatencyCritical
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(command_pipeline_e2e_duration_seconds_bucket[5m]))
+          ) > {{ALERT_COMMAND_E2E_P95_SECONDS_CRITICAL}}
+        for: {{ALERT_COMMAND_E2E_P95_FOR_CRITICAL}}
+        labels:
+          severity: critical
+          area: command
+        annotations:
+          summary: "Command pipeline end-to-end p95 latency is critical"
+          description: "command.pipeline.e2e.duration p95 > {{ALERT_COMMAND_E2E_P95_SECONDS_CRITICAL}}s for {{ALERT_COMMAND_E2E_P95_FOR_CRITICAL}}"
+
       - alert: PipelineErrorRateHigh
         expr: |
           (

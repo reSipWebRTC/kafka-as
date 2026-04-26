@@ -28,6 +28,7 @@ class SessionStartMessageDecoderTests {
                   "tenantId": "tenant-a",
                   "sourceLang": "zh-CN",
                   "targetLang": "en-US",
+                  "userId": "usr-1",
                   "traceId": "trc-1"
                 }
                 """);
@@ -37,6 +38,7 @@ class SessionStartMessageDecoderTests {
         assertEquals("tenant-a", message.tenantId());
         assertEquals("zh-CN", message.sourceLang());
         assertEquals("en-US", message.targetLang());
+        assertEquals("usr-1", message.userId());
         assertEquals("trc-1", message.traceId());
     }
 
@@ -48,6 +50,25 @@ class SessionStartMessageDecoderTests {
                         {
                           "type": "session.start",
                           "sessionId": "sess-1",
+                          "sourceLang": "zh-CN",
+                          "targetLang": "en-US",
+                          "userId": "usr-1"
+                        }
+                        """));
+
+        assertEquals("INVALID_MESSAGE", exception.code());
+        assertEquals("sess-1", exception.sessionId());
+    }
+
+    @Test
+    void rejectsMissingUserId() {
+        MessageValidationException exception = assertThrows(
+                MessageValidationException.class,
+                () -> decoder.decode("""
+                        {
+                          "type": "session.start",
+                          "sessionId": "sess-1",
+                          "tenantId": "tenant-a",
                           "sourceLang": "zh-CN",
                           "targetLang": "en-US"
                         }
