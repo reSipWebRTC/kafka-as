@@ -26,6 +26,7 @@
 - 核心补偿/超时路径已同步发布 `platform.audit` 事件（兼容保留 `platform.compensation`）
 - `tools/platform-dlq-replay.sh` 已落地统一重放运营入口（支持 tenant/sourceTopic/reason 过滤、dry-run/apply、结构化报告）
 - `tools/platform-dlq-auto-recovery.sh` 已落地跨服务自动恢复执行基线（恢复账本去重 + replay 编排 + 统一报告）
+- `session-orchestrator` 已消费 `platform.dlq`，实时执行补偿 Saga v2（`replay | session-close | manual` 动作路由 + 重试 + Redis 幂等状态）
 - `session-orchestrator` 查询 `control-plane` 已落地第一版熔断 + 缓存回退（fail-open/fail-closed）
 - `session-orchestrator` 已消费 `asr.partial` / `asr.final` / `translation.result` / `tts.ready` / `command.result` 并写入会话聚合进度快照
 - `session-orchestrator` 已补齐 idle/hard timeout 自动关闭基线（超时触发 `session.control(status=CLOSED)`）与 timeout 补偿信号发布
@@ -64,7 +65,7 @@
 | 服务 | 端口 | 当前已实现 | 当前未实现 |
 | --- | --- | --- | --- |
 | `speech-gateway` | `8080` | WebFlux 启动、`/ws/audio`、`session.start` / `session.ping` / `audio.frame` / `session.stop` / `command.confirm` / `playback.metric` 路由、`audio.ingress.raw` / `command.confirm.request` Kafka 发布、会话级限流/背压控制、错误下行 `session.error`、Kafka 驱动的 `subtitle.partial` / `subtitle.final` / `tts.chunk` / `tts.ready` / `command.result` / `session.closed` 下行、下行 E2E 稳定性测试基线、客户端可感知时延指标基线（first/final/tts.ready）、客户端播放阶段指标基线（playback start/stall.begin/stall.end/complete/fallback，兼容 stall）、可配置 WS token 鉴权（`Authorization: Bearer` 或 `access_token`） | 外部 IAM/RBAC 集成、更完整的下行聚合策略 |
-| `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、控制面熔断与缓存回退、Redis 会话状态、`session.control` Kafka 发布、会话聚合进度消费（`asr.partial`/`asr.final`/`translation.result`/`tts.ready`/`command.result`）、idle/hard timeout 自动关闭、timeout 补偿信号发布 | 高级补偿编排与结果聚合策略优化 |
+| `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、控制面熔断与缓存回退、Redis 会话状态、`session.control` Kafka 发布、会话聚合进度消费（`asr.partial`/`asr.final`/`translation.result`/`tts.ready`/`command.result`）、idle/hard timeout 自动关闭、timeout/stalled 补偿信号发布、`platform.dlq` 实时补偿 Saga v2 消费执行 | 强一致补偿事务编排与结果聚合策略优化 |
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配（含 FunASR v2 响应兼容、health 探测、并发保护、错误语义映射）、按稳定度 + VAD 静音切段分流发布 `asr.partial` / `asr.final`、按租户策略驱动重试/DLQ（含控制面失败回退） | FunASR 真机容量/故障演练、高级上下文与切段策略 |
 | `translation-worker` | `8083` | 消费 `asr.final` 后发布 `translation.request`，再消费 `translation.request` 生成并发布 `translation.result`；默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容、health 探测、并发保护、错误语义映射）；按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 真机容量/故障演练、术语治理、上下文增强 |
 | `tts-orchestrator` | `8084` | 消费 `translation.result`（仅 `sessionMode=TRANSLATION`）与 `command.result`（仅 `sessionMode=SMART_HOME`）、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容、health 探测、并发保护、错误语义映射）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、`tts.ready` 支持可配置 S3/MinIO 上传并回填真实 `playbackUrl`、支持 `cache-control` 与 `expires/sig` URL 签名策略、支持区域 CDN 路由/回源回退与可配置 cache scope/shard 策略、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS 真机容量/故障演练、对象存储高可用治理、CDN 区域路由与高级缓存治理 |
@@ -135,7 +136,7 @@
 | `command.confirm.request` | `speech-gateway` | `command-worker` | 客户端二次确认请求入口（`confirm_token + accept`） |
 | `command.result` | `command-worker` | `speech-gateway`、`tts-orchestrator` | 智能家居命令执行回执；网关下行与 SMART_HOME TTS 路由均已落地 |
 | `platform.audit` | `asr-worker`、`translation-worker`、`tts-orchestrator`、`command-worker`、`speech-gateway`、`session-orchestrator` | 暂无仓库内下游 | 统一审计事件（补偿/超时路径双写；兼容保留 `platform.compensation`） |
-| `platform.dlq` | `asr-worker`、`translation-worker`、`tts-orchestrator`、`command-worker`、`speech-gateway` | 暂无仓库内下游 | 统一死信治理事件（消费失败上报；兼容保留按源 Topic `.dlq`） |
+| `platform.dlq` | `asr-worker`、`translation-worker`、`tts-orchestrator`、`command-worker`、`speech-gateway` | `session-orchestrator` | 统一死信治理事件（消费失败上报；实时补偿 Saga 消费；兼容保留按源 Topic `.dlq`） |
 
 同时，`speech-gateway` 当前也消费以下下行 Topic 并回推 WebSocket：
 
@@ -148,7 +149,7 @@
 
 ## 5. 当前缺口
 
-- `platform.audit` / `platform.dlq` 已完成契约冻结并接入核心运行时路径；统一重放、自动恢复与跨服务补偿 Saga v1 执行脚本基线已落地，并新增会话级 stalled 补偿编排第一版（`post_final` / `post_translation`）
+- `platform.audit` / `platform.dlq` 已完成契约冻结并接入核心运行时路径；统一重放、自动恢复与跨服务补偿 Saga（脚本 v1 + 服务内实时 v2）基线已落地，并新增会话级 stalled 补偿编排第一版（`post_final` / `post_translation`）
 - ASR / Translation / TTS 已落地第一版生产联调基线，并补齐仓库内 fault-drill 收口与预发收口入口；但尚未完成真实流量闭环与预发/生产容量实战
 - 对象存储 HA 治理、CDN 区域路由/多级缓存治理、完整补偿编排、自适应熔断/灰度治理，以及压测/告警升级实战证据仍待完善
 

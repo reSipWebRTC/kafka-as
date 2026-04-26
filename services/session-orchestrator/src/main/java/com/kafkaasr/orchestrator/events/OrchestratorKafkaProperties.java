@@ -27,6 +27,9 @@ public class OrchestratorKafkaProperties {
     private String commandResultTopic = "command.result";
 
     @NotBlank
+    private String platformDlqTopic = "platform.dlq";
+
+    @NotBlank
     private String compensationTopic = "platform.compensation";
 
     @NotBlank
@@ -81,6 +84,14 @@ public class OrchestratorKafkaProperties {
 
     public void setCommandResultTopic(String commandResultTopic) {
         this.commandResultTopic = commandResultTopic;
+    }
+
+    public String getPlatformDlqTopic() {
+        return platformDlqTopic;
+    }
+
+    public void setPlatformDlqTopic(String platformDlqTopic) {
+        this.platformDlqTopic = platformDlqTopic;
     }
 
     public String getCompensationTopic() {

@@ -13,7 +13,8 @@ Current scope:
 - progress aggregation from pipeline events (`asr.partial` / `asr.final` / `translation.result` / `tts.ready` / `command.result`)
 - timeout orchestration (`idleTimeout` / `hardTimeout`) with auto-close to `session.control(status=CLOSED)`
 - timeout/stalled compensation signal publication to `platform.compensation` and `platform.audit`
+- realtime compensation saga consumer for `platform.dlq` (`replay | session-close | manual`) with Redis idempotency state and `platform.audit` publication
 
 Out of scope in this phase:
 
-- advanced multi-service compensation saga and rollback choreography
+- strong-consistency multi-service saga transaction/rollback choreography

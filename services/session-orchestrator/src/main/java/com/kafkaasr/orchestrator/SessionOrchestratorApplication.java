@@ -1,5 +1,6 @@
 package com.kafkaasr.orchestrator;
 
+import com.kafkaasr.orchestrator.compensation.CompensationSagaProperties;
 import com.kafkaasr.orchestrator.events.OrchestratorKafkaProperties;
 import com.kafkaasr.orchestrator.policy.ControlPlaneClientProperties;
 import com.kafkaasr.orchestrator.service.SessionOrchestrationProperties;
@@ -15,7 +16,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         OrchestratorKafkaProperties.class,
         SessionStoreProperties.class,
         ControlPlaneClientProperties.class,
-        SessionOrchestrationProperties.class
+        SessionOrchestrationProperties.class,
+        CompensationSagaProperties.class
 })
 public class SessionOrchestratorApplication {
 

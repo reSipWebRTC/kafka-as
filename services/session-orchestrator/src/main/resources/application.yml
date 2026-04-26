@@ -52,6 +52,7 @@ orchestrator:
     translation-result-topic: ${ORCHESTRATOR_TRANSLATION_RESULT_TOPIC:translation.result}
     tts-ready-topic: ${ORCHESTRATOR_TTS_READY_TOPIC:tts.ready}
     command-result-topic: ${ORCHESTRATOR_COMMAND_RESULT_TOPIC:command.result}
+    platform-dlq-topic: ${ORCHESTRATOR_PLATFORM_DLQ_TOPIC:platform.dlq}
     compensation-topic: ${ORCHESTRATOR_COMPENSATION_TOPIC:platform.compensation}
     audit-topic: ${ORCHESTRATOR_AUDIT_TOPIC:platform.audit}
     producer-id: ${ORCHESTRATOR_PRODUCER_ID:session-orchestrator}
@@ -68,6 +69,19 @@ orchestrator:
     idle-timeout-reason: ${ORCHESTRATOR_SESSION_IDLE_TIMEOUT_REASON:timeout.idle}
     hard-timeout-reason: ${ORCHESTRATOR_SESSION_HARD_TIMEOUT_REASON:timeout.hard}
     stalled-timeout-reason-prefix: ${ORCHESTRATOR_SESSION_STALLED_TIMEOUT_REASON_PREFIX:timeout.stalled}
+  compensation-saga:
+    enabled: ${ORCHESTRATOR_COMPENSATION_SAGA_ENABLED:true}
+    max-attempts: ${ORCHESTRATOR_COMPENSATION_SAGA_MAX_ATTEMPTS:3}
+    retry-backoff: ${ORCHESTRATOR_COMPENSATION_SAGA_RETRY_BACKOFF:200ms}
+    replay-output-mode: ${ORCHESTRATOR_COMPENSATION_SAGA_REPLAY_OUTPUT_MODE:source-topic}
+    replay-fixed-topic: ${ORCHESTRATOR_COMPENSATION_SAGA_REPLAY_FIXED_TOPIC:}
+    replay-key-field: ${ORCHESTRATOR_COMPENSATION_SAGA_REPLAY_KEY_FIELD:sessionId}
+    replay-send-timeout: ${ORCHESTRATOR_COMPENSATION_SAGA_REPLAY_SEND_TIMEOUT:3s}
+    session-close-timeout: ${ORCHESTRATOR_COMPENSATION_SAGA_SESSION_CLOSE_TIMEOUT:3s}
+    close-reason-prefix: ${ORCHESTRATOR_COMPENSATION_SAGA_CLOSE_REASON_PREFIX:compensation.saga}
+    publish-audit: ${ORCHESTRATOR_COMPENSATION_SAGA_PUBLISH_AUDIT:true}
+    state-key-prefix: ${ORCHESTRATOR_COMPENSATION_SAGA_STATE_KEY_PREFIX:orchestrator:compensation:saga:}
+    state-ttl: ${ORCHESTRATOR_COMPENSATION_SAGA_STATE_TTL:7d}
   control-plane:
     base-url: ${ORCHESTRATOR_CONTROL_PLANE_BASE_URL:http://localhost:8085}
     request-timeout: ${ORCHESTRATOR_CONTROL_PLANE_REQUEST_TIMEOUT:2s}

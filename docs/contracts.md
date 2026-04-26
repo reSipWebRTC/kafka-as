@@ -122,7 +122,7 @@
 | `command.confirm.request` | 客户端确认请求（`confirm_token + accept`） | `command.confirm.request` | `sessionId` |
 | `command.result` | 智能家居命令执行结果/确认要求回执 | `command.result` | `sessionId` |
 | `platform.audit` | 治理审计事件（配置变更、补偿、关键策略动作） | `platform.audit` | `tenantId` |
-| `platform.dlq` | 统一死信治理事件（跨服务排障与重放） | `platform.dlq` | `tenantId` |
+| `platform.dlq` | 统一死信治理事件（跨服务排障、重放与实时补偿编排） | `platform.dlq` | `tenantId` |
 
 当前实现语义（`asr-worker`）：
 
@@ -130,6 +130,7 @@
 - 稳定结果、`endOfStream=true`，或命中 VAD 静音切段阈值的结果发布为 `asr.final`
 - 治理事件 `tenant.policy.changed` 没有真实会话上下文时，`sessionId` 使用合成值（建议 `tenant-policy::<tenantId>`）
 - 治理事件（`tenant.policy.changed` / `platform.audit` / `platform.dlq`）没有真实会话上下文时，`sessionId` 使用合成值（建议 `governance::<tenantId>`）
+- `session-orchestrator` 会实时消费 `platform.dlq` 并执行补偿动作路由（`replay | session-close | manual`）
 - 治理事件 `tenant.policy.changed.payload.operation` 当前取值：`CREATED`、`UPDATED`、`ROLLED_BACK`、`ROLLED_BACK_TO_VERSION`
 - 当 `operation=ROLLED_BACK_TO_VERSION` 时，`sourcePolicyVersion` 与 `targetPolicyVersion` 必填
 - 治理事件 `tenant.policy.distribution.result` 契约已冻结，`payload.status` 当前取值：`APPLIED`、`FAILED`、`IGNORED`
