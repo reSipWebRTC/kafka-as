@@ -4,7 +4,7 @@
 
 在没有应用层一键部署脚本的前提下，提供一套可重复执行的人工部署与验收流程，覆盖：
 
-1. 六个核心服务启动与连通性检查。
+1. 七个核心服务启动与连通性检查。
 2. `control-plane` 鉴权行为验收（静态凭据模式）。
 3. 预发收口脚本执行与报告留档。
 
@@ -72,6 +72,7 @@ export CONTROL_AUTH_CREDENTIALS_1_TENANT_PATTERNS_0=tenant-a
 ./gradlew :services:session-orchestrator:bootRun
 ./gradlew :services:asr-worker:bootRun
 ./gradlew :services:translation-worker:bootRun
+./gradlew :services:command-worker:bootRun
 ./gradlew :services:tts-orchestrator:bootRun
 ./gradlew :services:speech-gateway:bootRun
 ```
@@ -82,6 +83,7 @@ export CONTROL_AUTH_CREDENTIALS_1_TENANT_PATTERNS_0=tenant-a
 - `session-orchestrator` `8081`
 - `asr-worker` `8082`
 - `translation-worker` `8083`
+- `command-worker` `8086`
 - `tts-orchestrator` `8084`
 - `control-plane` `8085`
 
@@ -90,7 +92,7 @@ export CONTROL_AUTH_CREDENTIALS_1_TENANT_PATTERNS_0=tenant-a
 ### 5.1 健康检查
 
 ```bash
-for p in 8080 8081 8082 8083 8084 8085; do
+for p in 8080 8081 8082 8083 8084 8085 8086; do
   curl -sf "http://127.0.0.1:$p/actuator/health"
 done
 ```
@@ -161,7 +163,7 @@ tools/preprod-drill-closure.sh
 
 以下全部满足才算通过：
 
-1. 六个服务健康检查全部成功。
+1. 七个服务健康检查全部成功。
 2. `control-plane-auth-drill.json` 中 `overallPass=true`。
 3. `preprod-drill-closure.json` 中 `overallPass=true`。
 4. 回滚编排接口验证成功，且事件元数据完整。

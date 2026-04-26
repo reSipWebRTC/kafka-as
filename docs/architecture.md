@@ -25,7 +25,7 @@
 - 推理服务、翻译服务、TTS 服务独立伸缩
 - 可观测性默认内建，而不是上线前临时补充
 
-## 3. 当前仓库实现基线（2026-04-24）
+## 3. 当前仓库实现基线（2026-04-26）
 
 当前仓库已经落地的实际模块链路如下：
 
@@ -41,6 +41,8 @@ flowchart LR
     A --> K
     K --> T["translation-worker"]
     T --> K
+    K --> CW["command-worker"]
+    CW --> K
     K --> TS["tts-orchestrator"]
     TS --> K
 ```
@@ -59,6 +61,7 @@ flowchart LR
 - `session-orchestrator` 的 Redis 会话状态与 `session.control` 发布
 - `asr-worker -> translation-worker -> tts-orchestrator` 主链路已打通，并补齐 FunASR / OpenAI / HTTP synthesis 第一版生产联调基线
 - `asr-worker` 的 VAD 静音切段与 `asr.partial` / `asr.final` 分流
+- `command-worker` 的 `CLIENT_BRIDGE` 状态机（`asr.final -> command.dispatch`、`command.confirm.request` / `command.execute.result -> command.result`）与重试/DLQ/幂等
 - `tts-orchestrator` 的对象存储上传、签名 URL、CDN 区域路由与回源回退基线
 - `control-plane` 的 Bearer Token 鉴权/授权、版本化 upsert/rollback、`tenant.policy.changed` 动态策略分发
 - 核心 Kafka consumer 固定重试 + `.dlq` 死信回退
@@ -175,7 +178,7 @@ flowchart TB
 
 当前基线：
 
-- 已承接 `audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`
+- 已承接 `audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`command.dispatch`、`command.confirm.request`、`command.execute.result`、`command.result`、`tenant.policy.changed`
 - 已落地消费侧固定重试、`.dlq` 死信回退、`idempotencyKey` 判重和补偿信号
 - 暂未落地统一重放流程和 Lag 治理文档化闭环
 
@@ -206,6 +209,19 @@ flowchart TB
 - 已实现默认 placeholder + 可切换 HTTP/OpenAI 适配的 `asr.final -> translation.result`
 - 已补齐 OpenAI 第一版生产联调基线（health 探测、并发保护、错误语义映射、引擎级指标）
 - 未实现真实配额/容量治理、术语增强和上下文策略
+
+### Command Worker
+
+目标职责：
+
+- `SMART_HOME` 命令编排与多轮确认状态机
+- 统一命令终态事件输出（UI/TTS 可复用）
+
+当前基线：
+
+- 已实现 `asr.final -> command.dispatch` 与 `command.confirm.request` / `command.execute.result -> command.result`
+- 已落地重试、DLQ、幂等判重与执行上下文 `memory/redis` 可切换存储
+- 未实现 `command-worker -> smartHomeNlu` 真实内网执行桥接与执行态高可用一致性治理
 
 ### TTS Orchestrator
 

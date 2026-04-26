@@ -9,7 +9,7 @@
 
 ## 1. 当前模块基线
 
-仓库现在已经包含 6 个核心服务和 2 类基础设施依赖的工程骨架。
+仓库现在已经包含 7 个核心服务和 2 类基础设施依赖的工程骨架。
 
 | 服务名 | 当前状态 | 当前已实现能力 | 主要依赖 |
 | --- | --- | --- | --- |
@@ -17,7 +17,8 @@
 | `session-orchestrator` | 已落地骨架 | 会话生命周期 API、策略校验、Redis 状态、`session.control` 发布 | Redis、Kafka、`control-plane` |
 | `asr-worker` | 已落地骨架 | 消费 `audio.ingress.raw`、默认 placeholder + 可切换 HTTP/FunASR ASR 适配、VAD 静音切段、发布 `asr.partial` / `asr.final`、FunASR 第一版生产联调基线 | Kafka |
 | `translation-worker` | 已落地骨架 | 消费 `asr.final`、默认 placeholder + 可切换 HTTP/OpenAI 翻译适配、发布 `translation.result`，OpenAI 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
-| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control`/URL 签名/区域路由/回源回退、cache scope/shard 策略，HTTP synthesis 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
+| `command-worker` | 已落地骨架 | 消费 `asr.final`（`SMART_HOME` 会话）/ `command.confirm.request` / `command.execute.result`，发布 `command.dispatch` / `command.result`，`CLIENT_BRIDGE` 多轮确认状态机，重试/DLQ/补偿、幂等判重，执行上下文 `memory/redis` 可切换存储 | Kafka |
+| `tts-orchestrator` | 已落地骨架 | 消费 `translation.result` 与 `command.result`、voice/cacheKey 生成、可切换 HTTP TTS synthesis 适配、发布 `tts.request` / `tts.chunk` / `tts.ready`、可配置 S3/MinIO 上传并回填 `tts.ready.playbackUrl`、可配置 CDN `cache-control`/URL 签名/区域路由/回源回退、cache scope/shard 策略，HTTP synthesis 适配已具备 health 探测、并发保护、错误语义映射与引擎级指标 | Kafka |
 | `control-plane` | 已落地骨架 | 租户策略 HTTP API、可配置 Bearer Token 鉴权/授权（读写 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 鉴权后端切换、JWKS 外部 IAM 校验后端骨架、Redis 存储、版本化 upsert/rollback（支持 `targetVersion` / `distributionRegions`）、策略历史快照、`tenant.policy.changed` 发布 | Redis、Kafka |
 
 基础设施：
@@ -140,7 +141,7 @@
 
 当前已经实现：
 
-- `translation.result` 消费
+- `translation.result` 与 `command.result` 消费
 - 规则 voice 选择 + 可切换 HTTP voice-policy 适配入口
 - 可切换 HTTP TTS synthesis 适配入口
 - TTS synthesis 响应兼容与错误语义加固（`code/status` 校验、`error` 快速失败、boolean-like stream 兼容）
@@ -159,6 +160,29 @@
 
 - TTS synthesis 真机容量/故障演练与模型侧运行保障（真实配额、限流与故障演练）
 - 对象存储高可用治理与更高级 CDN 缓存治理
+
+### command-worker
+
+目标职责：
+
+- 命令分发与多轮确认编排
+- `SMART_HOME` 会话的执行状态机推进
+- 命令终态结果统一发布（供 UI / TTS 消费）
+
+当前已经实现：
+
+- `asr.final`（仅 `SMART_HOME`）消费
+- `command.confirm.request` / `command.execute.result` 消费
+- `command.dispatch` / `command.result` 发布
+- `CLIENT_BRIDGE` 多轮确认状态机
+- 按租户策略驱动重试参数与 DLQ 后缀（控制面不可用时回退到本地默认）
+- `idempotencyKey` 判重与重复失败补偿信号基线
+- 执行上下文 `memory/redis` 可切换存储（默认 `memory`）
+
+当前未实现：
+
+- `command-worker -> smartHomeNlu` 真实内网执行桥接
+- 执行态持久化高可用与跨实例一致性治理
 
 ### control-plane
 
@@ -200,8 +224,8 @@
 ### 内部通信
 
 - `Kafka`
-  当前主异步总线，已落地 9 个 Topic（新增 `tenant.policy.changed`）。
-  核心 consumer 已落地 `.dlq` 死信回退、`idempotencyKey` 判重和补偿信号基线；`asr-worker`、`translation-worker`、`tts-orchestrator` 已升级到租户策略驱动重试/DLQ。
+  当前主异步总线，已落地 13 个 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`command.dispatch`、`command.confirm.request`、`command.execute.result`、`command.result`、`tenant.policy.changed`。
+  核心 consumer 已落地 `.dlq` 死信回退、`idempotencyKey` 判重和补偿信号基线；`asr-worker`、`translation-worker`、`tts-orchestrator`、`command-worker` 已升级到租户策略驱动重试/DLQ。
 - `HTTP`
   当前用于 `speech-gateway -> session-orchestrator` 和 `session-orchestrator -> control-plane` 的低频调用。
 
@@ -217,6 +241,7 @@ flowchart LR
     CP --> R
     A["asr-worker"] --> K
     T["translation-worker"] --> K
+    C["command-worker"] --> K
     TS["tts-orchestrator"] --> K
     TS -. "optional current path" .-> OSS["Object Storage / CDN"]
 ```
@@ -242,6 +267,7 @@ flowchart LR
 │  ├─ session-orchestrator/
 │  ├─ asr-worker/
 │  ├─ translation-worker/
+│  ├─ command-worker/
 │  ├─ tts-orchestrator/
 │  └─ control-plane/
 ├─ shared/

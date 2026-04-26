@@ -95,7 +95,7 @@ PREPROD_AUTH_DRILL_REQUIRED=1 \
 PREPROD_LOADTEST_REPORT_PATH="build/reports/loadtest/gateway-pipeline-loadtest-aggregate.json" \
 PREPROD_FAULT_DRILL_REPORT_PATH="build/reports/fault-drill/fault-drill-closure.json" \
 PREPROD_RECOVERY_MAX_SECONDS=900 \
-PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,GatewayWsErrorRateCritical,PipelineErrorRateHigh,PipelineErrorRateCritical,KafkaConsumerLagHigh,KafkaConsumerLagCritical,ControlPlaneAuthDenyRateHigh,ControlPlaneAuthDenyRateCritical,ControlPlaneExternalIamUnavailableSpike,ControlPlaneHybridFallbackSpike,ControlPlaneHybridFallbackCritical" \
+PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,GatewayWsErrorRateCritical,PipelineErrorRateHigh,PipelineErrorRateCritical,KafkaConsumerLagHigh,KafkaConsumerLagCritical,CommandDispatchSuccessRateLow,CommandDispatchSuccessRateCritical,CommandConfirmTimeoutRateHigh,CommandConfirmTimeoutRateCritical,CommandExecutionFailureRateHigh,CommandExecutionFailureRateCritical,CommandPipelineE2EP95LatencyHigh,CommandPipelineE2EP95LatencyCritical,ControlPlaneAuthDenyRateHigh,ControlPlaneAuthDenyRateCritical,ControlPlaneExternalIamUnavailableSpike,ControlPlaneHybridFallbackSpike,ControlPlaneHybridFallbackCritical" \
 tools/preprod-drill-closure.sh
 ```
 
@@ -208,6 +208,14 @@ tools/alert-ops-validate.sh
 | `GatewayWsErrorRateCritical` | 与 `GatewayWsErrorRateHigh` 同指标，阈值更高 | 触发升级链路（critical + escalation），优先执行回滚/限流 |
 | `DownlinkErrorRateHigh` | `gateway_downlink_messages_total`、补偿信号 | 检查下行 payload 兼容性与幂等键冲突，必要时降级下行 |
 | `DownlinkErrorRateCritical` | 与 `DownlinkErrorRateHigh` 同指标，阈值更高 | 触发升级链路，优先切换到稳定下行策略 |
+| `CommandDispatchSuccessRateLow` | `command_pipeline_dispatch_total`（`result=success,error`） | 检查 `command.dispatch` 产出与网关下行消费、客户端回执链路是否中断 |
+| `CommandDispatchSuccessRateCritical` | 与 `CommandDispatchSuccessRateLow` 同指标，阈值更高 | 触发升级链路，必要时暂停 `SMART_HOME` 命令入口并切到提示性兜底 |
+| `CommandConfirmTimeoutRateHigh` | `command_pipeline_result_total{status="timeout"}` | 检查确认倒计时策略、客户端交互与重连情况，必要时下调确认轮数 |
+| `CommandConfirmTimeoutRateCritical` | 与 `CommandConfirmTimeoutRateHigh` 同指标，阈值更高 | 触发升级链路，优先降级为“无需确认”或“只读查询”策略 |
+| `CommandExecutionFailureRateHigh` | `command_pipeline_result_total{status="failed"}` | 检查客户端执行回执错误码与内网桥接可用性，必要时回退到本地执行模式 |
+| `CommandExecutionFailureRateCritical` | 与 `CommandExecutionFailureRateHigh` 同指标，阈值更高 | 触发升级链路，优先切换 `SMART_HOME` 到受限模式并告警业务方 |
+| `CommandPipelineE2EP95LatencyHigh` | `command_pipeline_e2e_duration_seconds_bucket` | 检查命令分发、确认等待、执行回传三个阶段耗时 |
+| `CommandPipelineE2EP95LatencyCritical` | 与 `CommandPipelineE2EP95LatencyHigh` 同指标，阈值更高 | 触发升级链路，优先执行限流与确认超时收紧 |
 | `PipelineErrorRateHigh` | `*_pipeline_messages_total{result="error"}` | 定位异常服务并切换到稳定 provider/策略 |
 | `PipelineErrorRateCritical` | 与 `PipelineErrorRateHigh` 同指标，阈值更高 | 触发升级链路，必要时暂停问题服务入口流量 |
 | `*PipelineP95LatencyHigh` | `*_pipeline_duration_seconds_bucket` | 检查外部引擎超时和积压，必要时限流或降级 |

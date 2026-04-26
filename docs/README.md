@@ -14,7 +14,7 @@
 - 会话内有序、状态外置、事件驱动
 - 数据面与控制面分离
 
-## 当前实现基线（2026-04-23）
+## 当前实现基线（2026-04-26）
 
 当前仓库已经具备一条可运行的模块化骨架链路：
 
@@ -24,7 +24,8 @@
 - `session-orchestrator` 调用 `control-plane` 获取租户策略，写 Redis 会话状态，并发布 `session.control`
 - `asr-worker` 消费 `audio.ingress.raw` 并发布 `asr.partial` / `asr.final`
 - `translation-worker` 消费 `asr.final` 并发布 `translation.result`
-- `tts-orchestrator` 消费 `translation.result` 并发布 `tts.request` / `tts.chunk` / `tts.ready`
+- `command-worker` 消费 `asr.final`（`SMART_HOME` 会话）与命令回执事件，并发布 `command.dispatch` / `command.result`
+- `tts-orchestrator` 消费 `translation.result` 与 `command.result` 并发布 `tts.request` / `tts.chunk` / `tts.ready`
 
 当前详细实现状态见 [implementation-status.md](implementation-status.md)。
 

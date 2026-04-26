@@ -121,6 +121,32 @@ Scenario filter:
 
 - `FAULT_DRILL_SCENARIOS="asr-engine-fault-mapping translation-engine-fault-mapping tts-engine-fault-mapping"`
 
+### Run command-flow drill closure baseline (simulated/mock)
+
+Run from repository root or from a feature worktree:
+
+```bash
+tools/command-flow-drill.sh
+```
+
+Outputs:
+
+- `build/reports/command-flow-drill/command-flow-drill-closure.json`
+- `build/reports/command-flow-drill/command-flow-drill-summary.md`
+- `build/reports/command-flow-drill/command-flow-<scenario>.log`
+
+Scenario defaults:
+
+- `success`
+- `confirm-reject`
+- `intranet-timeout`
+- `duplicate-replay`
+- `client-disconnect-reconnect`
+
+Scenario filter:
+
+- `COMMAND_FLOW_DRILL_SCENARIOS="success confirm-reject intranet-timeout duplicate-replay client-disconnect-reconnect"`
+
 ### Run preprod drill closure
 
 Run from repository root or from a feature worktree:
@@ -143,7 +169,7 @@ Outputs:
 
 Useful flags:
 
-- `PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,PipelineErrorRateHigh,KafkaConsumerLagHigh"`
+- `PREPROD_WATCH_ALERTS="GatewayWsErrorRateHigh,PipelineErrorRateHigh,KafkaConsumerLagHigh,CommandDispatchSuccessRateLow,CommandConfirmTimeoutRateHigh,CommandExecutionFailureRateHigh,CommandPipelineE2EP95LatencyHigh"`
 - `PREPROD_RECOVERY_TIMEOUT_SECONDS=900`
 - `PREPROD_RECOVERY_POLL_SECONDS=30`
 - `PREPROD_RECOVERY_MAX_SECONDS=900`

@@ -126,7 +126,7 @@
 
 当前基线说明：
 
-- 6 个服务都已统一 `traceId` / `spanId` 关联字段
+- 7 个服务都已统一 `traceId` / `spanId` 关联字段
 - 当前日志格式仍是文本 pattern，不是完整 JSON 结构化日志
 
 ## 6. 告警设计
@@ -183,7 +183,7 @@
 - 服务健康看板
 - 基础资源看板
 
-## 9. 当前仓库观测基线（2026-04-24）
+## 9. 当前仓库观测基线（2026-04-26）
 
 已在以下服务接入统一基线：
 
@@ -191,6 +191,7 @@
 - `session-orchestrator`
 - `asr-worker`
 - `translation-worker`
+- `command-worker`
 - `tts-orchestrator`
 - `control-plane`
 
@@ -211,28 +212,31 @@
 - `asr.pipeline.messages.total` / `asr.pipeline.duration`
 - `translation.pipeline.messages.total` / `translation.pipeline.duration`
 - `tts.pipeline.messages.total` / `tts.pipeline.duration`
+- `command.pipeline.dispatch.total` / `command.pipeline.result.total` / `command.pipeline.e2e.duration`
 - `controlplane.tenant.policy.upsert.total` / `controlplane.tenant.policy.upsert.duration`
 - `controlplane.tenant.policy.get.total` / `controlplane.tenant.policy.get.duration`
 - `controlplane.auth.decision.total` / `controlplane.auth.decision.duration`
 - `controlplane.auth.hybrid.fallback.total`
 
-### 已落地监控资产（2026-04-24）
+### 已落地监控资产（2026-04-26）
 
 - `deploy/monitoring/docker-compose.yml`：本地 Prometheus + Grafana 启停
-- `deploy/monitoring/prometheus/prometheus.yml`：六服务 `/actuator/prometheus` 抓取
-- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`：错误率、P95 延迟、Kafka lag、控制面回退与鉴权告警
+- `deploy/monitoring/prometheus/prometheus.yml`：默认六服务 `/actuator/prometheus` 抓取（当前未包含 `command-worker`，需手工补充 scrape job）
+- `deploy/monitoring/prometheus/alerts/kafka-asr-alerts.yml`：错误率、P95 延迟、Kafka lag、控制面回退与鉴权告警（含 command.dispatch 成功率、确认超时率、执行失败率、命令链路端到端 P95）
 - `deploy/monitoring/grafana/dashboards/kafka-asr-overview.json`：主链路吞吐/错误/延迟 + downlink + lag 看板
 - `deploy/monitoring/alertmanager/alertmanager.yml`：default / warning / critical / escalation 路由基线
 - `tools/monitoring-up.sh` / `tools/monitoring-down.sh`：一键启停入口
 - `tools/alert-ops-validate.sh`：告警阈值顺序、分级规则覆盖和通知链路完整性校验
 
-### 已落地压测与告警闭环基线（2026-04-24）
+### 已落地压测与告警闭环基线（2026-04-26）
 
 - `tools/loadtest-alert-closure.sh`：仓库内多场景（smoke / baseline / stress）压测聚合入口
 - `tools/fault-drill-closure.sh`：ASR / Translation / TTS 故障演练收口入口
+- `tools/command-flow-drill.sh`：命令链路 5 场景演练收口入口（simulated/mock）
 - `tools/preprod-drill-closure.sh`：预发环境 loadtest / fault-drill / recovery 证据聚合入口
 - `build/reports/loadtest/gateway-pipeline-loadtest-aggregate.json`：多场景结构化压测结果
 - `build/reports/fault-drill/fault-drill-closure.json`：结构化故障演练结果
+- `build/reports/command-flow-drill/command-flow-drill-closure.json`：命令链路结构化演练结果（simulated/mock）
 - `build/reports/preprod-drill/preprod-drill-closure.json`：结构化预发收口结果
 - `docs/runbooks/loadtest-alert-closure.md`：执行频率、门槛和告警升级路径
 - `docs/runbooks/control-plane-iam-provider-integration.md`：控制面鉴权预检、演练与回退 runbook
@@ -242,6 +246,7 @@
 
 - `loadtest-alert-closure` 已支持 `capacityEvidence`
 - `fault-drill-closure` 已支持多场景聚合 `overallPass`
+- `command-flow-drill` 已支持命令链路 5 场景聚合 `overallPass`（simulated/mock）
 - `preprod-drill-closure` 已支持统一 `sloEvidence`（loadtest / fault / recovery）
 
 说明：
@@ -252,6 +257,7 @@
 ### 当前仍缺失
 
 - 客户端可感知的字幕首包 / 最终字幕延迟指标
+- Prometheus 默认抓取仍未覆盖 `command-worker`，命令链路指标目前仅在服务侧暴露
 - 真实预发/生产环境下的告警阈值再标定与通知链路运营化
 - 结构化 JSON 日志
 - 真实引擎链路（Kafka + 外部 ASR/翻译/TTS）的压测报告与 SLO 达成证据

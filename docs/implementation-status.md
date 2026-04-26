@@ -2,11 +2,15 @@
 
 ## 1. 当前基线
 
-截至 `2026-04-24`，仓库已经从“纯资料收敛”演进为“文档 + 契约 + 服务骨架并存”的工程仓库。
+截至 `2026-04-26`，仓库已经从“纯资料收敛”演进为“文档 + 契约 + 服务骨架并存”的工程仓库。
 
 当前已实现的主链路是：
 
 `client -> speech-gateway -> Kafka -> asr-worker -> translation-worker -> tts-orchestrator`
+
+`SMART_HOME` 命令链路当前已实现：
+
+`asr.final -> command-worker -> command.dispatch -> speech-gateway(ws) -> client -> command.execute.result -> command-worker -> command.result -> speech-gateway(ws)`
 
 配套的低频控制链路是：
 
@@ -15,7 +19,7 @@
 这条链路已经具备：
 
 - 统一 v1 事件 Envelope
-- 9 个已落地 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`tenant.policy.changed`
+- 13 个已落地 Topic：`audio.ingress.raw`、`session.control`、`asr.partial`、`asr.final`、`translation.result`、`tts.request`、`tts.chunk`、`tts.ready`、`command.dispatch`、`command.confirm.request`、`command.execute.result`、`command.result`、`tenant.policy.changed`
 - 低频控制 API：会话 start/stop、租户策略 get/put/rollback
 - 网关 `audio.frame` 会话级限流/背压保护（`RATE_LIMITED` / `BACKPRESSURE_DROP`）
 - 核心 Kafka 消费链路已落地重试与按源 Topic 的 `.dlq` 死信回退（`asr-worker`、`translation-worker`、`tts-orchestrator` 已升级到按租户策略驱动重试/DLQ）
@@ -38,13 +42,19 @@
 - `tools/alert-ops-validate.sh` 已补齐告警运营化一键校验（阈值顺序、分级规则覆盖、通知链路完整性）并产出机器可读报告
 - `tools/loadtest-alert-closure.sh` 已升级为多场景（smoke/baseline/stress）压测聚合收口，支持吞吐门槛与容量上限证据（`capacityEvidence`）输出
 - `tools/fault-drill-closure.sh` 已补齐 ASR/Translation/TTS 故障演练收口，并产出机器可读报告
+- `tools/command-flow-drill.sh` 已补齐命令链路 5 场景演练收口（成功、确认拒绝、内网超时、重复回传、客户端掉线重连），并产出 simulated/mock 机器可读报告
 - `tools/preprod-drill-closure.sh` 已补齐预发一键收口入口（loadtest/fault-drill/Alertmanager 恢复采样聚合），并输出统一 `sloEvidence`（loadtest/fault/recovery）
+- `command-worker` 已补齐 `CLIENT_BRIDGE` 编排状态机：`asr.final -> command.dispatch`、`command.confirm.request` / `command.execute.result -> command.result`
+- `command-worker` 已补齐重试/DLQ/补偿与幂等，并支持执行上下文 `memory/redis` 可切换存储（默认 `memory`）
+- `command-worker` 已补齐命令链路指标：`command.pipeline.dispatch.total`、`command.pipeline.result.total`、`command.pipeline.e2e.duration`
+- 告警规则已补齐命令链路 4 项：分发成功率、确认超时率、执行失败率、端到端 P95 时延（warning/critical 双阈值）
 - `control-plane` 鉴权链路已补齐后端级决策/耗时指标与 hybrid 回退计数（`controlplane.auth.*`）
 - `tools/control-plane-auth-drill.sh` 已补齐控制面鉴权预发演练脚本，并可接入 `tools/preprod-drill-closure.sh` 的 `control-auth` 阶段
 - 已补齐真实 IAM 对接准备层：参数模板（`deploy/env/control-plane-iam.env.template`）、预检脚本（`tools/control-plane-iam-precheck.sh`）与 runbook 清单
 - 已补齐 external-iam claim 映射与授权矩阵单测（读/写权限、租户范围、拒绝原因）
 - 已补齐控制面鉴权失败策略 simulated 演练脚本（`tools/control-plane-auth-failure-drill.sh`）：覆盖 JWKS 不可用/超时分类、hybrid fallback、指标与告警规则校验
 - 已补齐本地 JWKS + JWT 全链路 simulated 演练脚本（`tools/control-plane-jwks-jwt-drill.sh`）：覆盖 `external-iam` JWT 校验链路与 `hybrid` fallback 行为
+- 已完成一轮本地功能收口（simulated/mock）并产出证据：`control-plane-jwks-jwt-drill`、`control-plane-auth-failure-drill`、`control-plane-auth-drill`、`preprod-drill-closure`、`loadtest`、`fault-drill` 报告均为 `overallPass=true`（产物位于 `build/reports/preprod-drill`、`build/reports/loadtest`、`build/reports/fault-drill`）
 - 全仓测试与 `tools/verify.sh` 校验基线
 
 ## 2. 服务模块现状
@@ -55,8 +65,9 @@
 | `session-orchestrator` | `8081` | `POST /api/v1/sessions:start`、`POST /api/v1/sessions/{sessionId}:stop`、控制面策略校验、控制面熔断与缓存回退、Redis 会话状态、`session.control` Kafka 发布 | 超时编排、结果聚合、补偿工作流 |
 | `asr-worker` | `8082` | 消费 `audio.ingress.raw`、默认 placeholder 推理 + 可切换 HTTP/FunASR ASR 适配（含 FunASR v2 响应兼容、health 探测、并发保护、错误语义映射）、按稳定度 + VAD 静音切段分流发布 `asr.partial` / `asr.final`、按租户策略驱动重试/DLQ（含控制面失败回退） | FunASR 真机容量/故障演练、高级上下文与切段策略 |
 | `translation-worker` | `8083` | 消费 `asr.final`、默认 placeholder 翻译 + 可切换 HTTP/OpenAI 翻译适配（含 OpenAI v2 响应兼容、health 探测、并发保护、错误语义映射）、发布 `translation.result`、按租户策略驱动重试/DLQ（含控制面失败回退） | OpenAI 真机容量/故障演练、术语治理、上下文增强 |
-| `tts-orchestrator` | `8084` | 消费 `translation.result`、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容、health 探测、并发保护、错误语义映射）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、`tts.ready` 支持可配置 S3/MinIO 上传并回填真实 `playbackUrl`、支持 `cache-control` 与 `expires/sig` URL 签名策略、支持区域 CDN 路由/回源回退与可配置 cache scope/shard 策略、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS 真机容量/故障演练、对象存储高可用治理、CDN 区域路由与高级缓存治理 |
+| `tts-orchestrator` | `8084` | 消费 `translation.result` 与 `command.result`、规则 voice 选择 + 可切换 HTTP voice-policy 适配、可切换 HTTP TTS synthesis 适配（含 synthesis v2 响应兼容、health 探测、并发保护、错误语义映射）、命令回执状态模板化播报文案（成功/失败/取消/超时/待确认）、生成 cacheKey、发布 `tts.request`/`tts.chunk`/`tts.ready`、`tts.ready` 支持可配置 S3/MinIO 上传并回填真实 `playbackUrl`、支持 `cache-control` 与 `expires/sig` URL 签名策略、支持区域 CDN 路由/回源回退与可配置 cache scope/shard 策略、按租户策略驱动重试/DLQ（含控制面失败回退） | TTS 真机容量/故障演练、对象存储高可用治理、CDN 区域路由与高级缓存治理 |
 | `control-plane` | `8085` | `PUT/GET /api/v1/tenants/{tenantId}/policy`、`POST /api/v1/tenants/{tenantId}/policy:rollback`（支持可选 `targetVersion` / `distributionRegions`）、Redis 策略存储、版本化 upsert/rollback、历史快照栈、灰度/回退/可靠性策略字段、可配置 Bearer Token 鉴权与授权（读/写权限 + 租户范围）、`control.auth.mode=static/external-iam/hybrid` 切换与 JWKS 外部 IAM 校验后端骨架、鉴权决策/耗时/回退指标（`controlplane.auth.*`）、真实 IAM 对接参数模板与预检工具、external-iam claim 映射与授权矩阵单测、鉴权失败策略 simulated 演练脚本、本地 JWKS + JWT 全链路 simulated 演练脚本、`tenant.policy.changed` 发布（含 `sourcePolicyVersion` / `targetPolicyVersion` / `distributionRegions`） | 外部 IAM/RBAC 提供方联调与生产级运行保障（真实参数、阈值与告警闭环）、持久化数据库、跨区域分发与高级版本编排治理、跨区域分发实际执行链路 |
+| `command-worker` | `8086` | 消费 `asr.final` / `command.confirm.request` / `command.execute.result`，发布 `command.dispatch` / `command.result`，`CLIENT_BRIDGE` 多轮确认状态机，重试/DLQ/补偿、幂等判重，执行上下文 `memory/redis` 可切换存储 | `command-worker -> smartHomeNlu` 真实内网执行、执行态持久化高可用与跨实例一致性治理 |
 
 ## 3. 当前协议与接口面
 
@@ -73,6 +84,8 @@
 - `session.ping`
 - `audio.frame`
 - `session.stop`
+- `command.confirm`
+- `command.execute.result`
 - 当 `gateway.auth.enabled=true` 时，连接需携带合法 token（`Authorization: Bearer` 或 query `access_token`）
 
 当前已下发：
@@ -83,6 +96,8 @@
 - `tts.chunk`
 - `tts.ready`
 - `session.closed`
+- `command.dispatch`
+- `command.result`
 
 ### 3.2 HTTP API
 
@@ -106,13 +121,17 @@
 | Topic | Producer | Consumer | 说明 |
 | --- | --- | --- | --- |
 | `audio.ingress.raw` | `speech-gateway` | `asr-worker` | 高频音频主链路 |
-| `session.control` | `session-orchestrator` | 暂无仓库内下游 | 生命周期审计与编排事件 |
+| `session.control` | `session-orchestrator` | `speech-gateway` | 生命周期审计与会话关闭下行事件 |
 | `asr.partial` | `asr-worker` | `speech-gateway` | 中间识别结果，当前用于 `subtitle.partial` |
-| `asr.final` | `asr-worker` | `translation-worker` | 当前翻译入口 |
-| `translation.result` | `translation-worker` | `tts-orchestrator` | 当前 TTS 入口 |
+| `asr.final` | `asr-worker` | `translation-worker`、`command-worker` | 翻译入口与 `SMART_HOME` 命令编排入口 |
+| `translation.result` | `translation-worker` | `tts-orchestrator`、`speech-gateway` | 当前 TTS 入口，同时用于 `subtitle.final` 下行 |
 | `tts.request` | `tts-orchestrator` | 暂无仓库内下游 | TTS 编排输出，等待真实引擎接入 |
 | `tts.chunk` | `tts-orchestrator` | `speech-gateway` | TTS 分片输出，当前回推到 WebSocket 下行 |
 | `tts.ready` | `tts-orchestrator` | `speech-gateway` | TTS 回放就绪输出，当前回推到 WebSocket 下行 |
+| `command.dispatch` | `command-worker` | `speech-gateway` | 客户端命令分发（`CLIENT_BRIDGE`） |
+| `command.confirm.request` | `speech-gateway` | `command-worker` | 客户端确认上行回执 |
+| `command.execute.result` | `speech-gateway` | `command-worker` | 客户端执行结果上行回执 |
+| `command.result` | `command-worker` | `speech-gateway`、`tts-orchestrator` | 命令终态结果（UI/TTS 可消费） |
 | `tenant.policy.changed` | `control-plane` | `session-orchestrator`、`asr-worker`、`translation-worker`、`tts-orchestrator` | 租户策略变更通知（upsert/rollback 发布，运行时消费刷新已落地；支持 `sourcePolicyVersion` / `targetPolicyVersion` / `distributionRegions` 元数据） |
 
 同时，`speech-gateway` 当前也消费以下下行 Topic 并回推 WebSocket：
@@ -122,10 +141,13 @@
 - `tts.chunk` -> `tts.chunk`
 - `tts.ready` -> `tts.ready`
 - `session.control(status=CLOSED)` -> `session.closed`
+- `command.dispatch` -> `command.dispatch`
+- `command.result` -> `command.result`
 
 ## 5. 当前缺口
 
 - `translation.request` 仍是计划扩展 Topic
+- `command-worker` 侧仍未接入真实 `smartHomeNlu` 执行（当前为云端编排 + 客户端桥接契约闭环）
 - ASR / Translation / TTS 已落地第一版生产联调基线，并补齐仓库内 fault-drill 收口与预发收口入口；但尚未完成真实流量闭环与预发/生产容量实战
 - 对象存储 HA 治理、CDN 区域路由/多级缓存治理、完整补偿编排、自适应熔断/灰度治理，以及压测/告警升级实战证据仍待完善
 
