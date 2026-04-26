@@ -83,10 +83,11 @@
 - stalled 阶段（`post_final` / `post_translation`）检测与自动 `session.stop` 编排
 - timeout/stalled 触发补偿信号发布（`ops.compensation -> platform.compensation`，并双写 `platform.audit`）
 - 跨服务补偿 Saga v1 执行入口（`tools/platform-compensation-saga.sh`，动作路由：`replay | session-close | manual`）
+- `platform.dlq` 实时补偿 Saga v2 消费（动作重试、Redis 幂等状态、审计发布）
 
 当前未实现：
 
-- 服务内实时化/强一致跨服务补偿编排与降级工作流
+- 强一致跨服务补偿事务编排与降级工作流
 
 ### asr-worker
 

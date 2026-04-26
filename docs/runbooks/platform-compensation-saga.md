@@ -2,13 +2,18 @@
 
 ## 1. 目标
 
-为 `platform.dlq` 提供第一版跨服务补偿编排执行路径：
+为 `platform.dlq` 提供跨服务补偿编排执行路径：
 
 1. 拉取 `platform.dlq` 事件（Kafka 或 JSONL）。
 2. 按 `sourceTopic + reason` 分类为 `replay | session-close | manual`。
 3. 执行 replay（复用 `tools/platform-dlq-replay.sh`）和会话关闭动作。
 4. 生成 `platform.audit` 事件证据（apply 模式可发布到 Kafka）。
 5. 记录成功账本，避免重复处理同一 `eventId`。
+
+当前实现包含两条路径：
+
+- 批处理入口（v1）：`tools/platform-compensation-saga.sh`
+- 实时服务入口（v2）：`session-orchestrator` 消费 `platform.dlq`
 
 ## 2. 执行入口
 
@@ -23,6 +28,12 @@ tools/platform-compensation-saga.sh
 - 扫描最多 `200` 条 `platform.dlq` 事件。
 - 执行 dry-run（`COMPENSATION_SAGA_APPLY=0`）。
 - 生成补偿动作和审计证据，但不执行真实回放/会话关闭。
+
+实时化 v2（服务内）：
+
+- 启动 `session-orchestrator` 后会自动消费 `platform.dlq` 并执行同类动作路由。
+- 通过 `ORCHESTRATOR_COMPENSATION_SAGA_ENABLED=false` 可临时关闭实时消费。
+- 默认 consumer group：`session-orchestrator-compensation-saga`（可由 `ORCHESTRATOR_COMPENSATION_SAGA_GROUP_ID` 覆盖）。
 
 ## 3. 动作路由规则（v1）
 
