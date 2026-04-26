@@ -24,7 +24,7 @@ class TenantReliabilityPolicyResolverTests {
     @Test
     void resolvesTenantPolicyFromControlPlane() {
         QueueExchangeFunction exchangeFunction = new QueueExchangeFunction();
-        exchangeFunction.enqueue(successResponse(4, 350L, ".tenant-a.dlq", true, 45000L));
+        exchangeFunction.enqueue(successResponse(4, 350L, ".tenant-a.dlq", true, 45000L, "TRANSLATION"));
 
         TenantReliabilityPolicyResolver resolver = new TenantReliabilityPolicyResolver(
                 WebClient.builder().exchangeFunction(exchangeFunction).build(),
@@ -37,6 +37,7 @@ class TenantReliabilityPolicyResolverTests {
         assertEquals(4, policy.retryMaxAttempts());
         assertEquals(350L, policy.retryBackoffMs());
         assertEquals(".tenant-a.dlq", policy.dlqTopicSuffix());
+        assertEquals(TenantReliabilityPolicy.SESSION_MODE_TRANSLATION, policy.sessionMode());
     }
 
     @Test
@@ -60,7 +61,7 @@ class TenantReliabilityPolicyResolverTests {
     @Test
     void usesCachedPolicyWhenFailOpenEnabledAndControlPlaneFails() {
         QueueExchangeFunction exchangeFunction = new QueueExchangeFunction();
-        exchangeFunction.enqueue(successResponse(5, 500L, ".tenant-a.dlq", true, 60000L));
+        exchangeFunction.enqueue(successResponse(5, 500L, ".tenant-a.dlq", true, 60000L, "TRANSLATION"));
         exchangeFunction.enqueue(ClientResponse.create(HttpStatus.SERVICE_UNAVAILABLE).build());
 
         TenantReliabilityPolicyResolver resolver = new TenantReliabilityPolicyResolver(
@@ -81,8 +82,8 @@ class TenantReliabilityPolicyResolverTests {
     @Test
     void invalidateTenantClearsCachedPolicyAndForcesRefresh() {
         QueueExchangeFunction exchangeFunction = new QueueExchangeFunction();
-        exchangeFunction.enqueue(successResponse(4, 350L, ".tenant-a.dlq", true, 60000L));
-        exchangeFunction.enqueue(successResponse(6, 650L, ".tenant-a.v2.dlq", true, 60000L));
+        exchangeFunction.enqueue(successResponse(4, 350L, ".tenant-a.dlq", true, 60000L, "TRANSLATION"));
+        exchangeFunction.enqueue(successResponse(6, 650L, ".tenant-a.v2.dlq", true, 60000L, "TRANSLATION"));
 
         TenantReliabilityPolicyResolver resolver = new TenantReliabilityPolicyResolver(
                 WebClient.builder().exchangeFunction(exchangeFunction).build(),
@@ -98,6 +99,23 @@ class TenantReliabilityPolicyResolverTests {
         assertEquals(6, second.retryMaxAttempts());
         assertEquals(".tenant-a.v2.dlq", second.dlqTopicSuffix());
         assertEquals(2, exchangeFunction.calls());
+    }
+
+    @Test
+    void resolvesSmartHomeSessionModeFromControlPlane() {
+        QueueExchangeFunction exchangeFunction = new QueueExchangeFunction();
+        exchangeFunction.enqueue(successResponse(4, 350L, ".tenant-a.dlq", true, 45000L, "SMART_HOME"));
+
+        TenantReliabilityPolicyResolver resolver = new TenantReliabilityPolicyResolver(
+                WebClient.builder().exchangeFunction(exchangeFunction).build(),
+                controlPlaneProperties(),
+                kafkaDefaults(),
+                Clock.fixed(Instant.parse("2026-04-22T00:00:00Z"), ZoneOffset.UTC));
+
+        TenantReliabilityPolicy policy = resolver.resolve("tenant-a");
+
+        assertEquals(TenantReliabilityPolicy.SESSION_MODE_SMART_HOME, policy.sessionMode());
+        assertEquals(true, policy.isSmartHomeMode());
     }
 
     private static TranslationControlPlaneProperties controlPlaneProperties() {
@@ -123,7 +141,8 @@ class TenantReliabilityPolicyResolverTests {
             long retryBackoffMs,
             String dlqTopicSuffix,
             boolean failOpen,
-            long cacheTtlMs) {
+            long cacheTtlMs,
+            String sessionMode) {
         String body = """
                 {
                   "tenantId": "tenant-a",
@@ -131,9 +150,16 @@ class TenantReliabilityPolicyResolverTests {
                   "controlPlaneFallbackCacheTtlMs": %d,
                   "retryMaxAttempts": %d,
                   "retryBackoffMs": %d,
-                  "dlqTopicSuffix": "%s"
+                  "dlqTopicSuffix": "%s",
+                  "sessionMode": "%s"
                 }
-                """.formatted(failOpen, cacheTtlMs, retryMaxAttempts, retryBackoffMs, dlqTopicSuffix);
+                """.formatted(
+                        failOpen,
+                        cacheTtlMs,
+                        retryMaxAttempts,
+                        retryBackoffMs,
+                        dlqTopicSuffix,
+                        sessionMode);
         return ClientResponse.create(HttpStatus.OK)
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .body(body)

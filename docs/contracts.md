@@ -42,7 +42,7 @@
 新增说明：
 
 - `tts-orchestrator` 已实现 `translation.result` 同步产出 `tts.request`、`tts.chunk`、`tts.ready` 三类事件
-- `translation-worker` 已实现两段式翻译治理链路：`asr.final -> translation.request -> translation.result`
+- `translation-worker` 已实现两段式翻译治理链路：`asr.final -> translation.request -> translation.result`，并按租户 `sessionMode` 分流（`TRANSLATION` 处理，`SMART_HOME` 忽略）
 - `tts.ready.payload.playbackUrl` 已支持按租户映射的区域 CDN 路由，并可在区域路由缺失时回退到 origin URL
 - `control-plane` 已实现 `tenant.policy.changed` 事件发布（upsert/rollback），`session-orchestrator` / `asr-worker` / `translation-worker` / `tts-orchestrator` 已消费该事件用于策略缓存刷新
 - `control-plane` 已实现并冻结回滚编排契约：`POST /api/v1/tenants/{tenantId}/policy:rollback` 支持可选请求体 `targetVersion`、`distributionRegions`；请求体缺失时语义保持为“回滚上一版本”

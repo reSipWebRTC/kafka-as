@@ -152,6 +152,37 @@ class AsrFinalConsumerTests {
     }
 
     @Test
+    void ignoresAsrFinalWhenTenantSessionModeIsSmartHome() throws Exception {
+        AsrFinalEvent input = new AsrFinalEvent(
+                "evt-in-1",
+                "asr.final",
+                "v1",
+                "trc-1",
+                "sess-1",
+                "tenant-home",
+                null,
+                "asr-worker",
+                3L,
+                1713744000000L,
+                "sess-1:asr.final:3",
+                new AsrFinalPayload("打开客厅灯", "zh-CN", 0.9d, true));
+
+        String payload = objectMapper.writeValueAsString(input);
+        when(reliabilityPolicyResolver.resolve("tenant-home"))
+                .thenReturn(new TenantReliabilityPolicy(
+                        2,
+                        1L,
+                        ".dlq",
+                        TenantReliabilityPolicy.SESSION_MODE_SMART_HOME));
+
+        consumer.onMessage(payload);
+
+        verify(pipelineService, never()).toTranslationRequestEvent(any());
+        verify(translationRequestPublisher, never()).publish(any());
+        verify(compensationPublisher, never()).publish(anyString(), anyString(), anyString(), any(RuntimeException.class));
+    }
+
+    @Test
     void emitsCompensationSignalAfterRepeatedFailureThreshold() throws Exception {
         AsrFinalEvent input = new AsrFinalEvent(
                 "evt-in-1",

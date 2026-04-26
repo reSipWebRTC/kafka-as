@@ -58,7 +58,7 @@
 说明：
 
 - 主链路 Topic 继续按 `sessionId` 发送 Kafka Key，治理事件 `tenant.policy.changed` 使用 `tenantId` 作为 Key
-- `translation-worker` 当前采用两段式治理链路：`asr.final -> translation.request -> translation.result`
+- `translation-worker` 当前采用两段式治理链路：`asr.final -> translation.request -> translation.result`，并按租户 `sessionMode` 分流（`TRANSLATION` 处理，`SMART_HOME` 忽略）
 - `tts-orchestrator` 当前会从同一输入事件同步产出 `tts.request`、`tts.chunk`、`tts.ready`
 - `asr-worker`、`translation-worker`、`tts-orchestrator`、`speech-gateway` 下行消费者已接入固定重试 + `<source-topic>.dlq` 死信回退
 - 上述核心消费者均已接入基于 `idempotencyKey` 的 TTL 判重，重复消息按成功路径 no-op

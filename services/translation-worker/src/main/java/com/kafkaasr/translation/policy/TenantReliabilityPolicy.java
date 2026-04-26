@@ -1,9 +1,22 @@
 package com.kafkaasr.translation.policy;
 
+import java.util.Locale;
+
 public record TenantReliabilityPolicy(
         int retryMaxAttempts,
         long retryBackoffMs,
-        String dlqTopicSuffix) {
+        String dlqTopicSuffix,
+        String sessionMode) {
+
+    public static final String SESSION_MODE_TRANSLATION = "TRANSLATION";
+    public static final String SESSION_MODE_SMART_HOME = "SMART_HOME";
+
+    public TenantReliabilityPolicy(
+            int retryMaxAttempts,
+            long retryBackoffMs,
+            String dlqTopicSuffix) {
+        this(retryMaxAttempts, retryBackoffMs, dlqTopicSuffix, SESSION_MODE_TRANSLATION);
+    }
 
     public TenantReliabilityPolicy {
         if (retryMaxAttempts <= 0) {
@@ -15,5 +28,22 @@ public record TenantReliabilityPolicy(
         if (dlqTopicSuffix == null || dlqTopicSuffix.isBlank()) {
             throw new IllegalArgumentException("dlqTopicSuffix must not be blank");
         }
+        if (sessionMode == null || sessionMode.isBlank()) {
+            sessionMode = SESSION_MODE_TRANSLATION;
+        } else {
+            sessionMode = sessionMode.trim().toUpperCase(Locale.ROOT);
+            if (!SESSION_MODE_TRANSLATION.equals(sessionMode)
+                    && !SESSION_MODE_SMART_HOME.equals(sessionMode)) {
+                sessionMode = SESSION_MODE_TRANSLATION;
+            }
+        }
+    }
+
+    public boolean isTranslationMode() {
+        return SESSION_MODE_TRANSLATION.equals(sessionMode);
+    }
+
+    public boolean isSmartHomeMode() {
+        return SESSION_MODE_SMART_HOME.equals(sessionMode);
     }
 }

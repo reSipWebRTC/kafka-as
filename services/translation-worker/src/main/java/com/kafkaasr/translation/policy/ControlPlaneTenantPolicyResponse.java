@@ -6,5 +6,6 @@ public record ControlPlaneTenantPolicyResponse(
         long controlPlaneFallbackCacheTtlMs,
         int retryMaxAttempts,
         long retryBackoffMs,
-        String dlqTopicSuffix) {
+        String dlqTopicSuffix,
+        String sessionMode) {
 }
