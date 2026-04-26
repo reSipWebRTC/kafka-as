@@ -71,6 +71,17 @@ public class AsrFinalConsumer {
                 return;
             }
             TenantReliabilityPolicy reliabilityPolicy = reliabilityPolicyResolver.resolve(asrFinalEvent.tenantId());
+            if (!reliabilityPolicy.isTranslationMode()) {
+                meterRegistry.counter(
+                                "translation.request.messages.total",
+                                "result",
+                                "ignored",
+                                "code",
+                                "NON_TRANSLATION_MODE")
+                        .increment();
+                log.debug("Ignored asr.final for non-TRANSLATION tenant tenantId={}", asrFinalEvent.tenantId());
+                return;
+            }
             processWithRetry(asrFinalEvent, payload, reliabilityPolicy);
         } catch (IllegalArgumentException exception) {
             meterRegistry.counter(
